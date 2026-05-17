@@ -35,14 +35,19 @@ export default async function Home() {
           </div>
           <span className="font-semibold text-gray-900">Foundry Docs</span>
         </div>
-        <form action={createDocument}>
-          <button
-            type="submit"
-            className="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
-          >
-            + New document
-          </button>
-        </form>
+        <div className="flex items-center gap-3">
+          <Link href="/change-requests" className="text-sm text-gray-500 hover:text-gray-900 font-medium transition-colors">
+            Change Requests
+          </Link>
+          <form action={createDocument}>
+            <button
+              type="submit"
+              className="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            >
+              + New document
+            </button>
+          </form>
+        </div>
       </header>
 
       {/* Content */}
