@@ -31,6 +31,7 @@ export async function typeInCell(page: Page, row: number, col: number, value: st
   await page.locator(`[data-testid="cell-${row}-${col}"]`).click()
   const input = page.locator(`[data-testid="cell-${row}-${col}"] input.cell-input`)
   await input.waitFor({ state: 'visible' })
+  await input.click()  // ensure focus — autoFocus only fires on mount, not on update of already-selected cell
   await page.keyboard.type(value)
   await page.keyboard.press('Enter')
 }
