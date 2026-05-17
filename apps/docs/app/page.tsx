@@ -2,6 +2,8 @@ import Link from 'next/link'
 import { listDocuments } from '@/lib/actions'
 import { createDocument } from '@/lib/actions'
 
+export const dynamic = 'force-dynamic'
+
 function formatDate(ts: string) {
   return new Date(ts).toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',

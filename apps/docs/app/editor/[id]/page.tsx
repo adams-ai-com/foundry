@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation'
 import { getDocument } from '@/lib/actions'
 import { Editor } from '@/components/Editor'
 
+export const dynamic = 'force-dynamic'
+
 export default async function EditorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const doc = await getDocument(id)
