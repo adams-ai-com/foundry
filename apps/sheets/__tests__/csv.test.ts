@@ -15,7 +15,8 @@ describe('parseCSV', () => {
   })
 
   it('preserves leading zeros (ZIP codes, IDs)', () => {
-    expect(parseCSV('007,90210')).toEqual([['007', '90210']])
+    // 007 has leading zero → string; 90210 has no leading zero → number
+    expect(parseCSV('007,90210')).toEqual([['007', 90210]])
   })
 
   it('keeps strings that are not purely numeric', () => {
