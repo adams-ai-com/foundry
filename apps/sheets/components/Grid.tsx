@@ -107,7 +107,6 @@ export function Grid({ selected, onSelect }: GridProps) {
                       defaultValue={getCellFormula(addr) ?? String(rawValue ?? '')}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
-                          console.log('[Grid] Enter commit value:', JSON.stringify(e.currentTarget.value))
                           commitValue(addr, e.currentTarget.value)
                           onSelect({ ...addr, row: row + 1 })
                           e.preventDefault()
