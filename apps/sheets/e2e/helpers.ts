@@ -31,8 +31,8 @@ export async function typeInCell(page: Page, row: number, col: number, value: st
   await page.locator(`[data-testid="cell-${row}-${col}"]`).click()
   const input = page.locator(`[data-testid="cell-${row}-${col}"] input.cell-input`)
   await input.waitFor({ state: 'visible' })
-  await input.fill(value)
-  await input.press('Enter')
+  await page.keyboard.type(value)
+  await page.keyboard.press('Enter')
 }
 
 /** Returns the visible text of a cell (the display value, not the input). */
