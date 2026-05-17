@@ -22,6 +22,8 @@ test.describe('CSV Import', () => {
       mimeType: 'text/csv',
       buffer: Buffer.from(SAMPLE_CSV),
     })
+    // Click away so cell-0-0 (auto-selected) shows its text value not the raw input
+    await page.locator('[data-testid="cell-5-5"]').click()
 
     await expect(page.locator('[data-testid="cell-0-0"]')).toContainText('Name')
     await expect(page.locator('[data-testid="cell-0-1"]')).toContainText('Score')
@@ -38,6 +40,7 @@ test.describe('CSV Import', () => {
       mimeType: 'text/csv',
       buffer: Buffer.from(SAMPLE_CSV_WITH_QUOTES),
     })
+    await page.locator('[data-testid="cell-5-5"]').click()
 
     await expect(page.locator('[data-testid="cell-0-0"]')).toContainText('Last, First')
     await expect(page.locator('[data-testid="cell-1-0"]')).toContainText('Smith, Jane')
@@ -55,6 +58,7 @@ test.describe('CSV Import', () => {
       mimeType: 'text/csv',
       buffer: Buffer.from('new,data'),
     })
+    await page.locator('[data-testid="cell-5-5"]').click()
 
     await expect(page.locator('[data-testid="cell-0-0"]')).toContainText('new')
     await expect(page.locator('[data-testid="cell-0-1"]')).toContainText('data')
@@ -67,10 +71,13 @@ test.describe('CSV Import', () => {
       mimeType: 'text/csv',
       buffer: Buffer.from('hello,world'),
     })
+    await page.locator('[data-testid="cell-5-5"]').click()
 
     await expect(page.locator('[data-testid="cell-0-0"]')).toContainText('hello')
     await expect(page.locator('[data-testid="save-state"]')).toContainText('Saved', { timeout: 8000 })
     await page.reload()
+    // Click a cell not being checked to deselect cell-0-0
+    await page.locator('[data-testid="cell-2-2"]').click()
     await expect(page.locator('[data-testid="cell-0-0"]')).toContainText('hello')
     await expect(page.locator('[data-testid="cell-0-1"]')).toContainText('world')
   })
@@ -133,6 +140,7 @@ test.describe('CSV Export', () => {
     // Import back
     const fileInput = page.locator('input[type="file"]')
     await fileInput.setInputFiles({ name: 'roundtrip.csv', mimeType: 'text/csv', buffer: csvBuffer })
+    await page.locator('[data-testid="cell-5-5"]').click()
 
     await expect(page.locator('[data-testid="cell-0-0"]')).toContainText('Name')
     await expect(page.locator('[data-testid="cell-1-0"]')).toContainText('Alice')

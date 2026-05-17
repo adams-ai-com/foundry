@@ -80,6 +80,8 @@ test.describe('Cell formatting', () => {
     await typeInCell(page, 0, 0, '1234567')
     await page.locator('[data-testid="cell-0-0"]').click()
     await page.locator('[data-testid="select-numformat"]').selectOption('number')
+    // Click away so cell-0-0 shows its display value (not the raw-value input)
+    await page.locator('[data-testid="cell-0-1"]').click()
     await expect(page.locator('[data-testid="cell-0-0"]')).toContainText('1,234,567')
   })
 
@@ -87,6 +89,7 @@ test.describe('Cell formatting', () => {
     await typeInCell(page, 0, 0, '42.5')
     await page.locator('[data-testid="cell-0-0"]').click()
     await page.locator('[data-testid="select-numformat"]').selectOption('currency')
+    await page.locator('[data-testid="cell-0-1"]').click()
     await expect(page.locator('[data-testid="cell-0-0"]')).toContainText('$42.50')
   })
 
@@ -94,6 +97,7 @@ test.describe('Cell formatting', () => {
     await typeInCell(page, 0, 0, '0.75')
     await page.locator('[data-testid="cell-0-0"]').click()
     await page.locator('[data-testid="select-numformat"]').selectOption('percent')
+    await page.locator('[data-testid="cell-0-1"]').click()
     await expect(page.locator('[data-testid="cell-0-0"]')).toContainText('75%')
   })
 
@@ -125,6 +129,8 @@ test.describe('Cell formatting', () => {
     await page.locator('[data-testid="select-numformat"]').selectOption('currency')
     await expect(page.locator('[data-testid="save-state"]')).toContainText('Saved', { timeout: 8000 })
     await page.reload()
+    // After reload cell-0-0 is auto-selected; click away to see display value
+    await page.locator('[data-testid="cell-0-1"]').click()
     await expect(page.locator('[data-testid="cell-0-0"]')).toContainText('$9,999.00')
   })
 })

@@ -153,6 +153,8 @@ test.describe('Editor', () => {
     await typeInCell(page, 0, 0, 'persisted')
     await expect(page.locator('[data-testid="save-state"]')).toContainText('Saved', { timeout: 8000 })
     await page.reload()
+    // After reload cell-0-0 is auto-selected; click away to see its text content
+    await page.locator('[data-testid="cell-0-1"]').click()
     await expect(page.locator('[data-testid="cell-0-0"]')).toContainText('persisted')
   })
 

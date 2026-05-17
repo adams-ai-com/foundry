@@ -29,8 +29,11 @@ export function Grid({ selected, onSelect }: GridProps) {
     let editing = false
 
     const onKeyDown = (e: KeyboardEvent) => {
-      // Don't capture if an input is already focused (the cell input handles its own keys)
-      if (document.activeElement?.tagName === 'INPUT' && document.activeElement.classList.contains('cell-input')) return
+      // When the cell input is focused, let it handle Enter/Tab/Escape/Delete/Backspace;
+      // but still capture arrow keys so navigation always works.
+      if (document.activeElement?.tagName === 'INPUT' && document.activeElement.classList.contains('cell-input')) {
+        if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return
+      }
 
       const { row, col } = selected
       if (e.key === 'ArrowDown')  { e.preventDefault(); onSelect({ ...selected, row: Math.min(row + 1, ROWS - 1) }) }
@@ -97,6 +100,7 @@ export function Grid({ selected, onSelect }: GridProps) {
                 >
                   {isSelected ? (
                     <input
+                      autoFocus
                       id={`cell-${row}-${col}`}
                       className={`cell-input absolute inset-0 w-full h-full px-1.5 text-sm bg-transparent outline-none ${fontClasses}`}
                       defaultValue={getCellFormula(addr) ?? String(rawValue ?? '')}
