@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useRef } from 'react'
-import { cellAddress, colIndexToLetter } from '@foundry/shared'
+import { useCallback, useEffect } from 'react'
+import { colIndexToLetter } from '@foundry/shared'
 import type { CellAddress } from '@foundry/shared'
 import { useHyperFormulaContext } from '@/lib/hyperformula-context'
 import { applyNumFormat } from '@/lib/format-utils'
@@ -24,15 +24,7 @@ export function Grid({ selected, onSelect }: GridProps) {
     setCellValue(addr, value)
   }, [setCellValue])
 
-  // Track the in-progress edit value via onChange so we never depend on
-  // e.currentTarget.value in keydown (React's synthetic event may not see the
-  // DOM value for uncontrolled inputs before React flushes).
-  const editValueRef = useRef('')
-
   useEffect(() => {
-    let editValue = ''
-    let editing = false
-
     const onKeyDown = (e: KeyboardEvent) => {
       // When the cell input is focused, let it handle Enter/Tab/Escape/Delete/Backspace;
       // but still capture arrow keys so navigation always works.
@@ -106,27 +98,22 @@ export function Grid({ selected, onSelect }: GridProps) {
                   {isSelected ? (
                     <input
                       autoFocus
-                      onFocus={(e) => {
-                        editValueRef.current = e.currentTarget.value
-                        e.currentTarget.select()
-                      }}
+                      onFocus={(e) => { e.currentTarget.select() }}
                       id={`cell-${row}-${col}`}
                       className={`cell-input absolute inset-0 w-full h-full px-1.5 text-sm bg-transparent outline-none ${fontClasses}`}
                       defaultValue={getCellFormula(addr) ?? String(rawValue ?? '')}
-                      onChange={(e) => { editValueRef.current = e.target.value }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
-                          commitValue(addr, editValueRef.current)
+                          commitValue(addr, e.currentTarget.value)
                           onSelect({ ...addr, row: row + 1 })
                           e.preventDefault()
                         }
                         if (e.key === 'Tab') {
-                          commitValue(addr, editValueRef.current)
+                          commitValue(addr, e.currentTarget.value)
                           onSelect({ ...addr, col: col + 1 })
                           e.preventDefault()
                         }
                         if (e.key === 'Escape') {
-                          editValueRef.current = displayValue
                           e.currentTarget.value = displayValue
                           e.currentTarget.blur()
                         }
