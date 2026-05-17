@@ -49,8 +49,10 @@ test.describe('CSV Import', () => {
   test('CSV import replaces existing cell content', async ({ page }) => {
     // Type something first
     await page.locator('[data-testid="cell-0-0"]').click()
-    await page.keyboard.type('old data')
-    await page.keyboard.press('Enter')
+    const inp = page.locator('[data-testid="cell-0-0"] input.cell-input')
+    await inp.waitFor({ state: 'visible' })
+    await inp.fill('old data')
+    await inp.press('Enter')
 
     const fileInput = page.locator('input[type="file"]')
     await fileInput.setInputFiles({
@@ -90,15 +92,23 @@ test.describe('CSV Export', () => {
     title = await createTestSheet(page, 'ExportCSVTest')
     // Populate some cells
     await page.locator('[data-testid="cell-0-0"]').click()
-    await page.keyboard.type('Name')
-    await page.keyboard.press('Tab')
-    await page.keyboard.type('Score')
-    await page.keyboard.press('Enter')
+    let inp = page.locator('[data-testid="cell-0-0"] input.cell-input')
+    await inp.waitFor({ state: 'visible' })
+    await inp.fill('Name')
+    await inp.press('Tab')
+    inp = page.locator('[data-testid="cell-0-1"] input.cell-input')
+    await inp.waitFor({ state: 'visible' })
+    await inp.fill('Score')
+    await inp.press('Enter')
     await page.locator('[data-testid="cell-1-0"]').click()
-    await page.keyboard.type('Alice')
-    await page.keyboard.press('Tab')
-    await page.keyboard.type('95')
-    await page.keyboard.press('Enter')
+    inp = page.locator('[data-testid="cell-1-0"] input.cell-input')
+    await inp.waitFor({ state: 'visible' })
+    await inp.fill('Alice')
+    await inp.press('Tab')
+    inp = page.locator('[data-testid="cell-1-1"] input.cell-input')
+    await inp.waitFor({ state: 'visible' })
+    await inp.fill('95')
+    await inp.press('Enter')
   })
 
   test.afterEach(async ({ page }) => {
@@ -154,8 +164,10 @@ test.describe('Excel (.xlsx) Export', () => {
   test.beforeEach(async ({ page }) => {
     title = await createTestSheet(page, 'ExportXlsxTest')
     await page.locator('[data-testid="cell-0-0"]').click()
-    await page.keyboard.type('Hello')
-    await page.keyboard.press('Enter')
+    const inp = page.locator('[data-testid="cell-0-0"] input.cell-input')
+    await inp.waitFor({ state: 'visible' })
+    await inp.fill('Hello')
+    await inp.press('Enter')
   })
 
   test.afterEach(async ({ page }) => {

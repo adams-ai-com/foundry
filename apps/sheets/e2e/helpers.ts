@@ -29,9 +29,10 @@ export async function deleteTestSheet(page: Page, title: string) {
 /** Types a value into a cell and commits with Enter. */
 export async function typeInCell(page: Page, row: number, col: number, value: string) {
   await page.locator(`[data-testid="cell-${row}-${col}"]`).click()
-  await page.locator(`[data-testid="cell-${row}-${col}"] input.cell-input`).waitFor({ state: 'visible' })
-  await page.keyboard.type(value)
-  await page.keyboard.press('Enter')
+  const input = page.locator(`[data-testid="cell-${row}-${col}"] input.cell-input`)
+  await input.waitFor({ state: 'visible' })
+  await input.fill(value)
+  await input.press('Enter')
 }
 
 /** Returns the visible text of a cell (the display value, not the input). */

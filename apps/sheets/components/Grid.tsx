@@ -101,6 +101,7 @@ export function Grid({ selected, onSelect }: GridProps) {
                   {isSelected ? (
                     <input
                       autoFocus
+                      onFocus={(e) => e.currentTarget.select()}
                       id={`cell-${row}-${col}`}
                       className={`cell-input absolute inset-0 w-full h-full px-1.5 text-sm bg-transparent outline-none ${fontClasses}`}
                       defaultValue={getCellFormula(addr) ?? String(rawValue ?? '')}

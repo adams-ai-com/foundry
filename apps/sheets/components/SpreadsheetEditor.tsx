@@ -60,9 +60,9 @@ export function SpreadsheetEditor({ spreadsheet }: { spreadsheet: Spreadsheet })
     const isEmpty = title === 'Untitled' && Object.values(dataRef.current).every(s => s.length === 0)
     if (isEmpty) {
       await deleteSpreadsheet(spreadsheet.id)
-      return
+    } else {
+      await save(titleRef.current, dataRef.current, formatsRef.current)
     }
-    await save(titleRef.current, dataRef.current, formatsRef.current)
     window.location.href = '/'
   }
 

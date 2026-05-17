@@ -48,8 +48,10 @@ test.describe('Editor', () => {
 
   test('typing in a cell commits on Enter and moves down', async ({ page }) => {
     await page.locator('[data-testid="cell-0-0"]').click()
-    await page.keyboard.type('hello')
-    await page.keyboard.press('Enter')
+    const input00 = page.locator('[data-testid="cell-0-0"] input.cell-input')
+    await input00.waitFor({ state: 'visible' })
+    await input00.fill('hello')
+    await input00.press('Enter')
     // A1 should now show "hello"
     await expect(page.locator('[data-testid="cell-0-0"]')).toContainText('hello')
     // Focus should have moved to A2
@@ -58,8 +60,10 @@ test.describe('Editor', () => {
 
   test('Tab commits the cell and moves right', async ({ page }) => {
     await page.locator('[data-testid="cell-0-0"]').click()
-    await page.keyboard.type('first')
-    await page.keyboard.press('Tab')
+    const input00 = page.locator('[data-testid="cell-0-0"] input.cell-input')
+    await input00.waitFor({ state: 'visible' })
+    await input00.fill('first')
+    await input00.press('Tab')
     await expect(page.locator('[data-testid="cell-0-0"]')).toContainText('first')
     await expect(page.locator('[data-testid="formula-address"]')).toHaveText('B1')
   })
@@ -67,8 +71,12 @@ test.describe('Editor', () => {
   test('Escape cancels edit and restores prior value', async ({ page }) => {
     await typeInCell(page, 0, 0, 'original')
     await page.locator('[data-testid="cell-0-0"]').click()
-    await page.keyboard.type('overwrite')
-    await page.keyboard.press('Escape')
+    const input00 = page.locator('[data-testid="cell-0-0"] input.cell-input')
+    await input00.waitFor({ state: 'visible' })
+    await input00.fill('overwrite')
+    await input00.press('Escape')
+    // Click away so cell-0-0 shows its text value rather than the input
+    await page.locator('[data-testid="cell-5-5"]').click()
     await expect(page.locator('[data-testid="cell-0-0"]')).toContainText('original')
   })
 
@@ -103,8 +111,10 @@ test.describe('Editor', () => {
     await typeInCell(page, 0, 0, '10')
     await typeInCell(page, 1, 0, '20')
     await page.locator('[data-testid="cell-2-0"]').click()
-    await page.keyboard.type('=SUM(A1:A2)')
-    await page.keyboard.press('Enter')
+    const input20 = page.locator('[data-testid="cell-2-0"] input.cell-input')
+    await input20.waitFor({ state: 'visible' })
+    await input20.fill('=SUM(A1:A2)')
+    await input20.press('Enter')
     await page.locator('[data-testid="cell-2-0"]').click()
     await expect(page.locator('[data-testid="formula-value"]')).toHaveText('=SUM(A1:A2)')
   })
@@ -116,8 +126,10 @@ test.describe('Editor', () => {
     await typeInCell(page, 1, 0, '20')
     await typeInCell(page, 2, 0, '30')
     await page.locator('[data-testid="cell-3-0"]').click()
-    await page.keyboard.type('=SUM(A1:A3)')
-    await page.keyboard.press('Enter')
+    const input30 = page.locator('[data-testid="cell-3-0"] input.cell-input')
+    await input30.waitFor({ state: 'visible' })
+    await input30.fill('=SUM(A1:A3)')
+    await input30.press('Enter')
     await expect(page.locator('[data-testid="cell-3-0"]')).toContainText('60')
   })
 
@@ -134,16 +146,20 @@ test.describe('Editor', () => {
     await typeInCell(page, 0, 1, '20')
     await typeInCell(page, 0, 2, '30')
     await page.locator('[data-testid="cell-0-3"]').click()
-    await page.keyboard.type('=AVERAGE(A1:C1)')
-    await page.keyboard.press('Enter')
+    const input03 = page.locator('[data-testid="cell-0-3"] input.cell-input')
+    await input03.waitFor({ state: 'visible' })
+    await input03.fill('=AVERAGE(A1:C1)')
+    await input03.press('Enter')
     await expect(page.locator('[data-testid="cell-0-3"]')).toContainText('20')
   })
 
   test('IF formula evaluates correctly', async ({ page }) => {
     await typeInCell(page, 0, 0, '10')
     await page.locator('[data-testid="cell-0-1"]').click()
-    await page.keyboard.type('=IF(A1>5,"big","small")')
-    await page.keyboard.press('Enter')
+    const input01 = page.locator('[data-testid="cell-0-1"] input.cell-input')
+    await input01.waitFor({ state: 'visible' })
+    await input01.fill('=IF(A1>5,"big","small")')
+    await input01.press('Enter')
     await expect(page.locator('[data-testid="cell-0-1"]')).toContainText('big')
   })
 
@@ -161,10 +177,14 @@ test.describe('Editor', () => {
   test('formula persists after reload and re-evaluates', async ({ page }) => {
     await typeInCell(page, 0, 0, '100')
     await page.locator('[data-testid="cell-0-1"]').click()
-    await page.keyboard.type('=A1+1')
-    await page.keyboard.press('Tab')
+    const input01 = page.locator('[data-testid="cell-0-1"] input.cell-input')
+    await input01.waitFor({ state: 'visible' })
+    await input01.fill('=A1+1')
+    await input01.press('Tab')
     await expect(page.locator('[data-testid="save-state"]')).toContainText('Saved', { timeout: 8000 })
     await page.reload()
+    // Click away so cell-0-1 shows its text value rather than the input
+    await page.locator('[data-testid="cell-5-5"]').click()
     await expect(page.locator('[data-testid="cell-0-1"]')).toContainText('101')
   })
 
