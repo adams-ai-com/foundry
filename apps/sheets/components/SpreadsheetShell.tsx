@@ -7,21 +7,23 @@ import { Toolbar } from './Toolbar'
 import { PythonPanel } from './PythonPanel'
 import { HyperFormulaProvider } from '@/lib/hyperformula-context'
 import type { CellAddress } from '@foundry/shared'
-import type { SheetData } from '@/lib/actions'
+import type { SheetData, CellFormats } from '@/lib/actions'
 
 interface SpreadsheetShellProps {
   initialData?: SheetData
+  initialFormats?: CellFormats
   onChange?: (data: SheetData) => void
+  onFormatsChange?: (formats: CellFormats) => void
 }
 
-export function SpreadsheetShell({ initialData, onChange }: SpreadsheetShellProps) {
+export function SpreadsheetShell({ initialData, initialFormats, onChange, onFormatsChange }: SpreadsheetShellProps) {
   const [selected, setSelected] = useState<CellAddress>({ sheet: 'Sheet1', row: 0, col: 0 })
   const [pythonOpen, setPythonOpen] = useState(false)
 
   return (
-    <HyperFormulaProvider initialData={initialData} onChange={onChange}>
+    <HyperFormulaProvider initialData={initialData} initialFormats={initialFormats} onChange={onChange} onFormatsChange={onFormatsChange}>
       <div className="flex-1 flex flex-col select-none overflow-hidden">
-        <Toolbar onTogglePython={() => setPythonOpen(v => !v)} pythonOpen={pythonOpen} />
+        <Toolbar selected={selected} onTogglePython={() => setPythonOpen(v => !v)} pythonOpen={pythonOpen} />
         <FormulaBar selected={selected} />
         <div className="flex flex-1 overflow-hidden">
           <Grid

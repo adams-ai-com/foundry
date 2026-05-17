@@ -4,6 +4,21 @@ import { useCallback, useEffect } from 'react'
 import { cellAddress, colIndexToLetter } from '@foundry/shared'
 import type { CellAddress } from '@foundry/shared'
 import { useHyperFormulaContext } from '@/lib/hyperformula-context'
+import type { CellFormat } from '@/lib/actions'
+
+function applyNumFormat(value: string | number | boolean | null, numFormat?: CellFormat['numFormat']): string {
+  if (value === null || value === undefined || value === '') return ''
+  const n = Number(value)
+  if (!numFormat || numFormat === 'general') return String(value)
+  if (isNaN(n)) return String(value)
+  switch (numFormat) {
+    case 'number':   return n.toLocaleString('en-US', { maximumFractionDigits: 2 })
+    case 'currency': return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
+    case 'percent':  return new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 2 }).format(n)
+    case 'date':     return new Date(n * 86400000 - 2209075200000).toLocaleDateString('en-US')
+    default:         return String(value)
+  }
+}
 
 const ROWS = 100
 const COLS = 26
@@ -17,7 +32,7 @@ interface GridProps {
 }
 
 export function Grid({ selected, onSelect }: GridProps) {
-  const { getCellValue, setCellValue, getCellFormula } = useHyperFormulaContext()
+  const { getCellValue, setCellValue, getCellFormula, getCellFormat } = useHyperFormulaContext()
 
   const commitValue = useCallback((addr: CellAddress, value: string) => {
     setCellValue(addr, value)
@@ -73,12 +88,19 @@ export function Grid({ selected, onSelect }: GridProps) {
             {Array.from({ length: COLS }, (_, col) => {
               const addr: CellAddress = { sheet: selected.sheet, row, col }
               const isSelected = selected.row === row && selected.col === col
-              const displayValue = String(getCellValue(addr) ?? '')
+              const rawValue = getCellValue(addr)
+              const fmt = getCellFormat(addr)
+              const displayValue = applyNumFormat(rawValue, fmt.numFormat)
+              const fontClasses = [
+                fmt.bold      ? 'font-bold'     : '',
+                fmt.italic    ? 'italic'         : '',
+                fmt.underline ? 'underline'      : '',
+              ].filter(Boolean).join(' ')
 
               return (
                 <div
                   key={col}
-                  className={`cell border-t border-l relative ${isSelected ? 'selected' : ''}`}
+                  className={`cell border-t border-l relative ${isSelected ? 'selected' : ''} ${fontClasses}`}
                   style={{ width: COL_WIDTH, minWidth: COL_WIDTH }}
                   onMouseDown={() => onSelect(addr)}
                   onDoubleClick={() => {
@@ -89,8 +111,8 @@ export function Grid({ selected, onSelect }: GridProps) {
                   {isSelected ? (
                     <input
                       id={`cell-${row}-${col}`}
-                      className="cell-input absolute inset-0 w-full h-full px-1.5 text-sm bg-transparent outline-none"
-                      defaultValue={getCellFormula(addr) ?? displayValue}
+                      className={`cell-input absolute inset-0 w-full h-full px-1.5 text-sm bg-transparent outline-none ${fontClasses}`}
+                      defaultValue={getCellFormula(addr) ?? String(rawValue ?? '')}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           commitValue(addr, e.currentTarget.value)

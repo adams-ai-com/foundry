@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { SpreadsheetShell } from './SpreadsheetShell'
 import { updateSpreadsheet, deleteSpreadsheet } from '@/lib/actions'
-import type { Spreadsheet, SheetData } from '@/lib/actions'
+import type { Spreadsheet, SheetData, CellFormats } from '@/lib/actions'
 
 const AUTOSAVE_MS = 1500
 
@@ -13,37 +13,43 @@ export function SpreadsheetEditor({ spreadsheet }: { spreadsheet: Spreadsheet })
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const titleRef = useRef(spreadsheet.title)
   const dataRef = useRef<SheetData>(spreadsheet.data)
+  const formatsRef = useRef<CellFormats>(spreadsheet.formats)
 
-  const save = useCallback(async (t: string, d: SheetData) => {
+  const save = useCallback(async (t: string, d: SheetData, f: CellFormats) => {
     setSaveState('saving')
-    await updateSpreadsheet(spreadsheet.id, t, d)
+    await updateSpreadsheet(spreadsheet.id, t, d, f)
     setSaveState('saved')
   }, [spreadsheet.id])
 
-  const scheduleSave = useCallback((t: string, d: SheetData) => {
+  const scheduleSave = useCallback((t: string, d: SheetData, f: CellFormats) => {
     setSaveState('unsaved')
     if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => save(t, d), AUTOSAVE_MS)
+    saveTimer.current = setTimeout(() => save(t, d, f), AUTOSAVE_MS)
   }, [save])
 
   function handleTitleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const v = e.target.value
     setTitle(v)
     titleRef.current = v
-    scheduleSave(v, dataRef.current)
+    scheduleSave(v, dataRef.current, formatsRef.current)
   }
 
   function handleTitleBlur() {
     if (saveTimer.current) {
       clearTimeout(saveTimer.current)
       saveTimer.current = null
-      save(titleRef.current, dataRef.current)
+      save(titleRef.current, dataRef.current, formatsRef.current)
     }
   }
 
   function handleDataChange(data: SheetData) {
     dataRef.current = data
-    scheduleSave(titleRef.current, data)
+    scheduleSave(titleRef.current, data, formatsRef.current)
+  }
+
+  function handleFormatsChange(formats: CellFormats) {
+    formatsRef.current = formats
+    scheduleSave(titleRef.current, dataRef.current, formats)
   }
 
   async function handleBack() {
@@ -56,7 +62,7 @@ export function SpreadsheetEditor({ spreadsheet }: { spreadsheet: Spreadsheet })
       await deleteSpreadsheet(spreadsheet.id)
       return
     }
-    await save(titleRef.current, dataRef.current)
+    await save(titleRef.current, dataRef.current, formatsRef.current)
     window.location.href = '/'
   }
 
@@ -97,7 +103,12 @@ export function SpreadsheetEditor({ spreadsheet }: { spreadsheet: Spreadsheet })
         </div>
       </div>
 
-      <SpreadsheetShell initialData={spreadsheet.data} onChange={handleDataChange} />
+      <SpreadsheetShell
+        initialData={spreadsheet.data}
+        initialFormats={spreadsheet.formats}
+        onChange={handleDataChange}
+        onFormatsChange={handleFormatsChange}
+      />
     </>
   )
 }
