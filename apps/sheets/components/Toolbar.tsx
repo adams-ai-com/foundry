@@ -3,7 +3,7 @@
 import { useRef } from 'react'
 import { IconButton, Separator } from '@foundry/ui'
 import { useHyperFormulaContext } from '@/lib/hyperformula-context'
-import { importXlsx, exportXlsx } from '@/lib/xlsx-io'
+import { importXlsx, exportXlsx, parseCSV, serializeCSV } from '@/lib/xlsx-io'
 import type { CellAddress } from '@foundry/shared'
 import type { CellFormat } from '@/lib/actions'
 
@@ -26,23 +26,38 @@ export function Toolbar({ selected, onTogglePython, pythonOpen }: ToolbarProps) 
     const file = e.target.files?.[0]
     if (!file) return
     e.target.value = ''
-    const sheets = await importXlsx(file)
-    const data = Object.fromEntries(sheets.map(s => [s.name, s.data]))
-    loadAll(data, {})
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    if (ext === 'csv') {
+      const text = await file.text()
+      loadAll({ Sheet1: parseCSV(text) }, {})
+    } else {
+      const sheets = await importXlsx(file)
+      loadAll(Object.fromEntries(sheets.map(s => [s.name, s.data])), {})
+    }
   }
 
-  async function handleExport() {
+  async function handleExportXlsx() {
     const data = getSerializedData()
-    const names = getSheetNames()
-    const sheets = names.map(name => ({
+    const sheets = getSheetNames().map(name => ({
       name,
       data: (data[name] ?? []) as (string | number | null)[][],
     }))
     const blob = await exportXlsx(sheets)
+    triggerDownload(blob, 'spreadsheet.xlsx')
+  }
+
+  function handleExportCsv() {
+    const data = getSerializedData()
+    const firstName = getSheetNames()[0] ?? 'Sheet1'
+    const csv = serializeCSV((data[firstName] ?? []) as (string | number | boolean | null)[][])
+    triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), 'spreadsheet.csv')
+  }
+
+  function triggerDownload(blob: Blob, filename: string) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'spreadsheet.xlsx'
+    a.download = filename
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -91,7 +106,7 @@ export function Toolbar({ selected, onTogglePython, pythonOpen }: ToolbarProps) 
         <input
           ref={fileInputRef}
           type="file"
-          accept=".xlsx,.xls"
+          accept=".xlsx,.xls,.csv"
           className="hidden"
           onChange={handleImport}
         />
@@ -101,11 +116,18 @@ export function Toolbar({ selected, onTogglePython, pythonOpen }: ToolbarProps) 
         >
           Import
         </button>
+        <span className="text-xs text-gray-300">|</span>
         <button
           className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100"
-          onClick={handleExport}
+          onClick={handleExportXlsx}
         >
-          Export
+          xlsx
+        </button>
+        <button
+          className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100"
+          onClick={handleExportCsv}
+        >
+          csv
         </button>
       </div>
     </div>
