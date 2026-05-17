@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {
     environment: 'node',
+    include: ['tests/**/*.test.ts'],
     setupFiles: ['./tests/setup.ts'],
     // Run serially so DB cleanup between tests is reliable
     pool: 'forks',
