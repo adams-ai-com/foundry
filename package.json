@@ -1,0 +1,21 @@
+{
+  "name": "foundry",
+  "private": true,
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "type-check": "turbo type-check",
+    "dev:docs": "turbo dev --filter=@foundry/docs",
+    "dev:sheets": "turbo dev --filter=@foundry/sheets",
+    "dev:mail": "turbo dev --filter=@foundry/mail"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

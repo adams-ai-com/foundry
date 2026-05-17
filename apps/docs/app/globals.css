@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* TipTap editor styles */
+.tiptap {
+  outline: none;
+  min-height: 100%;
+}
+
+.tiptap p { @apply my-1 leading-relaxed; }
+.tiptap h1 { @apply text-3xl font-bold mt-6 mb-3; }
+.tiptap h2 { @apply text-2xl font-semibold mt-5 mb-2; }
+.tiptap h3 { @apply text-xl font-semibold mt-4 mb-2; }
+.tiptap ul { @apply list-disc pl-6 my-2; }
+.tiptap ol { @apply list-decimal pl-6 my-2; }
+.tiptap li { @apply my-0.5; }
+.tiptap blockquote { @apply border-l-4 border-gray-300 pl-4 italic text-gray-600 my-3; }
+.tiptap code { @apply bg-gray-100 rounded px-1 py-0.5 text-sm font-mono; }
+.tiptap pre { @apply bg-gray-900 text-gray-100 rounded p-4 my-3 overflow-x-auto; }
+.tiptap pre code { @apply bg-transparent p-0; }
+.tiptap hr { @apply border-gray-200 my-6; }
+.tiptap a { @apply text-blue-600 underline; }
+
+/* Tables */
+.tiptap table { @apply border-collapse w-full my-4; }
+.tiptap td, .tiptap th { @apply border border-gray-300 px-3 py-1.5 text-sm; }
+.tiptap th { @apply bg-gray-50 font-semibold; }
+.tiptap .selectedCell { @apply bg-blue-50; }

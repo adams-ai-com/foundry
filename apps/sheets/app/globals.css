@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; }
+
+.cell {
+  @apply border-b border-r border-gray-200 text-sm px-1.5 overflow-hidden whitespace-nowrap text-ellipsis cursor-cell;
+  height: 24px;
+  line-height: 24px;
+}
+
+.cell:focus { @apply outline-none ring-2 ring-inset ring-blue-500; }
+.cell.selected { @apply bg-blue-50; }
+.cell.header { @apply bg-gray-50 text-gray-500 text-xs font-medium text-center cursor-default select-none; }
