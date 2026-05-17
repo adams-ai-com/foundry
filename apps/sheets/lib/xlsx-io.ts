@@ -4,6 +4,8 @@ import ExcelJS from 'exceljs'
 
 function csvParseField(s: string): string | number | null {
   if (s === '') return null
+  // Preserve leading zeros (ZIP codes, phone numbers, IDs like "007")
+  if (s.length > 1 && s[0] === '0' && s[1] !== '.') return s
   const n = Number(s)
   return (!isNaN(n) && s.trim() !== '') ? n : s
 }
@@ -34,7 +36,12 @@ export function parseCSV(text: string): (string | number | null)[][] {
   }
 
   if (field || row.length > 0) { row.push(csvParseField(field)); rows.push(row) }
-  if (rows.length > 0 && rows[rows.length - 1].every(v => v === null)) rows.pop()
+  // Strip single trailing null row caused by a trailing newline (not a row of empty fields)
+  const endsWithNewline = text.endsWith('\n') || text.endsWith('\r\n')
+  if (endsWithNewline && rows.length > 0) {
+    const last = rows[rows.length - 1]
+    if (last.length === 1 && last[0] === null) rows.pop()
+  }
   return rows
 }
 

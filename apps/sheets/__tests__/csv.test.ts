@@ -14,8 +14,12 @@ describe('parseCSV', () => {
     expect(parseCSV('1.5,2.75')).toEqual([[1.5, 2.75]])
   })
 
-  it('keeps strings that look almost numeric', () => {
-    expect(parseCSV('007,1e2text')).toEqual([['007', '1e2text']])
+  it('preserves leading zeros (ZIP codes, IDs)', () => {
+    expect(parseCSV('007,90210')).toEqual([['007', '90210']])
+  })
+
+  it('keeps strings that are not purely numeric', () => {
+    expect(parseCSV('1e2text,abc123')).toEqual([['1e2text', 'abc123']])
   })
 
   it('scientific notation numbers are parsed', () => {
@@ -34,7 +38,7 @@ describe('parseCSV', () => {
     expect(parseCSV('a,,c')).toEqual([['a', null, 'c']])
   })
 
-  it('returns null for an entirely empty field', () => {
+  it('returns two nulls for a bare comma (two empty fields)', () => {
     expect(parseCSV(',')).toEqual([[null, null]])
   })
 

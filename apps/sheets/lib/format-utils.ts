@@ -1,7 +1,7 @@
 import type { CellFormat } from './actions'
 
-// Excel serial date → JS Date (epoch Jan 0, 1900 with leap-year quirk correction)
-const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30)
+// Excel serial date → JS Date: serial 1 = Jan 1 1900, so epoch = Dec 31 1899
+const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 31)
 
 export function applyNumFormat(
   value: string | number | boolean | null,
