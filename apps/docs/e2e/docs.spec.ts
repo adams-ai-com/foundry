@@ -10,7 +10,8 @@ async function createDoc(page: Page): Promise<string> {
 }
 
 async function waitForSaved(page: Page) {
-  await expect(page.getByText('Saved')).toBeVisible({ timeout: 8000 })
+  // Use data-testid + exact text so we don't match "Unsaved" or "Saving…"
+  await expect(page.getByTestId('save-state')).toHaveText('Saved', { timeout: 8000 })
 }
 
 // ─── home page ────────────────────────────────────────────────────────────────
@@ -69,8 +70,9 @@ test('content auto-saves and persists after reload', async ({ page }) => {
   await editor.click()
   await page.keyboard.type('Hello from Playwright')
 
-  // Save indicator should cycle through saving → saved
-  await expect(page.getByText('Saved')).toBeVisible({ timeout: 8000 })
+  // Wait for unsaved state to confirm typing was detected, then wait for save
+  await expect(page.getByTestId('save-state')).toHaveText(/Unsaved|Saving/, { timeout: 3000 })
+  await expect(page.getByTestId('save-state')).toHaveText('Saved', { timeout: 8000 })
 
   // Reload and verify content is still there
   await page.goto(`/editor/${id}`)
@@ -84,10 +86,10 @@ test('save indicator shows Unsaved while typing then Saved after debounce', asyn
   await page.keyboard.type('x')
 
   // Should briefly show Unsaved or Saving
-  await expect(page.getByText(/Unsaved|Saving/)).toBeVisible({ timeout: 3000 })
+  await expect(page.getByTestId('save-state')).toHaveText(/Unsaved|Saving/, { timeout: 3000 })
 
   // Then settle on Saved
-  await expect(page.getByText('Saved')).toBeVisible({ timeout: 8000 })
+  await expect(page.getByTestId('save-state')).toHaveText('Saved', { timeout: 8000 })
 })
 
 // ─── editor — title + content together ───────────────────────────────────────
@@ -168,6 +170,6 @@ test('deleting a document removes it from the list', async ({ page }) => {
 
 test('navigating to an unknown document id shows 404', async ({ page }) => {
   await page.goto('/editor/00000000-0000-0000-0000-000000000000')
-  // Next.js renders "This page could not be found" for notFound()
-  await expect(page.getByText(/could not be found|404/i)).toBeVisible()
+  // Next.js 404 page renders both an h1 "404" and an h2 with the message
+  await expect(page.getByRole('heading', { name: '404' })).toBeVisible()
 })

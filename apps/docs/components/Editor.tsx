@@ -100,7 +100,7 @@ export function Editor({ doc }: { doc: Document }) {
           data-testid="doc-title"
           className="flex-1 text-lg font-semibold text-gray-800 bg-transparent border-none outline-none placeholder-gray-300"
         />
-        <span className="text-xs text-gray-400 shrink-0">
+        <span className="text-xs text-gray-400 shrink-0" data-testid="save-state">
           {saveState === 'saving' ? 'Saving…' : saveState === 'unsaved' ? 'Unsaved' : 'Saved'}
         </span>
       </div>
