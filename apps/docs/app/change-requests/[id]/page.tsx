@@ -3,9 +3,8 @@ import { notFound } from 'next/navigation'
 import {
   getCR, getCRNotes, getCRAttachments,
   updateCRStatus, updateCRPriority, updateCRAssignee, addCRNote, archiveCR,
-  CR_STATUSES, STATUS_LABELS, PRIORITY_LABELS,
-  type CRStatus, type CRPriority,
 } from '@/lib/cr-actions'
+import { CR_STATUSES, STATUS_LABELS, PRIORITY_LABELS, type CRStatus, type CRPriority } from '@/lib/cr-types'
 
 export const dynamic = 'force-dynamic'
 

@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { listCRs, CR_STATUSES, STATUS_LABELS, PRIORITY_LABELS, type CR, type CRStatus } from '@/lib/cr-actions'
+import { listCRs } from '@/lib/cr-actions'
+import { CR_STATUSES, STATUS_LABELS, PRIORITY_LABELS, type CR, type CRStatus } from '@/lib/cr-types'
 
 export const dynamic = 'force-dynamic'
 
