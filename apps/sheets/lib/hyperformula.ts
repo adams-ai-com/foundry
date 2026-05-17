@@ -2,9 +2,39 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CellAddress } from '@foundry/shared'
 import type { SheetData } from './actions'
 
-export function useHyperFormula(initialData?: SheetData) {
+type HFInstance = import('hyperformula').HyperFormula
+
+export function serializeHF(hf: HFInstance): SheetData {
+  const result: SheetData = {}
+  for (const name of hf.getSheetNames()) {
+    const sheetId = hf.getSheetId(name)
+    if (sheetId === undefined) { result[name] = []; continue }
+    const { height, width } = hf.getSheetDimensions(sheetId)
+    if (height === 0 || width === 0) { result[name] = []; continue }
+    const rows: (string | number | boolean | null)[][] = []
+    for (let r = 0; r < height; r++) {
+      const row: (string | number | boolean | null)[] = []
+      for (let c = 0; c < width; c++) {
+        const formula = hf.getCellFormula({ sheet: sheetId, row: r, col: c })
+        if (formula) {
+          row.push(formula)
+        } else {
+          const val = hf.getCellValue({ sheet: sheetId, row: r, col: c })
+          row.push(val instanceof Error ? null : (val as string | number | boolean | null) ?? null)
+        }
+      }
+      rows.push(row)
+    }
+    result[name] = rows
+  }
+  return result
+}
+
+export function useHyperFormula(initialData?: SheetData, onChange?: (data: SheetData) => void) {
   const [tick, setTick] = useState(0)
-  const hfRef = useRef<import('hyperformula').HyperFormula | null>(null)
+  const hfRef = useRef<HFInstance | null>(null)
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
 
   useEffect(() => {
     let cancelled = false
@@ -48,34 +78,12 @@ export function useHyperFormula(initialData?: SheetData) {
     if (sheetId === undefined) return
     hfRef.current.setCellContents({ sheet: sheetId, row: addr.row, col: addr.col }, [[value]])
     setTick(t => t + 1)
+    if (onChangeRef.current) onChangeRef.current(serializeHF(hfRef.current))
   }, [])
 
   const getSerializedData = useCallback((): SheetData => {
-    const hf = hfRef.current
-    if (!hf) return { Sheet1: [] }
-    const result: SheetData = {}
-    for (const name of hf.getSheetNames()) {
-      const sheetId = hf.getSheetId(name)
-      if (sheetId === undefined) { result[name] = []; continue }
-      const { height, width } = hf.getSheetDimensions(sheetId)
-      if (height === 0 || width === 0) { result[name] = []; continue }
-      const rows: (string | number | boolean | null)[][] = []
-      for (let r = 0; r < height; r++) {
-        const row: (string | number | boolean | null)[] = []
-        for (let c = 0; c < width; c++) {
-          const formula = hf.getCellFormula({ sheet: sheetId, row: r, col: c })
-          if (formula) {
-            row.push(formula)
-          } else {
-            const val = hf.getCellValue({ sheet: sheetId, row: r, col: c })
-            row.push(val instanceof Error ? null : (val as string | number | boolean | null) ?? null)
-          }
-        }
-        rows.push(row)
-      }
-      result[name] = rows
-    }
-    return result
+    if (!hfRef.current) return { Sheet1: [] }
+    return serializeHF(hfRef.current)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tick])
 

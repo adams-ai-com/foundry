@@ -3,8 +3,7 @@
 import { useCallback, useEffect } from 'react'
 import { cellAddress, colIndexToLetter } from '@foundry/shared'
 import type { CellAddress } from '@foundry/shared'
-import { useHyperFormula } from '@/lib/hyperformula'
-import type { SheetData } from '@/lib/actions'
+import { useHyperFormulaContext } from '@/lib/hyperformula-context'
 
 const ROWS = 100
 const COLS = 26
@@ -15,17 +14,14 @@ const HEADER_WIDTH = 50
 interface GridProps {
   selected: CellAddress
   onSelect: (addr: CellAddress) => void
-  initialData?: SheetData
-  onChange?: (data: SheetData) => void
 }
 
-export function Grid({ selected, onSelect, initialData, onChange }: GridProps) {
-  const { getCellValue, setCellValue, getCellFormula, getSerializedData } = useHyperFormula(initialData)
+export function Grid({ selected, onSelect }: GridProps) {
+  const { getCellValue, setCellValue, getCellFormula } = useHyperFormulaContext()
 
   const commitValue = useCallback((addr: CellAddress, value: string) => {
     setCellValue(addr, value)
-    if (onChange) onChange(getSerializedData())
-  }, [setCellValue, onChange, getSerializedData])
+  }, [setCellValue])
 
   useEffect(() => {
     let editValue = ''

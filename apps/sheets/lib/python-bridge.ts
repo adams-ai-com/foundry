@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useHyperFormula } from './hyperformula'
+import { useHyperFormulaContext } from './hyperformula-context'
 
 type PyodideInterface = {
   runPythonAsync: (code: string) => Promise<unknown>
@@ -35,7 +35,7 @@ export function usePython() {
   const [running, setRunning] = useState(false)
   const [output, setOutput] = useState('')
   const pyRef = useRef<PyodideInterface | null>(null)
-  const { getCellValue, getCellFormula, setCellValue } = useHyperFormula()
+  const { getCellValue, setCellValue } = useHyperFormulaContext()
 
   useEffect(() => {
     loadPyodide().then((py) => {

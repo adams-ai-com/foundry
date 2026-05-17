@@ -2,14 +2,14 @@
 
 import { cellAddress } from '@foundry/shared'
 import type { CellAddress } from '@foundry/shared'
-import { useHyperFormula } from '@/lib/hyperformula'
+import { useHyperFormulaContext } from '@/lib/hyperformula-context'
 
 interface FormulaBarProps {
   selected: CellAddress
 }
 
 export function FormulaBar({ selected }: FormulaBarProps) {
-  const { getCellFormula, getCellValue } = useHyperFormula()
+  const { getCellFormula, getCellValue } = useHyperFormulaContext()
   const formula = getCellFormula(selected)
   const value = getCellValue(selected)
   const display = formula ?? String(value ?? '')
