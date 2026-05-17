@@ -22,6 +22,15 @@
 .tiptap hr { @apply border-gray-200 my-6; }
 .tiptap a { @apply text-blue-600 underline; }
 
+/* Placeholder */
+.tiptap p.is-empty:first-child::before {
+  color: #adb5bd;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
 /* Tables */
 .tiptap table { @apply border-collapse w-full my-4; }
 .tiptap td, .tiptap th { @apply border border-gray-300 px-3 py-1.5 text-sm; }

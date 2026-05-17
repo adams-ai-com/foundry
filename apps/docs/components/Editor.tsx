@@ -12,19 +12,31 @@ import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
+import Placeholder from '@tiptap/extension-placeholder'
 import { Toolbar } from './Toolbar'
-import { updateDocument } from '@/lib/actions'
+import { updateDocument, deleteDocument } from '@/lib/actions'
 import type { Document } from '@/lib/actions'
 
 type JSONContent = Record<string, unknown>
 
 const AUTOSAVE_MS = 1500
 
+function isDocEmpty(title: string, content: JSONContent): boolean {
+  if (title !== 'Untitled' && title !== '') return false
+  // ProseMirror empty doc: {type:'doc', content:[{type:'paragraph'}]}
+  const nodes = (content as { content?: unknown[] }).content
+  if (!nodes || nodes.length === 0) return true
+  if (nodes.length === 1) {
+    const node = nodes[0] as { type?: string; content?: unknown[] }
+    return node.type === 'paragraph' && (!node.content || node.content.length === 0)
+  }
+  return false
+}
+
 export function Editor({ doc }: { doc: Document }) {
   const [title, setTitle] = useState(doc.title)
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'unsaved'>('saved')
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Ref keeps onUpdate from closing over stale title state
   const titleRef = useRef(doc.title)
 
   const save = useCallback(async (newTitle: string, content: JSONContent) => {
@@ -51,16 +63,15 @@ export function Editor({ doc }: { doc: Document }) {
       TableRow,
       TableHeader,
       TableCell,
+      Placeholder.configure({ placeholder: 'Start writing…' }),
     ],
-    content: Object.keys(doc.content).length ? (doc.content as JSONContent) : '<p></p>',
+    content: Object.keys(doc.content).length ? (doc.content as JSONContent) : '',
     editorProps: {
       attributes: {
         class: 'tiptap prose max-w-none p-12 min-h-full focus:outline-none',
       },
     },
     onUpdate({ editor }) {
-      // Use ref so this always has the latest title even though this callback
-      // is created once at mount and never re-created by TipTap.
       scheduleSave(titleRef.current, editor.getJSON())
     },
   })
@@ -72,7 +83,6 @@ export function Editor({ doc }: { doc: Document }) {
     scheduleSave(newTitle, editor?.getJSON() ?? {})
   }
 
-  // Flush any pending save on blur so navigating away doesn't lose title edits
   function handleTitleBlur() {
     if (saveTimer.current) {
       clearTimeout(saveTimer.current)
@@ -81,16 +91,48 @@ export function Editor({ doc }: { doc: Document }) {
     }
   }
 
-  // Clean up timer on unmount
+  async function handleBack() {
+    // Clean up timer
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+    }
+    // Delete orphan docs silently (never named, never typed anything)
+    const content = editor?.getJSON() ?? {}
+    if (isDocEmpty(titleRef.current, content)) {
+      await deleteDocument(doc.id) // redirects to '/'
+      return
+    }
+    // Otherwise flush save then navigate
+    await save(titleRef.current, content)
+    window.location.href = '/'
+  }
+
   useEffect(() => {
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current) }
   }, [])
 
+  const saveIndicator =
+    saveState === 'saving'
+      ? { dot: 'bg-amber-400 animate-pulse', text: 'Saving…', textColor: 'text-gray-400' }
+      : saveState === 'unsaved'
+      ? { dot: 'bg-amber-400', text: 'Unsaved', textColor: 'text-amber-600' }
+      : { dot: 'bg-green-500', text: 'Saved', textColor: 'text-gray-400' }
+
   return (
     <>
       {/* Header bar */}
-      <div className="flex items-center gap-4 px-6 py-3 bg-white border-b border-gray-200">
-        <a href="/" className="text-gray-400 hover:text-gray-600 text-sm shrink-0">← Docs</a>
+      <div className="flex items-center gap-4 px-4 py-2.5 bg-white border-b border-gray-200 shrink-0">
+        <button
+          onClick={handleBack}
+          className="flex items-center gap-1.5 text-gray-500 hover:text-gray-900 text-sm font-medium transition-colors shrink-0 group"
+        >
+          <svg className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Docs
+        </button>
+        <div className="w-px h-5 bg-gray-200 shrink-0" />
         <input
           type="text"
           value={title}
@@ -98,17 +140,20 @@ export function Editor({ doc }: { doc: Document }) {
           onBlur={handleTitleBlur}
           placeholder="Untitled"
           data-testid="doc-title"
-          className="flex-1 text-lg font-semibold text-gray-800 bg-transparent border-none outline-none placeholder-gray-300"
+          className="flex-1 text-base font-semibold text-gray-900 bg-transparent border-none outline-none placeholder-gray-300 min-w-0"
         />
-        <span className="text-xs text-gray-400 shrink-0" data-testid="save-state">
-          {saveState === 'saving' ? 'Saving…' : saveState === 'unsaved' ? 'Unsaved' : 'Saved'}
-        </span>
+        <div className="flex items-center gap-2 shrink-0" data-testid="save-state">
+          <span className={`w-2 h-2 rounded-full shrink-0 ${saveIndicator.dot}`} />
+          <span className={`text-xs ${saveIndicator.textColor} hidden sm:block`}>
+            {saveIndicator.text}
+          </span>
+        </div>
       </div>
 
       <Toolbar editor={editor} />
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-[816px] min-h-[1056px] mx-auto my-8 bg-white shadow-sm border border-gray-200 rounded">
+      <div className="flex-1 overflow-y-auto bg-gray-100">
+        <div className="max-w-[816px] mx-auto my-8 mb-16 bg-white shadow-sm border border-gray-200 rounded-sm min-h-[calc(100vh-180px)]">
           <EditorContent editor={editor} className="h-full" />
         </div>
       </div>
