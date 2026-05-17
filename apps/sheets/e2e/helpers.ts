@@ -1,4 +1,4 @@
-import { type Page, expect } from '@playwright/test'
+import { type Page, type Locator, expect } from '@playwright/test'
 
 /** Creates a new spreadsheet, sets a unique title, and waits for first save. Returns the title. */
 export async function createTestSheet(page: Page, label = 'E2E'): Promise<string> {
@@ -26,13 +26,29 @@ export async function deleteTestSheet(page: Page, title: string) {
   await page.waitForLoadState('networkidle')
 }
 
+/**
+ * Sets a cell-input's value via the native HTMLInputElement setter so React's
+ * synthetic onChange fires and the editValueRef (in Grid) is updated. Playwright's
+ * pressSequentially dispatches keyboard events but headless Chromium does not
+ * perform the browser's default character-insertion for those synthetic events,
+ * so the DOM value stays empty and nothing gets committed.
+ */
+export async function setCellInputValue(input: Locator, value: string) {
+  await input.evaluate((el: HTMLInputElement, v) => {
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype, 'value',
+    )!.set!
+    nativeSetter.call(el, v)
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+  }, value)
+}
+
 /** Types a value into a cell and commits with Enter. */
 export async function typeInCell(page: Page, row: number, col: number, value: string) {
   await page.locator(`[data-testid="cell-${row}-${col}"]`).click()
   const input = page.locator(`[data-testid="cell-${row}-${col}"] input.cell-input`)
   await input.waitFor({ state: 'visible' })
-  await input.click()  // ensure focus — autoFocus only fires on mount, not on update of already-selected cell
-  await page.keyboard.type(value)
+  await setCellInputValue(input, value)
   await page.keyboard.press('Enter')
 }
 

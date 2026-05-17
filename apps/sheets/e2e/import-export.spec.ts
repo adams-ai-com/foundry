@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { createTestSheet, deleteTestSheet } from './helpers'
+import { createTestSheet, deleteTestSheet, setCellInputValue } from './helpers'
 
 const SAMPLE_CSV = 'Name,Score,Note\nAlice,95,Top\nBob,87,Good\nCharlie,100,Perfect'
 const SAMPLE_CSV_WITH_QUOTES = '"Last, First",Score\n"Smith, Jane",92\n"Doe, John",88'
@@ -51,7 +51,7 @@ test.describe('CSV Import', () => {
     await page.locator('[data-testid="cell-0-0"]').click()
     const inp = page.locator('[data-testid="cell-0-0"] input.cell-input')
     await inp.waitFor({ state: 'visible' })
-    await inp.pressSequentially('old data')
+    await setCellInputValue(inp, 'old data')
     await page.keyboard.press('Enter')
 
     const fileInput = page.locator('input[type="file"]')
@@ -94,20 +94,20 @@ test.describe('CSV Export', () => {
     await page.locator('[data-testid="cell-0-0"]').click()
     let inp = page.locator('[data-testid="cell-0-0"] input.cell-input')
     await inp.waitFor({ state: 'visible' })
-    await inp.pressSequentially('Name')
+    await setCellInputValue(inp, 'Name')
     await page.keyboard.press('Tab')
     inp = page.locator('[data-testid="cell-0-1"] input.cell-input')
     await inp.waitFor({ state: 'visible' })
-    await inp.pressSequentially('Score')
+    await setCellInputValue(inp, 'Score')
     await page.keyboard.press('Enter')
     await page.locator('[data-testid="cell-1-0"]').click()
     inp = page.locator('[data-testid="cell-1-0"] input.cell-input')
     await inp.waitFor({ state: 'visible' })
-    await inp.pressSequentially('Alice')
+    await setCellInputValue(inp, 'Alice')
     await page.keyboard.press('Tab')
     inp = page.locator('[data-testid="cell-1-1"] input.cell-input')
     await inp.waitFor({ state: 'visible' })
-    await inp.pressSequentially('95')
+    await setCellInputValue(inp, '95')
     await page.keyboard.press('Enter')
   })
 
@@ -166,7 +166,7 @@ test.describe('Excel (.xlsx) Export', () => {
     await page.locator('[data-testid="cell-0-0"]').click()
     const inp = page.locator('[data-testid="cell-0-0"] input.cell-input')
     await inp.waitFor({ state: 'visible' })
-    await inp.pressSequentially('Hello')
+    await setCellInputValue(inp, 'Hello')
     await page.keyboard.press('Enter')
   })
 
