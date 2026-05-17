@@ -68,19 +68,20 @@ export function Toolbar({ selected, onTogglePython, pythonOpen }: ToolbarProps) 
 
       <Separator />
 
-      <IconButton label="Bold (Ctrl+B)" active={!!fmt.bold} onClick={() => toggleFormat('bold')}>
+      <IconButton data-testid="btn-bold" label="Bold (Ctrl+B)" active={!!fmt.bold} onClick={() => toggleFormat('bold')}>
         <strong>B</strong>
       </IconButton>
-      <IconButton label="Italic (Ctrl+I)" active={!!fmt.italic} onClick={() => toggleFormat('italic')}>
+      <IconButton data-testid="btn-italic" label="Italic (Ctrl+I)" active={!!fmt.italic} onClick={() => toggleFormat('italic')}>
         <em>I</em>
       </IconButton>
-      <IconButton label="Underline (Ctrl+U)" active={!!fmt.underline} onClick={() => toggleFormat('underline')}>
+      <IconButton data-testid="btn-underline" label="Underline (Ctrl+U)" active={!!fmt.underline} onClick={() => toggleFormat('underline')}>
         <span className="underline">U</span>
       </IconButton>
 
       <Separator />
 
       <select
+        data-testid="select-numformat"
         className="text-xs border border-gray-200 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
         value={fmt.numFormat ?? 'general'}
         onChange={(e) => setCellFormat(selected, { numFormat: e.target.value as CellFormat['numFormat'] })}
@@ -95,6 +96,7 @@ export function Toolbar({ selected, onTogglePython, pythonOpen }: ToolbarProps) 
       <Separator />
 
       <IconButton
+        data-testid="btn-python"
         label="Python scripting"
         active={pythonOpen}
         onClick={onTogglePython}
@@ -111,6 +113,7 @@ export function Toolbar({ selected, onTogglePython, pythonOpen }: ToolbarProps) 
           onChange={handleImport}
         />
         <button
+          data-testid="btn-import"
           className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100"
           onClick={() => fileInputRef.current?.click()}
         >
@@ -118,12 +121,14 @@ export function Toolbar({ selected, onTogglePython, pythonOpen }: ToolbarProps) 
         </button>
         <span className="text-xs text-gray-300">|</span>
         <button
+          data-testid="btn-export-xlsx"
           className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100"
           onClick={handleExportXlsx}
         >
           xlsx
         </button>
         <button
+          data-testid="btn-export-csv"
           className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100"
           onClick={handleExportCsv}
         >
