@@ -16,6 +16,8 @@ import { Toolbar } from './Toolbar'
 import { updateDocument } from '@/lib/actions'
 import type { Document } from '@/lib/actions'
 
+type JSONContent = Record<string, unknown>
+
 const AUTOSAVE_MS = 1500
 
 export function Editor({ doc }: { doc: Document }) {
@@ -23,13 +25,13 @@ export function Editor({ doc }: { doc: Document }) {
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'unsaved'>('saved')
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const save = useCallback(async (newTitle: string, content: object) => {
+  const save = useCallback(async (newTitle: string, content: JSONContent) => {
     setSaveState('saving')
     await updateDocument(doc.id, newTitle, content)
     setSaveState('saved')
   }, [doc.id])
 
-  const scheduleSave = useCallback((newTitle: string, content: object) => {
+  const scheduleSave = useCallback((newTitle: string, content: JSONContent) => {
     setSaveState('unsaved')
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => save(newTitle, content), AUTOSAVE_MS)
@@ -48,7 +50,7 @@ export function Editor({ doc }: { doc: Document }) {
       TableHeader,
       TableCell,
     ],
-    content: Object.keys(doc.content).length ? doc.content : '<p></p>',
+    content: Object.keys(doc.content).length ? (doc.content as JSONContent) : '<p></p>',
     editorProps: {
       attributes: {
         class: 'tiptap prose max-w-none p-12 min-h-full focus:outline-none',

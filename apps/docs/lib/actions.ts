@@ -37,10 +37,10 @@ export async function createDocument() {
   redirect(`/editor/${rows[0].id}`)
 }
 
-export async function updateDocument(id: string, title: string, content: object) {
+export async function updateDocument(id: string, title: string, content: Record<string, unknown>) {
   await sql`
     UPDATE documents
-    SET title = ${title}, content = ${sql.json(content)}, updated_at = now()
+    SET title = ${title}, content = ${sql.json(content as Parameters<typeof sql.json>[0])}, updated_at = now()
     WHERE id = ${id}
   `
 }
