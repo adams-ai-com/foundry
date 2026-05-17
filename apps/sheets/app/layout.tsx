@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { FeedbackButton } from '@/components/FeedbackButton'
 
 export const metadata: Metadata = {
   title: 'Foundry Sheets',
@@ -9,7 +10,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-white text-gray-900 antialiased overflow-hidden">{children}</body>
+      <body className="bg-white text-gray-900 antialiased overflow-hidden">
+        {children}
+        <FeedbackButton />
+      </body>
     </html>
   )
 }
