@@ -11,7 +11,7 @@ export async function GET(
   `
   if (!rows[0]) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { filename, mime_type, content } = rows[0]
-  return new NextResponse(content, {
+  return new NextResponse(new Uint8Array(content), {
     headers: {
       'Content-Type': mime_type,
       'Content-Disposition': `inline; filename="${filename}"`,
