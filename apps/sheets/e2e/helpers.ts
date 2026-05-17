@@ -4,6 +4,7 @@ import { type Page, expect } from '@playwright/test'
 export async function createTestSheet(page: Page, label = 'E2E'): Promise<string> {
   const title = `${label}-${Date.now()}`
   await page.goto('/')
+  await page.waitForLoadState('networkidle')
   await page.click('button:has-text("New spreadsheet")')
   await page.waitForURL(/\/editor\//)
   await page.fill('[data-testid="spreadsheet-title"]', title)
@@ -15,11 +16,14 @@ export async function createTestSheet(page: Page, label = 'E2E'): Promise<string
 /** Navigates to home and deletes the sheet with the given title. */
 export async function deleteTestSheet(page: Page, title: string) {
   await page.goto('/')
+  await page.waitForLoadState('networkidle')
   const row = page.locator('[data-testid="sheet-row"]').filter({ hasText: title })
   if (await row.count() === 0) return
   page.once('dialog', d => d.accept())
   await row.locator('button[aria-label="Delete spreadsheet"]').click()
-  await page.waitForURL('/')
+  // Wait for the row to disappear — confirms the server action + redirect completed
+  await expect(row).not.toBeVisible({ timeout: 8000 })
+  await page.waitForLoadState('networkidle')
 }
 
 /** Types a value into a cell and commits with Enter. */
