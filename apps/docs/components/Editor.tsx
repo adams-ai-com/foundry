@@ -24,6 +24,8 @@ export function Editor({ doc }: { doc: Document }) {
   const [title, setTitle] = useState(doc.title)
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'unsaved'>('saved')
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Ref keeps onUpdate from closing over stale title state
+  const titleRef = useRef(doc.title)
 
   const save = useCallback(async (newTitle: string, content: JSONContent) => {
     setSaveState('saving')
@@ -57,26 +59,31 @@ export function Editor({ doc }: { doc: Document }) {
       },
     },
     onUpdate({ editor }) {
-      scheduleSave(title, editor.getJSON())
+      // Use ref so this always has the latest title even though this callback
+      // is created once at mount and never re-created by TipTap.
+      scheduleSave(titleRef.current, editor.getJSON())
     },
   })
 
-  // Save on title change (editor content stays as-is)
   function handleTitleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const newTitle = e.target.value
     setTitle(newTitle)
+    titleRef.current = newTitle
     scheduleSave(newTitle, editor?.getJSON() ?? {})
   }
 
-  // Flush save on unmount
-  useEffect(() => {
-    return () => {
-      if (saveTimer.current) {
-        clearTimeout(saveTimer.current)
-        if (editor) save(title, editor.getJSON())
-      }
+  // Flush any pending save on blur so navigating away doesn't lose title edits
+  function handleTitleBlur() {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+      save(titleRef.current, editor?.getJSON() ?? {})
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current) }
   }, [])
 
   return (
@@ -88,7 +95,9 @@ export function Editor({ doc }: { doc: Document }) {
           type="text"
           value={title}
           onChange={handleTitleChange}
+          onBlur={handleTitleBlur}
           placeholder="Untitled"
+          data-testid="doc-title"
           className="flex-1 text-lg font-semibold text-gray-800 bg-transparent border-none outline-none placeholder-gray-300"
         />
         <span className="text-xs text-gray-400 shrink-0">

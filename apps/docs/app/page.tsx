@@ -1,6 +1,5 @@
 import Link from 'next/link'
-import { listDocuments } from '@/lib/actions'
-import { createDocument } from '@/lib/actions'
+import { listDocuments, createDocument, deleteDocument } from '@/lib/actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,24 +39,40 @@ export default async function Home() {
           </div>
 
           {docs.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-8">No documents yet. Create your first one.</p>
+            <p className="text-gray-400 text-sm text-center py-8" data-testid="empty-state">No documents yet. Create your first one.</p>
           ) : (
-            <ul className="divide-y divide-gray-100">
-              {docs.map((doc) => (
-                <li key={doc.id}>
-                  <Link
-                    href={`/editor/${doc.id}`}
-                    className="flex items-center justify-between py-3 px-1 hover:bg-gray-50 rounded transition-colors group"
-                  >
-                    <span className="font-medium text-gray-800 group-hover:text-blue-600 truncate">
-                      {doc.title || 'Untitled'}
-                    </span>
-                    <span className="text-xs text-gray-400 ml-4 shrink-0">
-                      {formatDate(doc.updated_at)}
-                    </span>
-                  </Link>
-                </li>
-              ))}
+            <ul className="divide-y divide-gray-100" data-testid="doc-list">
+              {docs.map((doc) => {
+                const deleteWithId = deleteDocument.bind(null, doc.id)
+                return (
+                  <li key={doc.id} className="flex items-center group" data-testid="doc-row">
+                    <Link
+                      href={`/editor/${doc.id}`}
+                      className="flex-1 flex items-center justify-between py-3 px-1 hover:bg-gray-50 rounded-l transition-colors"
+                    >
+                      <span className="font-medium text-gray-800 group-hover:text-blue-600 truncate" data-testid="doc-title-link">
+                        {doc.title || 'Untitled'}
+                      </span>
+                      <span className="text-xs text-gray-400 ml-4 shrink-0">
+                        {formatDate(doc.updated_at)}
+                      </span>
+                    </Link>
+                    <form action={deleteWithId} className="shrink-0 ml-2">
+                      <button
+                        type="submit"
+                        aria-label="Delete document"
+                        data-testid="delete-doc"
+                        className="text-gray-300 hover:text-red-500 px-2 py-3 transition-colors opacity-0 group-hover:opacity-100"
+                        onClick={(e) => {
+                          if (!confirm('Delete this document?')) e.preventDefault()
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </form>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </div>
