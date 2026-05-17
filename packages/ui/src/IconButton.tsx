@@ -3,6 +3,7 @@ import React from 'react'
 interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean
   label: string
+  children?: React.ReactNode
 }
 
 export function IconButton({ active = false, label, className = '', children, ...props }: IconButtonProps) {
