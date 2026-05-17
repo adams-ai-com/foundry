@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { listSpreadsheets, createSpreadsheet, deleteSpreadsheet } from '@/lib/actions'
+import { listSpreadsheets, createSpreadsheet } from '@/lib/actions'
+import { DeleteButton } from '@/components/DeleteButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,22 +24,6 @@ function GridIcon() {
       <rect x="3" y="3" width="18" height="18" rx="1" />
       <path d="M3 9h18M3 15h18M9 3v18M15 3v18" strokeLinecap="round" />
     </svg>
-  )
-}
-
-function DeleteButton({ id }: { id: string }) {
-  const del = deleteSpreadsheet.bind(null, id)
-  return (
-    <form action={del}>
-      <button
-        type="submit"
-        aria-label="Delete spreadsheet"
-        className="text-gray-300 hover:text-red-500 px-2 py-3 transition-colors opacity-0 group-hover:opacity-100"
-        onClick={(e) => { if (!confirm('Delete this spreadsheet?')) e.preventDefault() }}
-      >
-        ✕
-      </button>
-    </form>
   )
 }
 
