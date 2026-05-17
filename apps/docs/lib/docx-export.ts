@@ -29,7 +29,7 @@ function nodeToChildren(node: PMNode): TextRun[] {
 
 function nodeToDocxParagraph(node: PMNode): Paragraph | Table | null {
   if (node.type === 'heading') {
-    const levelMap: Record<number, HeadingLevel> = {
+    const levelMap: Record<number, typeof HeadingLevel[keyof typeof HeadingLevel]> = {
       1: HeadingLevel.HEADING_1,
       2: HeadingLevel.HEADING_2,
       3: HeadingLevel.HEADING_3,
