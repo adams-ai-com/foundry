@@ -47,21 +47,16 @@ export interface CellAddress {
 
 // Mail
 
-export interface MailAccount {
-  id: string
-  email: string
-  displayName: string
-  serverUrl: string  // JMAP session URL
-}
-
 export interface MailThread {
   id: string
   subject: string
-  participants: string[]
+  participants: MailAddress[]
   lastMessageAt: Date
   messageCount: number
-  unread: boolean
+  unreadCount: number
   snippet: string
+  isArchived: boolean
+  isSpam: boolean
 }
 
 export interface MailMessage {
@@ -71,15 +66,25 @@ export interface MailMessage {
   to: MailAddress[]
   cc: MailAddress[]
   subject: string
-  bodyHtml: string
-  bodyText: string
-  date: Date
-  attachments: Attachment[]
+  bodyHtml: string | null
+  bodyText: string | null
+  receivedAt: Date
+  isRead: boolean
+  isStarred: boolean
+  protocol: 'smtp' | 'internal'
 }
 
 export interface MailAddress {
   name?: string
   email: string
+}
+
+export interface MailboxInfo {
+  id: string
+  path: string
+  displayName: string
+  totalCount: number
+  unreadCount: number
 }
 
 export interface Attachment {
@@ -92,8 +97,8 @@ export interface Attachment {
 export interface CalendarEvent {
   id: string
   title: string
-  start: Date
-  end: Date
+  startAt: Date
+  endAt: Date
   allDay: boolean
   description?: string
   location?: string

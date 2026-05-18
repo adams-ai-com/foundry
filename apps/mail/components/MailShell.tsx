@@ -1,23 +1,60 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { InboxView } from './InboxView'
 import { MessageReader } from './MessageReader'
 import { CalendarView } from './CalendarView'
 import { ComposeModal } from './ComposeModal'
-import type { MailThread } from '@foundry/shared'
+import type { MailThread, MailboxInfo } from '@foundry/shared'
+import { listMailboxes } from '../lib/api'
 
-type View = 'inbox' | 'calendar' | 'contacts'
+type View = 'mail' | 'calendar' | 'contacts'
+
+const SYSTEM_MAILBOXES = ['inbox', 'sent', 'drafts', 'archive', 'trash', 'spam']
 
 export function MailShell() {
-  const [view, setView] = useState<View>('inbox')
+  const [view, setView] = useState<View>('mail')
+  const [mailbox, setMailbox] = useState('inbox')
   const [selectedThread, setSelectedThread] = useState<MailThread | null>(null)
   const [composing, setComposing] = useState(false)
+  const [replyTo, setReplyTo] = useState<MailThread | undefined>(undefined)
+  const [mailboxes, setMailboxes] = useState<MailboxInfo[]>([])
+
+  useEffect(() => {
+    listMailboxes().then(setMailboxes).catch(() => setMailboxes([]))
+  }, [])
+
+  const handleSelectMailbox = (path: string) => {
+    setMailbox(path)
+    setSelectedThread(null)
+    setView('mail')
+  }
+
+  const handleReply = (thread: MailThread) => {
+    setReplyTo(thread)
+    setComposing(true)
+  }
+
+  const handleCompose = () => {
+    setReplyTo(undefined)
+    setComposing(true)
+  }
+
+  const mailboxLabel = (path: string) =>
+    path.charAt(0).toUpperCase() + path.slice(1)
+
+  // Merge fetched mailboxes with system mailbox defaults (show system mailboxes even if empty)
+  const sidebarMailboxes: { path: string; unreadCount: number }[] = SYSTEM_MAILBOXES.map((path) => {
+    const found = mailboxes.find((m) => m.path === path)
+    return { path, unreadCount: found?.unreadCount ?? 0 }
+  })
+
+  const customMailboxes = mailboxes.filter((m) => !SYSTEM_MAILBOXES.includes(m.path))
 
   return (
     <div className="h-screen flex">
       {/* Sidebar */}
-      <aside className="w-56 border-r border-gray-200 bg-gray-50 flex flex-col">
+      <aside className="w-52 border-r border-gray-200 bg-gray-50 flex flex-col flex-shrink-0">
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 bg-blue-600 rounded flex items-center justify-center">
@@ -29,7 +66,7 @@ export function MailShell() {
 
         <div className="p-2">
           <button
-            onClick={() => setComposing(true)}
+            onClick={handleCompose}
             className="w-full bg-blue-600 text-white text-sm px-3 py-2 rounded hover:bg-blue-700 transition-colors font-medium"
           >
             Compose
@@ -37,31 +74,78 @@ export function MailShell() {
         </div>
 
         <nav className="p-2 flex flex-col gap-0.5">
-          {([
-            { id: 'inbox', label: 'Inbox', icon: '📥' },
-            { id: 'calendar', label: 'Calendar', icon: '📅' },
-            { id: 'contacts', label: 'Contacts', icon: '👤' },
-          ] as { id: View; label: string; icon: string }[]).map(({ id, label, icon }) => (
+          {sidebarMailboxes.map(({ path, unreadCount }) => (
             <button
-              key={id}
-              onClick={() => setView(id)}
-              className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded w-full text-left transition-colors ${
-                view === id ? 'bg-blue-100 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-100'
+              key={path}
+              onClick={() => handleSelectMailbox(path)}
+              className={`flex items-center justify-between text-sm px-3 py-1.5 rounded w-full text-left transition-colors ${
+                view === 'mail' && mailbox === path
+                  ? 'bg-blue-100 text-blue-700 font-medium'
+                  : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
-              <span>{icon}</span>
-              {label}
+              <span>{mailboxLabel(path)}</span>
+              {unreadCount > 0 && (
+                <span className="text-xs bg-blue-600 text-white rounded-full px-1.5 py-0.5 font-medium">
+                  {unreadCount}
+                </span>
+              )}
             </button>
           ))}
+
+          {customMailboxes.length > 0 && (
+            <>
+              <div className="text-xs text-gray-400 uppercase tracking-wide px-3 pt-3 pb-1">Folders</div>
+              {customMailboxes.map((m) => (
+                <button
+                  key={m.path}
+                  onClick={() => handleSelectMailbox(m.path)}
+                  className={`flex items-center justify-between text-sm px-3 py-1.5 rounded w-full text-left transition-colors ${
+                    view === 'mail' && mailbox === m.path
+                      ? 'bg-blue-100 text-blue-700 font-medium'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <span>{m.displayName}</span>
+                  {m.unreadCount > 0 && (
+                    <span className="text-xs bg-blue-600 text-white rounded-full px-1.5 py-0.5">
+                      {m.unreadCount}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </>
+          )}
+
+          <div className="border-t border-gray-200 mt-2 pt-2">
+            {([
+              { id: 'calendar' as View, label: 'Calendar' },
+              { id: 'contacts' as View, label: 'Contacts' },
+            ]).map(({ id, label }) => (
+              <button
+                key={id}
+                onClick={() => setView(id)}
+                className={`flex items-center text-sm px-3 py-1.5 rounded w-full text-left transition-colors ${
+                  view === id ? 'bg-blue-100 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </nav>
       </aside>
 
       {/* Main */}
       <main className="flex-1 overflow-hidden flex">
-        {view === 'inbox' && (
+        {view === 'mail' && (
           <>
-            <InboxView selectedThread={selectedThread} onSelectThread={setSelectedThread} />
-            <MessageReader thread={selectedThread} />
+            <InboxView
+              mailbox={mailbox}
+              selectedThread={selectedThread}
+              onSelectThread={setSelectedThread}
+            />
+            <MessageReader thread={selectedThread} onReply={handleReply} />
           </>
         )}
         {view === 'calendar' && <CalendarView />}
@@ -72,7 +156,12 @@ export function MailShell() {
         )}
       </main>
 
-      {composing && <ComposeModal onClose={() => setComposing(false)} />}
+      {composing && (
+        <ComposeModal
+          onClose={() => setComposing(false)}
+          replyTo={replyTo}
+        />
+      )}
     </div>
   )
 }

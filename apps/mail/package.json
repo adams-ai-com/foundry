@@ -12,17 +12,12 @@
   "dependencies": {
     "@foundry/shared": "workspace:*",
     "@foundry/ui": "workspace:*",
-    "ical.js": "^2.0.0",
-    "imapflow": "^1.0.0",
     "next": "^15.0.0",
-    "nodemailer": "^6.9.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "tsdav": "^2.0.0"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@types/node": "^20",
-    "@types/nodemailer": "^6.4.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10.4.0",
