@@ -174,8 +174,30 @@ CREATE TRIGGER contacts_search_trigger
   BEFORE INSERT OR UPDATE OF name, email, org
   ON contacts FOR EACH ROW EXECUTE FUNCTION contacts_search_update();
 
+-- ─── Tasks ──────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS tasks (
+  id                  TEXT PRIMARY KEY,
+  account_id          TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  workspace_id        TEXT,
+  title               TEXT NOT NULL,
+  description         TEXT,
+  status              TEXT NOT NULL DEFAULT 'todo'
+                        CHECK (status IN ('todo','in_progress','done','cancelled')),
+  priority            TEXT NOT NULL DEFAULT 'normal'
+                        CHECK (priority IN ('low','normal','high','urgent')),
+  assigned_to         TEXT,                              -- email of assignee
+  due_at              TIMESTAMPTZ,
+  source_thread_id    TEXT REFERENCES threads(id),       -- created from a mail thread
+  source_decision_id  TEXT,                              -- action item from a decision
+  completed_at        TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS tasks_account_status ON tasks(account_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS tasks_due ON tasks(account_id, due_at) WHERE due_at IS NOT NULL;
+
 -- ─── Decisions ──────────────────────────────────────────────────────────────
--- architectural seed: decisions as first-class entities (no UI yet — schema ready)
 CREATE TABLE IF NOT EXISTS decisions (
   id                TEXT PRIMARY KEY,
   account_id        TEXT REFERENCES accounts(id),

@@ -10,6 +10,8 @@ import { searchRoutes } from './routes/search.js'
 import { attachmentRoutes } from './routes/attachments.js'
 import { calendarRoutes } from './routes/calendar.js'
 import { contactRoutes } from './routes/contacts.js'
+import { taskRoutes } from './routes/tasks.js'
+import { decisionRoutes } from './routes/decisions.js'
 
 export async function buildApi() {
   const app = Fastify({ logger: { level: 'warn' } })
@@ -49,6 +51,8 @@ export async function buildApi() {
   await app.register(attachmentRoutes, opts)
   await app.register(calendarRoutes, opts)
   await app.register(contactRoutes, opts)
+  await app.register(taskRoutes, opts)
+  await app.register(decisionRoutes, opts)
 
   return app
 }

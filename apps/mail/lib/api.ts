@@ -149,3 +149,79 @@ export async function listContacts(q?: string): Promise<Contact[]> {
   const params = q ? `?q=${encodeURIComponent(q)}` : ''
   return req<Contact[]>(`contacts${params}`)
 }
+
+// ─── Tasks ────────────────────────────────────────────────────────────────────
+
+export interface Task {
+  id: string
+  title: string
+  description: string | null
+  status: 'todo' | 'in_progress' | 'done' | 'cancelled'
+  priority: 'low' | 'normal' | 'high' | 'urgent'
+  assignedTo: string | null
+  dueAt: string | null
+  sourceThreadId: string | null
+  sourceDecisionId: string | null
+  completedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export async function listTasks(status?: string): Promise<{ tasks: Task[]; total: number }> {
+  const q = status ? `?status=${encodeURIComponent(status)}` : ''
+  return req<{ tasks: Task[]; total: number }>(`tasks${q}`)
+}
+
+export async function createTask(input: {
+  title: string
+  description?: string
+  priority?: Task['priority']
+  assignedTo?: string
+  dueAt?: string
+  sourceThreadId?: string
+}): Promise<Task> {
+  return req<Task>('tasks', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export async function updateTask(id: string, patch: Partial<Pick<Task, 'title' | 'description' | 'status' | 'priority' | 'assignedTo' | 'dueAt'>>): Promise<Task> {
+  return req<Task>(`tasks/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })
+}
+
+export async function deleteTask(id: string): Promise<void> {
+  await req(`tasks/${id}`, { method: 'DELETE' })
+}
+
+// ─── Decisions ────────────────────────────────────────────────────────────────
+
+export interface Decision {
+  id: string
+  subject: string
+  outcome: string
+  decidedBy: string | null
+  decidedAt: string
+  sourceThreadId: string | null
+  sourceMeetingId: string | null
+  createdAt: string
+}
+
+export async function listDecisions(): Promise<{ decisions: Decision[]; total: number }> {
+  return req<{ decisions: Decision[]; total: number }>('decisions')
+}
+
+export async function createDecision(input: {
+  subject: string
+  outcome: string
+  decidedBy?: string
+  decidedAt?: string
+  sourceThreadId?: string
+}): Promise<Decision> {
+  return req<Decision>('decisions', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export async function updateDecision(id: string, patch: Partial<Pick<Decision, 'subject' | 'outcome' | 'decidedBy' | 'decidedAt'>>): Promise<Decision> {
+  return req<Decision>(`decisions/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })
+}
+
+export async function deleteDecision(id: string): Promise<void> {
+  await req(`decisions/${id}`, { method: 'DELETE' })
+}
