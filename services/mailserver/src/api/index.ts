@@ -13,6 +13,7 @@ import { contactRoutes } from './routes/contacts.js'
 import { taskRoutes } from './routes/tasks.js'
 import { decisionRoutes } from './routes/decisions.js'
 import { fileRoutes } from './routes/files.js'
+import { channelRoutes } from './routes/channels.js'
 
 export async function buildApi() {
   const app = Fastify({ logger: { level: 'warn' } })
@@ -58,6 +59,7 @@ export async function buildApi() {
   await app.register(taskRoutes, opts)
   await app.register(decisionRoutes, opts)
   await app.register(fileRoutes, opts)
+  await app.register(channelRoutes, opts)
 
   return app
 }

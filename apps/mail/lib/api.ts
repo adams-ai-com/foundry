@@ -265,3 +265,64 @@ export function downloadFileUrl(id: string): string {
 export async function deleteFile(id: string): Promise<void> {
   await req(`files/${id}`, { method: 'DELETE' })
 }
+
+// ─── Channels ─────────────────────────────────────────────────────────────────
+
+export interface Channel {
+  id: string
+  name: string
+  description: string | null
+  isPrivate: boolean
+  createdAt: string
+}
+
+export interface ChannelMessage {
+  id: string
+  channelId: string
+  senderName: string
+  senderEmail: string
+  body: string
+  editedAt: string | null
+  createdAt: string
+}
+
+export async function listChannels(): Promise<Channel[]> {
+  return req<Channel[]>('channels')
+}
+
+export async function createChannel(input: { name: string; description?: string }): Promise<Channel> {
+  return req<Channel>('channels', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export async function deleteChannel(id: string): Promise<void> {
+  await req(`channels/${id}`, { method: 'DELETE' })
+}
+
+export async function listChannelMessages(
+  channelId: string,
+  opts: { before?: string; after?: string; limit?: number } = {},
+): Promise<ChannelMessage[]> {
+  const q = new URLSearchParams()
+  if (opts.before) q.set('before', opts.before)
+  if (opts.after) q.set('after', opts.after)
+  if (opts.limit) q.set('limit', String(opts.limit))
+  return req<ChannelMessage[]>(`channels/${channelId}/messages?${q}`)
+}
+
+export async function postChannelMessage(
+  channelId: string,
+  body: string,
+): Promise<ChannelMessage> {
+  return req<ChannelMessage>(`channels/${channelId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({
+      body,
+      senderEmail: process.env.NEXT_PUBLIC_MAIL_FROM ?? 'user@foundry.local',
+      senderName: process.env.NEXT_PUBLIC_DISPLAY_NAME ?? '',
+    }),
+  })
+}
+
+export async function deleteChannelMessage(channelId: string, messageId: string): Promise<void> {
+  await req(`channels/${channelId}/messages/${messageId}`, { method: 'DELETE' })
+}
