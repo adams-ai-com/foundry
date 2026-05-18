@@ -1,5 +1,4 @@
-import { db } from './db.js'
-import { nanoid } from 'nanoid'
+import { sql as db, newId } from '../db.js'
 
 export interface Decision {
   id: string
@@ -52,7 +51,7 @@ export async function createDecision(
     workspaceId?: string
   },
 ): Promise<Decision> {
-  const id = nanoid()
+  const id = newId()
   const [row] = await db<Decision[]>`
     INSERT INTO decisions (id, account_id, workspace_id, subject, outcome,
                            decided_by, decided_at, source_thread_id, source_meeting_id)
