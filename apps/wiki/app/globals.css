@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.tiptap {
+  outline: none;
+  min-height: 200px;
+}
+
+.tiptap p.is-editor-empty:first-child::before {
+  color: #9ca3af;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Prose styles for wiki content */
+.tiptap h1 { @apply text-3xl font-bold text-gray-900 mt-8 mb-4 first:mt-0; }
+.tiptap h2 { @apply text-2xl font-semibold text-gray-900 mt-6 mb-3; }
+.tiptap h3 { @apply text-xl font-semibold text-gray-800 mt-5 mb-2; }
+.tiptap p  { @apply text-gray-700 leading-relaxed mb-3; }
+.tiptap ul  { @apply list-disc pl-6 mb-3 space-y-1; }
+.tiptap ol  { @apply list-decimal pl-6 mb-3 space-y-1; }
+.tiptap li  { @apply text-gray-700; }
+.tiptap blockquote { @apply border-l-4 border-gray-300 pl-4 italic text-gray-500 my-4; }
+.tiptap code { @apply bg-gray-100 text-red-600 px-1 py-0.5 rounded text-sm font-mono; }
+.tiptap pre  { @apply bg-gray-900 text-gray-100 p-4 rounded-lg my-4 overflow-x-auto; }
+.tiptap pre code { @apply bg-transparent text-inherit p-0; }
+.tiptap a   { @apply text-blue-600 underline hover:text-blue-800; }
+.tiptap hr  { @apply border-gray-200 my-6; }
+.tiptap table { @apply border-collapse w-full my-4; }
+.tiptap td, .tiptap th { @apply border border-gray-200 px-3 py-2 text-sm; }
+.tiptap th { @apply bg-gray-50 font-semibold; }
+.tiptap ul[data-type="taskList"] { @apply list-none pl-0; }
+.tiptap ul[data-type="taskList"] li { @apply flex items-start gap-2; }
+.tiptap ul[data-type="taskList"] li > label { @apply flex-shrink-0 mt-0.5; }
