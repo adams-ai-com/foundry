@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS messages (
   protocol        TEXT NOT NULL DEFAULT 'smtp' CHECK (protocol IN ('smtp', 'internal')),
   message_id      TEXT UNIQUE,                       -- RFC 2822 Message-ID header
   in_reply_to     TEXT,
-  references      TEXT,                              -- space-separated Message-IDs
+  message_refs    TEXT,                              -- space-separated Message-IDs (RFC 2822 References)
   subject         TEXT NOT NULL DEFAULT '',
   from_name       TEXT,
   from_email      TEXT NOT NULL,
