@@ -18,6 +18,8 @@ export async function buildApi() {
   const app = Fastify({ logger: { level: 'warn' } })
 
   await app.register(cors, { origin: false })
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore — @fastify/multipart types resolved on the server where the package is installed
   await app.register((await import('@fastify/multipart')).default, { limits: { fileSize: 100 * 1024 * 1024 } })
 
   // Auth — API key + account resolution

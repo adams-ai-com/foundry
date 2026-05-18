@@ -23,7 +23,7 @@ export async function fileRoutes(app: FastifyInstance) {
     async (req, reply) => {
       const accountId = (req as any).accountId as string
 
-      const data = await req.file()
+      const data = await (req as any).file()
       if (!data) return reply.code(400).send({ error: 'No file uploaded' })
 
       const buf = await data.toBuffer()
