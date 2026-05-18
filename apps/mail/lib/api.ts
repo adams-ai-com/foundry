@@ -225,3 +225,43 @@ export async function updateDecision(id: string, patch: Partial<Pick<Decision, '
 export async function deleteDecision(id: string): Promise<void> {
   await req(`decisions/${id}`, { method: 'DELETE' })
 }
+
+// ─── Files ────────────────────────────────────────────────────────────────────
+
+export interface FileItem {
+  id: string
+  filename: string
+  contentType: string
+  size: number
+  messageId: string | null
+  createdAt: string
+}
+
+export async function listFiles(opts: { page?: number; search?: string } = {}): Promise<{ files: FileItem[]; total: number }> {
+  const q = new URLSearchParams()
+  if (opts.page) q.set('page', String(opts.page))
+  if (opts.search) q.set('search', opts.search)
+  return req<{ files: FileItem[]; total: number }>(`files?${q}`)
+}
+
+export async function uploadFile(file: File): Promise<FileItem> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch('/api/mail/files', {
+    method: 'POST',
+    body: form,
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error((err as any).error ?? `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export function downloadFileUrl(id: string): string {
+  return `/api/mail/files/${id}/download`
+}
+
+export async function deleteFile(id: string): Promise<void> {
+  await req(`files/${id}`, { method: 'DELETE' })
+}

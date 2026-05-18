@@ -6,11 +6,12 @@ import { MessageReader } from './MessageReader'
 import { CalendarView } from './CalendarView'
 import { TasksView } from './TasksView'
 import { DecisionsView } from './DecisionsView'
+import { FilesView } from './FilesView'
 import { ComposeModal } from './ComposeModal'
 import type { MailThread, MailboxInfo } from '@foundry/shared'
 import { listMailboxes } from '../lib/api'
 
-type View = 'mail' | 'calendar' | 'contacts' | 'tasks' | 'decisions'
+type View = 'mail' | 'calendar' | 'contacts' | 'tasks' | 'decisions' | 'files'
 
 const SYSTEM_MAILBOXES = ['inbox', 'sent', 'drafts', 'archive', 'trash', 'spam']
 
@@ -125,6 +126,7 @@ export function MailShell() {
               { id: 'contacts' as View, label: 'Contacts' },
               { id: 'tasks' as View, label: 'Tasks' },
               { id: 'decisions' as View, label: 'Decisions' },
+              { id: 'files' as View, label: 'Files' },
             ]).map(({ id, label }) => (
               <button
                 key={id}
@@ -166,6 +168,11 @@ export function MailShell() {
         {view === 'decisions' && (
           <div className="flex-1 overflow-hidden bg-gray-900 text-gray-200">
             <DecisionsView />
+          </div>
+        )}
+        {view === 'files' && (
+          <div className="flex-1 overflow-hidden bg-gray-900 text-gray-200 relative">
+            <FilesView />
           </div>
         )}
       </main>
