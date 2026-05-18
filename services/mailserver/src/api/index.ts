@@ -12,11 +12,13 @@ import { calendarRoutes } from './routes/calendar.js'
 import { contactRoutes } from './routes/contacts.js'
 import { taskRoutes } from './routes/tasks.js'
 import { decisionRoutes } from './routes/decisions.js'
+import { fileRoutes } from './routes/files.js'
 
 export async function buildApi() {
   const app = Fastify({ logger: { level: 'warn' } })
 
   await app.register(cors, { origin: false })
+  await app.register((await import('@fastify/multipart')).default, { limits: { fileSize: 100 * 1024 * 1024 } })
 
   // Auth — API key + account resolution
   app.addHook('preHandler', async (req, reply) => {
@@ -53,6 +55,7 @@ export async function buildApi() {
   await app.register(contactRoutes, opts)
   await app.register(taskRoutes, opts)
   await app.register(decisionRoutes, opts)
+  await app.register(fileRoutes, opts)
 
   return app
 }
