@@ -3,7 +3,7 @@ export const config = {
   apiPort: parseInt(process.env.API_PORT ?? '3002'),
   apiKey: process.env.API_KEY ?? 'dev-key',
   smtp: {
-    port: parseInt(process.env.SMTP_PORT ?? '25'),
+    port: parseInt(process.env.SMTP_PORT ?? '0'),
     submissionPort: parseInt(process.env.SMTP_SUBMISSION_PORT ?? '587'),
     host: process.env.SMTP_HOST ?? '0.0.0.0',
   },
