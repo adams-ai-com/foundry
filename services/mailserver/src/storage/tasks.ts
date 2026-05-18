@@ -1,5 +1,4 @@
-import { db } from './db.js'
-import { nanoid } from 'nanoid'
+import { sql as db, newId } from '../db.js'
 
 export interface Task {
   id: string
@@ -65,7 +64,7 @@ export async function createTask(
     workspaceId?: string
   },
 ): Promise<Task> {
-  const id = nanoid()
+  const id = newId()
   const [row] = await db<Task[]>`
     INSERT INTO tasks (id, account_id, workspace_id, title, description, status, priority,
                        assigned_to, due_at, source_thread_id, source_decision_id)
