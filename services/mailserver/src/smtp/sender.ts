@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer'
+import { createTransport, type SendMailOptions } from 'nodemailer'
 import { readFileSync, existsSync } from 'fs'
 import { config } from '../config.js'
 import { sql, newId } from '../db.js'
@@ -22,7 +22,7 @@ export interface SendOptions {
 
 function buildTransport() {
   if (config.relay.host) {
-    return nodemailer.createTransport({
+    return createTransport({
       host: config.relay.host,
       port: config.relay.port,
       secure: config.relay.port === 465,
@@ -32,7 +32,7 @@ function buildTransport() {
     })
   }
   // Direct delivery fallback (development only)
-  return nodemailer.createTransport({ sendmail: true })
+  return createTransport({ sendmail: true })
 }
 
 function loadDkimKey(): string | null {
@@ -48,7 +48,7 @@ export async function sendMessage(opts: SendOptions): Promise<string> {
   const fromDomain = opts.from.split('@')[1] ?? config.domain
   const messageIdValue = `<${newId()}@${fromDomain}>`
 
-  const mailOptions: nodemailer.SendMailOptions = {
+  const mailOptions: SendMailOptions = {
     messageId: messageIdValue,
     from: opts.fromName ? `"${opts.fromName}" <${opts.from}>` : opts.from,
     to: opts.to.map((a) => a.name ? `"${a.name}" <${a.email}>` : a.email),
