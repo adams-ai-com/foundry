@@ -46,7 +46,7 @@ export async function storeInboundMessage(
   await sql`
     INSERT INTO messages (
       id, account_id, mailbox_id, thread_id, protocol,
-      message_id, in_reply_to, references,
+      message_id, in_reply_to, message_refs,
       subject, from_name, from_email, to_addrs, cc_addrs,
       date, body_html, body_text, raw_size, is_read
     ) VALUES (
