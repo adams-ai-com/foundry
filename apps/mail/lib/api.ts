@@ -1,4 +1,4 @@
-import type { MailThread, MailMessage, MailboxInfo, CalendarEvent, MailAddress } from '@foundry/shared'
+import type { MailThread, MailMessage, MailboxInfo, CalendarEvent } from '@foundry/shared'
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api/mail/${path}`, {
@@ -12,60 +12,58 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json()
 }
 
-// Raw API shapes (snake_case from postgres)
+// Raw API shapes — storage layer already maps to camelCase, dates come as ISO strings
 interface RawThread {
-  id: string; subject: string; participants: MailAddress[]
-  last_message_at: string; message_count: number; unread_count: number
-  snippet: string | null; is_archived: boolean; is_spam: boolean
+  id: string; subject: string; participants: { name?: string; email: string }[]
+  messageCount: number; unreadCount: number; lastMessageAt: string | null
+  snippet: string; isStarred: boolean
 }
 
 interface RawMessage {
-  id: string; thread_id: string; from_email: string; from_name: string | null
-  to_addrs: MailAddress[]; cc_addrs: MailAddress[]; subject: string
-  body_html: string | null; body_text: string | null
-  received_at: string; is_read: boolean; is_starred: boolean
-  protocol: 'smtp' | 'internal'
+  id: string; fromEmail: string; fromName: string | null
+  toAddrs: { name?: string; email: string }[]; ccAddrs: { name?: string; email: string }[]
+  subject: string; bodyHtml: string | null; bodyText: string | null
+  date: string; isRead: boolean; isStarred: boolean
 }
 
 interface RawMailbox {
-  id: string; path: string; display_name: string
-  total_count: number; unread_count: number
+  id: string; path: string; name: string; totalCount: number; unreadCount: number
 }
 
 interface RawEvent {
   id: string; title: string; description: string | null; location: string | null
   start_at: string; end_at: string; all_day: boolean
-  attendees: MailAddress[]
+  attendees: { name?: string; email: string }[]
 }
 
-function toThread(r: RawThread): MailThread {
+function toThread(r: RawThread, threadId?: string): MailThread {
   return {
-    id: r.id,
+    id: r.id ?? threadId ?? '',
     subject: r.subject,
     participants: r.participants ?? [],
-    lastMessageAt: new Date(r.last_message_at),
-    messageCount: r.message_count,
-    unreadCount: r.unread_count,
+    lastMessageAt: r.lastMessageAt ? new Date(r.lastMessageAt) : new Date(0),
+    messageCount: r.messageCount,
+    unreadCount: r.unreadCount,
     snippet: r.snippet ?? '',
-    isArchived: r.is_archived ?? false,
-    isSpam: r.is_spam ?? false,
+    isArchived: false,
+    isSpam: false,
   }
 }
 
-function toMessage(r: RawMessage): MailMessage {
+function toMessage(r: RawMessage, threadId: string): MailMessage {
   return {
     id: r.id,
-    threadId: r.thread_id,
-    from: { name: r.from_name ?? undefined, email: r.from_email },
-    to: r.to_addrs ?? [],
-    cc: r.cc_addrs ?? [],
+    threadId,
+    from: { name: r.fromName ?? undefined, email: r.fromEmail },
+    to: r.toAddrs ?? [],
+    cc: r.ccAddrs ?? [],
     subject: r.subject,
-    bodyHtml: r.body_html,
-    bodyText: r.body_text,
-    receivedAt: new Date(r.received_at),
-    isRead: r.is_read,
-    isStarred: r.is_starred,
-    protocol: r.protocol,
+    bodyHtml: r.bodyHtml,
+    bodyText: r.bodyText,
+    receivedAt: new Date(r.date),
+    isRead: r.isRead,
+    isStarred: r.isStarred,
+    protocol: 'smtp',
   }
 }
 
@@ -73,9 +71,9 @@ function toMailbox(r: RawMailbox): MailboxInfo {
   return {
     id: r.id,
     path: r.path,
-    displayName: r.display_name,
-    totalCount: r.total_count,
-    unreadCount: r.unread_count,
+    displayName: r.name,
+    totalCount: r.totalCount,
+    unreadCount: r.unreadCount,
   }
 }
 
@@ -97,16 +95,18 @@ export async function listMailboxes(): Promise<MailboxInfo[]> {
   return rows.map(toMailbox)
 }
 
-export async function listThreads(mailbox = 'inbox', cursor?: string): Promise<MailThread[]> {
-  const q = new URLSearchParams({ mailbox, limit: '50' })
-  if (cursor) q.set('cursor', cursor)
-  const rows = await req<RawThread[]>(`threads?${q}`)
-  return rows.map(toThread)
+export async function listThreads(mailbox = 'inbox', page = 1): Promise<MailThread[]> {
+  const q = new URLSearchParams({ mailbox, page: String(page) })
+  const data = await req<{ threads: RawThread[]; total: number }>(`threads?${q}`)
+  return (data.threads ?? []).map((t) => toThread(t))
 }
 
 export async function getThread(id: string): Promise<{ thread: MailThread; messages: MailMessage[] }> {
-  const data = await req<{ thread: RawThread; messages: RawMessage[] }>(`threads/${id}`)
-  return { thread: toThread(data.thread), messages: data.messages.map(toMessage) }
+  const data = await req<RawThread & { messages: RawMessage[] }>(`threads/${id}`)
+  return {
+    thread: toThread(data, id),
+    messages: (data.messages ?? []).map((m) => toMessage(m, id)),
+  }
 }
 
 export async function patchThread(id: string, body: Record<string, unknown>): Promise<void> {
@@ -115,7 +115,7 @@ export async function patchThread(id: string, body: Record<string, unknown>): Pr
 
 export async function searchThreads(q: string): Promise<MailThread[]> {
   const rows = await req<RawThread[]>(`search?${new URLSearchParams({ q })}`)
-  return rows.map(toThread)
+  return rows.map((t) => toThread(t))
 }
 
 export async function sendMail(payload: {
