@@ -1,6 +1,6 @@
-# Foundry (Open-Source Productivity Suite)
+# Foundry (Unified Open-Source Workspace)
 
-pnpm monorepo (Turborepo). AGPL-licensed open-source suite replacing MS Office: Docs, Sheets, Mail. Adams AI manages self-hosted instances for verticals. Working copy lives here on the control box; running on foundry-srv.
+pnpm monorepo (Turborepo). AGPL-licensed open-source workspace replacing MS 365 / Google Workspace: Mail (our own server), Docs, Sheets, Channels, Files, Wiki, Tasks, Decisions. Workspace-first architecture. AI-native. Adams AI manages self-hosted instances for verticals. Working copy lives here on the control box; running on foundry-srv.
 
 ## Remote host
 - **Server**: foundry-srv `142.93.61.78`
@@ -10,7 +10,8 @@ pnpm monorepo (Turborepo). AGPL-licensed open-source suite replacing MS Office: 
 ## Monorepo layout
 - `apps/docs` — Foundry Docs (word processor)
 - `apps/sheets` — Foundry Sheets (spreadsheets, not yet built)
-- `apps/mail` — Foundry Mail (Stalwart-backed, not yet built)
+- `apps/mail` — Foundry Mail client (Next.js, scaffold exists — needs rewiring to our own mailserver)
+- `services/mailserver` — Foundry Mail server (Node.js, not yet built — our own SMTP + storage + REST API)
 - `packages/` — shared libs
 
 ## Blue-green deployment (Docs)
