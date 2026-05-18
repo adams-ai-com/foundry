@@ -174,6 +174,34 @@ CREATE TRIGGER contacts_search_trigger
   BEFORE INSERT OR UPDATE OF name, email, org
   ON contacts FOR EACH ROW EXECUTE FUNCTION contacts_search_update();
 
+-- ─── Channels ───────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS channels (
+  id           TEXT PRIMARY KEY,
+  account_id   TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  workspace_id TEXT,
+  name         TEXT NOT NULL,        -- lowercase, no spaces (e.g. "general")
+  description  TEXT,
+  is_private   BOOLEAN NOT NULL DEFAULT FALSE,
+  created_by   TEXT,                 -- email of creator
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(account_id, name)
+);
+
+CREATE INDEX IF NOT EXISTS channels_account ON channels(account_id, created_at);
+
+CREATE TABLE IF NOT EXISTS channel_messages (
+  id           TEXT PRIMARY KEY,
+  channel_id   TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+  account_id   TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  sender_name  TEXT NOT NULL,
+  sender_email TEXT NOT NULL,
+  body         TEXT NOT NULL,
+  edited_at    TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS channel_messages_channel ON channel_messages(channel_id, created_at);
+
 -- ─── Tasks ──────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS tasks (
   id                  TEXT PRIMARY KEY,
