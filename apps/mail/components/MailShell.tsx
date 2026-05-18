@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react'
 import { InboxView } from './InboxView'
 import { MessageReader } from './MessageReader'
 import { CalendarView } from './CalendarView'
+import { TasksView } from './TasksView'
+import { DecisionsView } from './DecisionsView'
 import { ComposeModal } from './ComposeModal'
 import type { MailThread, MailboxInfo } from '@foundry/shared'
 import { listMailboxes } from '../lib/api'
 
-type View = 'mail' | 'calendar' | 'contacts'
+type View = 'mail' | 'calendar' | 'contacts' | 'tasks' | 'decisions'
 
 const SYSTEM_MAILBOXES = ['inbox', 'sent', 'drafts', 'archive', 'trash', 'spam']
 
@@ -121,6 +123,8 @@ export function MailShell() {
             {([
               { id: 'calendar' as View, label: 'Calendar' },
               { id: 'contacts' as View, label: 'Contacts' },
+              { id: 'tasks' as View, label: 'Tasks' },
+              { id: 'decisions' as View, label: 'Decisions' },
             ]).map(({ id, label }) => (
               <button
                 key={id}
@@ -152,6 +156,16 @@ export function MailShell() {
         {view === 'contacts' && (
           <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
             Contacts coming soon
+          </div>
+        )}
+        {view === 'tasks' && (
+          <div className="flex-1 overflow-hidden bg-gray-900 text-gray-200">
+            <TasksView />
+          </div>
+        )}
+        {view === 'decisions' && (
+          <div className="flex-1 overflow-hidden bg-gray-900 text-gray-200">
+            <DecisionsView />
           </div>
         )}
       </main>
