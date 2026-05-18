@@ -10,7 +10,7 @@
     "db:migrate": "tsx src/migrate.ts"
   },
   "dependencies": {
-    "@fastify/cors": "^9.0.0",
+    "@fastify/cors": "^10.0.0",
     "dotenv": "^16.4.5",
     "fastify": "^5.0.0",
     "mailparser": "^3.7.0",
