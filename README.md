@@ -69,15 +69,15 @@ Foundry is in active development. Here is where each surface stands:
 
 | Surface | Status |
 |---|---|
-| Docs | ✅ P0 live — editor, save/load, .docx round-trip |
-| Mail | 🔨 P1 in development — mail server + client |
-| Sheets | 📋 P1 planned — grid + HyperFormula + Python |
-| Channels | 📋 Planned — shares mail's message model |
-| Files | 📋 Planned — mail attachments seed this |
-| Wiki | 📋 Planned — built on Docs editor |
-| Tasks + Decisions | 📋 Schema designed, UI planned |
+| Docs | ✅ Live — rich text editor, save/load, .docx round-trip |
+| Sheets | ✅ Live — spreadsheet grid, HyperFormula engine, Python scripting |
+| Mail | ✅ Live — our own mail server (SMTP + REST API), inbox, threads, compose, calendar, contacts, full-text search |
+| Channels | 📋 Planned — shares Mail's protocol-agnostic message model |
+| Files | 📋 Planned — mail attachments already seed this table |
+| Wiki | 📋 Planned — built on the Docs editor |
+| Tasks + Decisions | 📋 Schema live in the Mail DB, UI planned |
 
-This is honest: Foundry is not finished. It is being built in the open because we believe the community that will use it should be part of building it.
+This is honest: Foundry is not finished. The three core surfaces are live. The rest is being built in the open because we believe the community that will use it should be part of building it.
 
 ---
 
@@ -101,14 +101,20 @@ git clone https://github.com/adams-ai-com/foundry
 cd foundry
 pnpm install
 
-# Configure
+# Configure apps
 cp apps/docs/.env.example apps/docs/.env.local
-cp apps/mail/.env.example apps/mail/.env.local
+cp apps/sheets/.env.example apps/sheets/.env.local
+cp apps/mail/.env.example apps/mail/.env.local      # MAILSERVER_URL, MAILSERVER_API_KEY, etc.
+
+# Configure mail server
+cp services/mailserver/.env.example services/mailserver/.env
+# Edit DATABASE_URL, API_KEY, MAIL_DOMAIN, SMTP_PORT
+
+# Run migrations
+pnpm --filter @foundry/mailserver db:migrate
 
 # Run in development
 pnpm dev
-
-# Production deployment — see docs/self-hosting.md
 ```
 
 DNS setup for Mail (MX, SPF, DKIM, DMARC) is documented in `docs/mail-dns.md`.
@@ -163,6 +169,8 @@ Foundry is built on the shoulders of the open-source community:
 - **LibreOffice** (The Document Foundation) — server-side document conversion
 - **TipTap** / **ProseMirror** — document editor foundation
 - **HyperFormula** — spreadsheet formula engine
+- **Nodemailer** / **smtp-server** / **mailparser** — mail server foundation
+- **Fastify** — API server framework
 - The many other open-source libraries listed in `docs/acknowledgements.md`
 
 We are grateful for their work and committed to contributing back.
