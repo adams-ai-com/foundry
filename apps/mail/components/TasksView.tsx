@@ -29,12 +29,8 @@ export function TasksView() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const status = filter === 'active' ? undefined : filter === 'done' ? 'done' : undefined
-      const { tasks: rows } = await listTasks(status)
-      const filtered = filter === 'active'
-        ? rows.filter((t) => t.status === 'todo' || t.status === 'in_progress')
-        : rows
-      setTasks(filtered)
+      const { tasks: rows } = await listTasks(filter === 'all' ? undefined : filter)
+      setTasks(rows)
     } finally {
       setLoading(false)
     }
