@@ -157,6 +157,7 @@ export function ChannelsView() {
         <div className="px-3 pt-4 pb-2 flex items-center justify-between">
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Channels</span>
           <button
+            data-testid="new-channel-button"
             onClick={() => setShowNewChannel(true)}
             className="text-gray-400 hover:text-gray-200 text-lg leading-none"
             title="New channel"
@@ -172,6 +173,7 @@ export function ChannelsView() {
             {channels.map((ch) => (
               <button
                 key={ch.id}
+                data-testid={`channel-item-${ch.name}`}
                 onClick={() => setActiveChannel(ch)}
                 className={`w-full text-left flex items-center justify-between px-2 py-1.5 rounded text-sm group ${
                   activeChannel?.id === ch.id
@@ -261,6 +263,7 @@ export function ChannelsView() {
             <div className="border-t border-gray-800 p-3 flex-shrink-0">
               <div className="flex items-end gap-2 bg-gray-800 rounded-lg px-3 py-2">
                 <textarea
+                  data-testid="message-input"
                   ref={inputRef}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
@@ -276,6 +279,7 @@ export function ChannelsView() {
                   }}
                 />
                 <button
+                  data-testid="message-send-button"
                   onClick={handleSend}
                   disabled={!draft.trim() || sending}
                   className="text-blue-400 hover:text-blue-300 disabled:opacity-30 flex-shrink-0 pb-0.5"

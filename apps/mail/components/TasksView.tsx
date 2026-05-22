@@ -64,6 +64,7 @@ export function TasksView() {
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
         <h2 className="text-sm font-semibold text-gray-200">Tasks</h2>
         <button
+          data-testid="new-task-button"
           onClick={() => { setEditingTask(null); setShowForm(true) }}
           className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded"
         >
@@ -97,7 +98,7 @@ export function TasksView() {
         ) : (
           <ul className="divide-y divide-gray-800">
             {tasks.map((task) => (
-              <li key={task.id} className="flex items-start gap-3 px-4 py-3 hover:bg-gray-800/40 group">
+              <li key={task.id} data-testid="task-item" className="flex items-start gap-3 px-4 py-3 hover:bg-gray-800/40 group">
                 {/* Status toggle */}
                 <button
                   onClick={() => cycleStatus(task)}
@@ -240,6 +241,7 @@ function TaskForm({
         </h3>
         <form onSubmit={handleSubmit} className="space-y-3">
           <input
+            data-testid="task-title-input"
             autoFocus
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -282,6 +284,7 @@ function TaskForm({
               Cancel
             </button>
             <button
+              data-testid="task-save-button"
               type="submit"
               disabled={saving || !title.trim()}
               className="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-1.5 rounded"

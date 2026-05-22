@@ -37,7 +37,7 @@ export function CalendarView() {
     })
 
   return (
-    <div className="flex-1 flex flex-col p-6">
+    <div data-testid="calendar-view" className="flex-1 flex flex-col p-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">{MONTHS[month]} {year}</h2>
         <div className="flex gap-1">

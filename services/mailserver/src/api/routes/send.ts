@@ -16,6 +16,7 @@ export async function sendRoutes(app: FastifyInstance) {
       inReplyTo?: string
       references?: string
       threadId?: string
+      attachmentIds?: string[]
     }
   }>('/send', async (req, reply) => {
     const accountId = (req as any).accountId as string
@@ -47,6 +48,7 @@ export async function sendRoutes(app: FastifyInstance) {
       inReplyTo: b.inReplyTo,
       references: b.references,
       threadId: b.threadId,
+      attachmentIds: b.attachmentIds,
     })
 
     return { messageId }
