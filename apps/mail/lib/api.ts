@@ -98,10 +98,17 @@ export async function listMailboxes(): Promise<MailboxInfo[]> {
   return rows.map(toMailbox)
 }
 
-export async function listThreads(mailbox = 'inbox', page = 1): Promise<MailThread[]> {
-  const q = new URLSearchParams({ mailbox, page: String(page) })
+export async function listThreads(
+  mailbox = 'inbox',
+  page = 1,
+  sort: 'newest' | 'oldest' | 'unread' = 'newest',
+): Promise<{ threads: MailThread[]; total: number }> {
+  const q = new URLSearchParams({ mailbox, page: String(page), sort })
   const data = await req<{ threads: RawThread[]; total: number }>(`threads?${q}`)
-  return (data.threads ?? []).map((t) => toThread(t))
+  return {
+    threads: (data.threads ?? []).map((t) => toThread(t)),
+    total: data.total ?? 0,
+  }
 }
 
 export async function getThread(id: string): Promise<{ thread: MailThread; messages: MailMessage[] }> {
@@ -114,6 +121,26 @@ export async function getThread(id: string): Promise<{ thread: MailThread; messa
 
 export async function patchThread(id: string, body: Record<string, unknown>): Promise<void> {
   await req(`threads/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+}
+
+export async function archiveThread(id: string): Promise<void> {
+  await patchThread(id, { action: 'archive' })
+}
+
+export async function trashThread(id: string): Promise<void> {
+  await patchThread(id, { action: 'trash' })
+}
+
+export async function starThread(id: string, starred: boolean): Promise<void> {
+  await patchThread(id, { action: starred ? 'star' : 'unstar' })
+}
+
+export async function markThreadUnread(id: string): Promise<void> {
+  await patchThread(id, { action: 'unread' })
+}
+
+export async function permanentlyDeleteThread(id: string): Promise<void> {
+  await req(`threads/${id}`, { method: 'DELETE' })
 }
 
 export async function searchThreads(q: string): Promise<MailThread[]> {
