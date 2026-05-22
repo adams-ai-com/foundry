@@ -55,8 +55,22 @@ sudo -u foundry psql "$WURL" -f /var/www/foundry/apps/wiki/lib/schema.sql
 ## Mail deployment (non-blue-green — simple pnpm start)
 - Mail client: `pnpm --filter @foundry/mail start` from `/var/www/foundry`
 - Mail server: `node dist/index.js` from `/var/www/foundry/services/mailserver`
-- Rebuild server on changes: write `/tmp/build-mail.sh` (`cd /var/www/foundry && pnpm --filter @foundry/mail build`) then `sudo -u foundry /tmp/build-mail.sh`
+- Rebuild mail client: `cd /var/www/foundry && sudo -u foundry pnpm --filter @foundry/mail build` then restart `foundry-mail-client.service`
 - Rebuild mailserver: `sudo -u foundry npm run build --prefix /var/www/foundry/services/mailserver`
+
+## Testing
+- **Mailserver integration tests (74 tests)**: Must inject DATABASE_URL since no .env in mailserver dir
+  ```bash
+  sudo -u foundry env -i PATH="$PATH" DATABASE_URL=$(sudo grep "DATABASE_URL" /etc/foundry-mail/secrets.env | cut -d= -f2-) bash -c "cd /var/www/foundry/services/mailserver && pnpm run test"
+  ```
+- **Mail client E2E tests (32 tests, Playwright/Chromium)**:
+  - Playwright binaries at `/home/manager/.cache/ms-playwright/`; run as `manager` user
+  - Requires session `e2e-test-session-fixed` in `foundry_workspace` DB (already created)
+  - Global setup verifies mailserver health at `localhost:3100/health`
+  ```bash
+  cd /var/www/foundry/apps/mail
+  MAIL_BASE_URL=http://localhost:3004 MAILSERVER_HEALTH_URL=http://localhost:3100/health PLAYWRIGHT_BROWSERS_PATH=/home/manager/.cache/ms-playwright ./node_modules/.bin/playwright test --reporter=list
+  ```
 
 ## Mail server config
 - Account `foundry01` in `foundry_mail` DB (domain: `foundry.local`)

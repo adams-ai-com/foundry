@@ -1,29 +1,43 @@
 import { type NextRequest, NextResponse } from 'next/server'
+import { getSession } from '@foundry/auth'
 
 const MAILSERVER_URL = process.env.MAILSERVER_URL ?? 'http://localhost:3100'
 const MAILSERVER_API_KEY = process.env.MAILSERVER_API_KEY ?? ''
 const MAILSERVER_ACCOUNT_ID = process.env.MAILSERVER_ACCOUNT_ID ?? ''
 
 async function handler(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const { path } = await params
   const upstream = new URL(`${MAILSERVER_URL}/api/v1/${path.join('/')}`)
   req.nextUrl.searchParams.forEach((v, k) => upstream.searchParams.set(k, v))
 
   const isMultipart = req.headers.get('content-type')?.startsWith('multipart/')
-  const hasBody = req.method !== 'GET' && req.method !== 'HEAD'
+  const canHaveBody = req.method !== 'GET' && req.method !== 'HEAD'
 
-  // For multipart uploads, stream the body through with the original content-type.
-  // For everything else, pass as text with JSON content-type.
-  const body = hasBody ? (isMultipart ? req.body : await req.text()) : undefined
-
-  const contentType = isMultipart
-    ? (req.headers.get('content-type') ?? 'multipart/form-data')
-    : 'application/json'
+  // Determine body and Content-Type:
+  // - Multipart: stream through with original content-type
+  // - JSON with actual body text: forward as application/json
+  // - DELETE/PATCH with empty body: no body, no Content-Type (Fastify rejects empty JSON)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let body: any
+  let contentType: string | undefined
+  if (isMultipart && canHaveBody) {
+    body = req.body
+    contentType = req.headers.get('content-type') ?? 'multipart/form-data'
+  } else if (canHaveBody) {
+    const text = await req.text()
+    if (text.length > 0) {
+      body = text
+      contentType = 'application/json'
+    }
+  }
 
   const res = await fetch(upstream.toString(), {
     method: req.method,
     headers: {
-      'Content-Type': contentType,
+      ...(contentType ? { 'Content-Type': contentType } : {}),
       'X-API-Key': MAILSERVER_API_KEY,
       'X-Account-Id': MAILSERVER_ACCOUNT_ID,
     },
@@ -32,7 +46,12 @@ async function handler(req: NextRequest, { params }: { params: Promise<{ path: s
     body,
   })
 
-  // File downloads — stream the response body directly
+  // No-content responses (204, etc.)
+  if (res.status === 204 || res.headers.get('content-length') === '0') {
+    return new NextResponse(null, { status: res.status })
+  }
+
+  // File downloads — stream binary response body directly
   const resContentType = res.headers.get('content-type') ?? ''
   if (!resContentType.includes('application/json') && res.body) {
     return new NextResponse(res.body, {

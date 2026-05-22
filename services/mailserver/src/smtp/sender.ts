@@ -4,6 +4,7 @@ import { config } from '../config.js'
 import { sql, newId } from '../db.js'
 import { storeInboundMessage } from '../storage/messages.js'
 import { parseMail } from '../parser/mime.js'
+import { getFile } from '../storage/files.js'
 
 export interface SendOptions {
   accountId: string
@@ -18,6 +19,7 @@ export interface SendOptions {
   inReplyTo?: string
   references?: string
   threadId?: string
+  attachmentIds?: string[]
 }
 
 function buildTransport() {
@@ -48,6 +50,21 @@ export async function sendMessage(opts: SendOptions): Promise<string> {
   const fromDomain = opts.from.split('@')[1] ?? config.domain
   const messageIdValue = `<${newId()}@${fromDomain}>`
 
+  // Resolve file attachments
+  const nodemailerAttachments: Array<{ filename: string; path: string; contentType: string }> = []
+  if (opts.attachmentIds?.length) {
+    for (const fileId of opts.attachmentIds) {
+      const file = await getFile(opts.accountId, fileId)
+      if (file) {
+        nodemailerAttachments.push({
+          filename: file.filename,
+          path: file.storage_path,
+          contentType: file.content_type,
+        })
+      }
+    }
+  }
+
   const mailOptions: SendMailOptions = {
     messageId: messageIdValue,
     from: opts.fromName ? `"${opts.fromName}" <${opts.from}>` : opts.from,
@@ -59,6 +76,7 @@ export async function sendMessage(opts: SendOptions): Promise<string> {
     text: opts.bodyText ?? undefined,
     inReplyTo: opts.inReplyTo ?? undefined,
     references: opts.references ?? undefined,
+    attachments: nodemailerAttachments.length ? nodemailerAttachments : undefined,
     ...(dkimKey && {
       dkim: {
         domainName: fromDomain,
@@ -96,6 +114,16 @@ export async function sendMessage(opts: SendOptions): Promise<string> {
     WHERE mb.account_id = ${opts.accountId} AND mb.type = 'sent'
       AND m.id = ${messageId}
   `
+
+  // Link uploaded attachments to the sent message
+  if (opts.attachmentIds?.length) {
+    for (const fileId of opts.attachmentIds) {
+      await sql`
+        UPDATE files SET message_id = ${messageId}
+        WHERE id = ${fileId} AND account_id = ${opts.accountId}
+      `
+    }
+  }
 
   return messageId
 }

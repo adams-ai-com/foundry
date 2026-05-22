@@ -228,7 +228,7 @@ CREATE INDEX IF NOT EXISTS tasks_due ON tasks(account_id, due_at) WHERE due_at I
 -- ─── Decisions ──────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS decisions (
   id                TEXT PRIMARY KEY,
-  account_id        TEXT REFERENCES accounts(id),
+  account_id        TEXT REFERENCES accounts(id) ON DELETE CASCADE,
   workspace_id      TEXT,
   subject           TEXT NOT NULL,
   outcome           TEXT NOT NULL,

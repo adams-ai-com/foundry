@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import type { MailThread, MailMessage } from '@foundry/shared'
+import type { ComposeRequest } from './ComposeModal'
 import { getThread } from '../lib/api'
 
 interface MessageReaderProps {
   thread: MailThread | null
-  onReply: (thread: MailThread) => void
+  onCompose: (req?: ComposeRequest) => void
 }
 
-export function MessageReader({ thread, onReply }: MessageReaderProps) {
+export function MessageReader({ thread, onCompose }: MessageReaderProps) {
   const [messages, setMessages] = useState<MailMessage[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -30,9 +31,11 @@ export function MessageReader({ thread, onReply }: MessageReaderProps) {
     )
   }
 
+  const lastMessage = messages[messages.length - 1]
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-200">
+      <div className="px-6 py-4 border-b border-gray-200 flex-shrink-0">
         <h1 className="text-lg font-semibold">{thread.subject}</h1>
         <div className="text-sm text-gray-500 mt-1">
           {thread.participants.map((p) => p.name ?? p.email).join(', ')}
@@ -49,23 +52,52 @@ export function MessageReader({ thread, onReply }: MessageReaderProps) {
         )}
 
         {!loading && messages.map((msg, i) => (
-          <MessageBubble key={msg.id} message={msg} defaultOpen={i === messages.length - 1} />
+          <MessageBubble
+            key={msg.id}
+            message={msg}
+            defaultOpen={i === messages.length - 1}
+            onForward={() => onCompose({ forwardMessage: msg })}
+          />
         ))}
       </div>
 
-      <div className="border-t border-gray-200 px-6 py-3 flex gap-2">
+      <div className="border-t border-gray-200 px-6 py-3 flex gap-2 flex-shrink-0">
         <button
-          onClick={() => onReply(thread)}
+          onClick={() => onCompose({ replyTo: thread })}
           className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded transition-colors font-medium"
         >
           Reply
         </button>
+        {thread.participants.length > 1 && (
+          <button
+            onClick={() => onCompose({ replyTo: thread, replyAll: true })}
+            className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded transition-colors font-medium"
+          >
+            Reply All
+          </button>
+        )}
+        {lastMessage && (
+          <button
+            onClick={() => onCompose({ forwardMessage: lastMessage })}
+            className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded transition-colors font-medium"
+          >
+            Forward
+          </button>
+        )}
       </div>
     </div>
   )
 }
 
-function MessageBubble({ message, defaultOpen }: { message: MailMessage; defaultOpen: boolean }) {
+function MessageBubble({
+  message,
+  defaultOpen,
+  onForward,
+}: {
+  message: MailMessage
+  defaultOpen: boolean
+  onForward: () => void
+}) {
   const [open, setOpen] = useState(defaultOpen)
 
   const fromLabel = message.from.name
@@ -97,12 +129,13 @@ function MessageBubble({ message, defaultOpen }: { message: MailMessage; default
         <div className="px-6 pb-4">
           <div className="text-xs text-gray-400 mb-3">
             To: {message.to.map((a) => a.name ?? a.email).join(', ')}
-            {message.cc.length > 0 && ` · CC: ${message.cc.map((a) => a.name ?? a.email).join(', ')}`}
+            {message.cc.length > 0 &&
+              ` · CC: ${message.cc.map((a) => a.name ?? a.email).join(', ')}`}
           </div>
           {message.bodyHtml ? (
             <iframe
               srcDoc={message.bodyHtml}
-              sandbox="allow-popups allow-popups-to-escape-sandbox"
+              sandbox="allow-popups"
               className="w-full min-h-[200px] border-0"
               onLoad={(e) => {
                 const f = e.currentTarget
@@ -114,6 +147,14 @@ function MessageBubble({ message, defaultOpen }: { message: MailMessage; default
               {message.bodyText}
             </pre>
           )}
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={onForward}
+              className="text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 px-2 py-1 rounded transition-colors"
+            >
+              Forward
+            </button>
+          </div>
         </div>
       )}
     </div>

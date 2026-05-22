@@ -8,7 +8,7 @@ import { TasksView } from './TasksView'
 import { DecisionsView } from './DecisionsView'
 import { FilesView } from './FilesView'
 import { ChannelsView } from './ChannelsView'
-import { ComposeModal } from './ComposeModal'
+import { ComposeModal, type ComposeRequest } from './ComposeModal'
 import type { MailThread, MailboxInfo } from '@foundry/shared'
 import { listMailboxes } from '../lib/api'
 
@@ -21,7 +21,7 @@ export function MailShell() {
   const [mailbox, setMailbox] = useState('inbox')
   const [selectedThread, setSelectedThread] = useState<MailThread | null>(null)
   const [composing, setComposing] = useState(false)
-  const [replyTo, setReplyTo] = useState<MailThread | undefined>(undefined)
+  const [composeRequest, setComposeRequest] = useState<ComposeRequest | undefined>(undefined)
   const [mailboxes, setMailboxes] = useState<MailboxInfo[]>([])
 
   useEffect(() => {
@@ -34,20 +34,14 @@ export function MailShell() {
     setView('mail')
   }
 
-  const handleReply = (thread: MailThread) => {
-    setReplyTo(thread)
-    setComposing(true)
-  }
-
-  const handleCompose = () => {
-    setReplyTo(undefined)
+  const handleCompose = (req?: ComposeRequest) => {
+    setComposeRequest(req)
     setComposing(true)
   }
 
   const mailboxLabel = (path: string) =>
     path.charAt(0).toUpperCase() + path.slice(1)
 
-  // Merge fetched mailboxes with system mailbox defaults (show system mailboxes even if empty)
   const sidebarMailboxes: { path: string; unreadCount: number }[] = SYSTEM_MAILBOXES.map((path) => {
     const found = mailboxes.find((m) => m.path === path)
     return { path, unreadCount: found?.unreadCount ?? 0 }
@@ -70,14 +64,15 @@ export function MailShell() {
 
         <div className="p-2">
           <button
-            onClick={handleCompose}
+            data-testid="compose-button"
+            onClick={() => handleCompose()}
             className="w-full bg-blue-600 text-white text-sm px-3 py-2 rounded hover:bg-blue-700 transition-colors font-medium"
           >
             Compose
           </button>
         </div>
 
-        <nav className="p-2 flex flex-col gap-0.5">
+        <nav className="p-2 flex flex-col gap-0.5 overflow-y-auto flex-1">
           {sidebarMailboxes.map(({ path, unreadCount }) => (
             <button
               key={path}
@@ -132,6 +127,7 @@ export function MailShell() {
             ]).map(({ id, label }) => (
               <button
                 key={id}
+                data-testid={`nav-${id}`}
                 onClick={() => setView(id)}
                 className={`flex items-center text-sm px-3 py-1.5 rounded w-full text-left transition-colors ${
                   view === id ? 'bg-blue-100 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-100'
@@ -153,7 +149,10 @@ export function MailShell() {
               selectedThread={selectedThread}
               onSelectThread={setSelectedThread}
             />
-            <MessageReader thread={selectedThread} onReply={handleReply} />
+            <MessageReader
+              thread={selectedThread}
+              onCompose={handleCompose}
+            />
           </>
         )}
         {view === 'calendar' && <CalendarView />}
@@ -186,8 +185,8 @@ export function MailShell() {
 
       {composing && (
         <ComposeModal
-          onClose={() => setComposing(false)}
-          replyTo={replyTo}
+          onClose={() => { setComposing(false); setComposeRequest(undefined) }}
+          request={composeRequest}
         />
       )}
     </div>
