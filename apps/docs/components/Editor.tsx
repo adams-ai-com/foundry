@@ -14,6 +14,8 @@ import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Toolbar } from './Toolbar'
+import { VersionHistory } from './VersionHistory'
+import { Comments } from './Comments'
 import { updateDocument, deleteDocument } from '@/lib/actions'
 import type { Document } from '@/lib/actions'
 
@@ -23,7 +25,6 @@ const AUTOSAVE_MS = 1500
 
 function isDocEmpty(title: string, content: JSONContent): boolean {
   if (title !== 'Untitled' && title !== '') return false
-  // ProseMirror empty doc: {type:'doc', content:[{type:'paragraph'}]}
   const nodes = (content as { content?: unknown[] }).content
   if (!nodes || nodes.length === 0) return true
   if (nodes.length === 1) {
@@ -36,8 +37,12 @@ function isDocEmpty(title: string, content: JSONContent): boolean {
 export function Editor({ doc }: { doc: Document }) {
   const [title, setTitle] = useState(doc.title)
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'unsaved'>('saved')
+  const [showHistory, setShowHistory] = useState(false)
+  const [showComments, setShowComments] = useState(false)
+  const [importing, setImporting] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const titleRef = useRef(doc.title)
+  const importRef = useRef<HTMLInputElement>(null)
 
   const save = useCallback(async (newTitle: string, content: JSONContent) => {
     setSaveState('saving')
@@ -92,20 +97,52 @@ export function Editor({ doc }: { doc: Document }) {
   }
 
   async function handleBack() {
-    // Clean up timer
     if (saveTimer.current) {
       clearTimeout(saveTimer.current)
       saveTimer.current = null
     }
-    // Delete orphan docs silently (never named, never typed anything)
     const content = editor?.getJSON() ?? {}
     if (isDocEmpty(titleRef.current, content)) {
-      await deleteDocument(doc.id) // redirects to '/'
+      await deleteDocument(doc.id)
       return
     }
-    // Otherwise flush save then navigate
     await save(titleRef.current, content)
-    window.location.href = '/'
+    window.location.href = '/docs'
+  }
+
+  function handleRestore(content: object, restoredTitle: string) {
+    setTitle(restoredTitle)
+    titleRef.current = restoredTitle
+    editor?.commands.setContent(content as JSONContent)
+    scheduleSave(restoredTitle, content as JSONContent)
+    setShowHistory(false)
+  }
+
+  async function handleSaveNamed(label: string) {
+    await fetch(`/docs/api/versions/${doc.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label }),
+    })
+  }
+
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImporting(true)
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch('/docs/api/import', { method: 'POST', body: fd })
+    if (res.ok) {
+      const { content, title: importedTitle } = await res.json()
+      const newTitle = importedTitle || file.name.replace(/\.docx$/, '')
+      setTitle(newTitle)
+      titleRef.current = newTitle
+      editor?.commands.setContent(content)
+      scheduleSave(newTitle, content)
+    }
+    setImporting(false)
+    if (importRef.current) importRef.current.value = ''
   }
 
   useEffect(() => {
@@ -142,11 +179,59 @@ export function Editor({ doc }: { doc: Document }) {
           data-testid="doc-title"
           className="flex-1 text-base font-semibold text-gray-900 bg-transparent border-none outline-none placeholder-gray-300 min-w-0"
         />
-        <div className="flex items-center gap-2 shrink-0" data-testid="save-state">
-          <span className={`w-2 h-2 rounded-full shrink-0 ${saveIndicator.dot}`} />
-          <span className={`text-xs ${saveIndicator.textColor} hidden sm:block`}>
-            {saveIndicator.text}
-          </span>
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Save state */}
+          <div className="flex items-center gap-2 mr-2" data-testid="save-state">
+            <span className={`w-2 h-2 rounded-full shrink-0 ${saveIndicator.dot}`} />
+            <span className={`text-xs ${saveIndicator.textColor} hidden sm:block`}>
+              {saveIndicator.text}
+            </span>
+          </div>
+
+          {/* Import */}
+          <input ref={importRef} type="file" accept=".docx" className="hidden" onChange={handleImport} />
+          <button
+            title="Import .docx"
+            disabled={importing}
+            onClick={() => importRef.current?.click()}
+            className="text-xs text-gray-500 hover:text-gray-900 px-2.5 py-1.5 rounded hover:bg-gray-100 transition-colors font-medium disabled:opacity-50"
+          >
+            {importing ? 'Importing…' : 'Import'}
+          </button>
+
+          {/* Export */}
+          <a
+            href={`/docs/api/export/${doc.id}`}
+            download
+            title="Export as .docx"
+            className="text-xs text-gray-500 hover:text-gray-900 px-2.5 py-1.5 rounded hover:bg-gray-100 transition-colors font-medium"
+          >
+            Export
+          </a>
+
+          <div className="w-px h-4 bg-gray-200 mx-1" />
+
+          {/* Comments toggle */}
+          <button
+            title="Comments"
+            onClick={() => { setShowComments((v) => !v); setShowHistory(false) }}
+            className={`p-1.5 rounded transition-colors ${showComments ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+          </button>
+
+          {/* Version history toggle */}
+          <button
+            title="Version history"
+            onClick={() => { setShowHistory((v) => !v); setShowComments(false) }}
+            className={`p-1.5 rounded transition-colors ${showHistory ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -157,6 +242,23 @@ export function Editor({ doc }: { doc: Document }) {
           <EditorContent editor={editor} className="h-full" />
         </div>
       </div>
+
+      {showHistory && (
+        <VersionHistory
+          documentId={doc.id}
+          currentTitle={title}
+          onClose={() => setShowHistory(false)}
+          onRestore={handleRestore}
+          onSaveNamed={handleSaveNamed}
+        />
+      )}
+
+      {showComments && (
+        <Comments
+          documentId={doc.id}
+          onClose={() => setShowComments(false)}
+        />
+      )}
     </>
   )
 }

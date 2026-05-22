@@ -13,6 +13,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@foundry/auth": "workspace:*",
     "@foundry/shared": "workspace:*",
     "@foundry/ui": "workspace:*",
     "@tiptap/core": "^2.4.0",

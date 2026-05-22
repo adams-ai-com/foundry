@@ -3,7 +3,7 @@ import { type Page, type Locator, expect } from '@playwright/test'
 /** Creates a new spreadsheet, sets a unique title, and waits for first save. Returns the title. */
 export async function createTestSheet(page: Page, label = 'E2E'): Promise<string> {
   const title = `${label}-${Date.now()}`
-  await page.goto('/')
+  await page.goto('/sheets')
   await page.waitForLoadState('networkidle')
   await page.click('button:has-text("New spreadsheet")')
   await page.waitForURL(/\/editor\//)
@@ -15,23 +15,19 @@ export async function createTestSheet(page: Page, label = 'E2E'): Promise<string
 
 /** Navigates to home and deletes the sheet with the given title. */
 export async function deleteTestSheet(page: Page, title: string) {
-  await page.goto('/')
+  await page.goto('/sheets')
   await page.waitForLoadState('networkidle')
   const row = page.locator('[data-testid="sheet-row"]').filter({ hasText: title })
   if (await row.count() === 0) return
   page.once('dialog', d => d.accept())
   await row.locator('button[aria-label="Delete spreadsheet"]').click()
-  // Wait for the row to disappear — confirms the server action + redirect completed
   await expect(row).not.toBeVisible({ timeout: 8000 })
   await page.waitForLoadState('networkidle')
 }
 
 /**
  * Sets a cell-input's value via the native HTMLInputElement setter so React's
- * synthetic onChange fires and the editValueRef (in Grid) is updated. Playwright's
- * pressSequentially dispatches keyboard events but headless Chromium does not
- * perform the browser's default character-insertion for those synthetic events,
- * so the DOM value stays empty and nothing gets committed.
+ * synthetic onChange fires and the editValueRef (in Grid) is updated.
  */
 export async function setCellInputValue(input: Locator, value: string) {
   await input.evaluate((el: HTMLInputElement, v) => {
@@ -49,7 +45,7 @@ export async function typeInCell(page: Page, row: number, col: number, value: st
   const input = page.locator(`[data-testid="cell-${row}-${col}"] input.cell-input`)
   await input.waitFor({ state: 'visible' })
   await setCellInputValue(input, value)
-  await page.keyboard.press('Enter')
+  await input.press('Enter')
 }
 
 /** Returns the visible text of a cell (the display value, not the input). */

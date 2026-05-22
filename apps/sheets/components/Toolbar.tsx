@@ -9,11 +9,14 @@ import type { CellFormat } from '@/lib/actions'
 
 interface ToolbarProps {
   selected: CellAddress
+  selectionEnd: CellAddress | null
   onTogglePython: () => void
+  onToggleChart: () => void
   pythonOpen: boolean
+  chartOpen: boolean
 }
 
-export function Toolbar({ selected, onTogglePython, pythonOpen }: ToolbarProps) {
+export function Toolbar({ selected, selectionEnd: _selectionEnd, onTogglePython, onToggleChart, pythonOpen, chartOpen }: ToolbarProps) {
   const { getCellFormat, setCellFormat, getSerializedData, getSheetNames, loadAll } = useHyperFormulaContext()
   const fmt = getCellFormat(selected)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -63,11 +66,7 @@ export function Toolbar({ selected, onTogglePython, pythonOpen }: ToolbarProps) 
   }
 
   return (
-    <div className="flex items-center gap-0.5 px-3 py-1.5 bg-white border-b border-gray-200 flex-wrap">
-      <span className="font-semibold text-sm text-gray-700 mr-2">Foundry Sheets</span>
-
-      <Separator />
-
+    <div className="flex items-center gap-0.5 px-3 py-1.5 bg-white border-b border-gray-200 flex-wrap shrink-0">
       <IconButton data-testid="btn-bold" label="Bold (Ctrl+B)" active={!!fmt.bold} onClick={() => toggleFormat('bold')}>
         <strong>B</strong>
       </IconButton>
@@ -95,43 +94,26 @@ export function Toolbar({ selected, onTogglePython, pythonOpen }: ToolbarProps) 
 
       <Separator />
 
-      <IconButton
-        data-testid="btn-python"
-        label="Python scripting"
-        active={pythonOpen}
-        onClick={onTogglePython}
-      >
+      <IconButton data-testid="btn-chart" label="Charts" active={chartOpen} onClick={onToggleChart}>
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+      </IconButton>
+
+      <IconButton data-testid="btn-python" label="Python scripting" active={pythonOpen} onClick={onTogglePython}>
         🐍
       </IconButton>
 
       <div className="ml-auto flex items-center gap-1">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".xlsx,.xls,.csv"
-          className="hidden"
-          onChange={handleImport}
-        />
-        <button
-          data-testid="btn-import"
-          className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100"
-          onClick={() => fileInputRef.current?.click()}
-        >
+        <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImport} />
+        <button data-testid="btn-import" className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100" onClick={() => fileInputRef.current?.click()}>
           Import
         </button>
         <span className="text-xs text-gray-300">|</span>
-        <button
-          data-testid="btn-export-xlsx"
-          className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100"
-          onClick={handleExportXlsx}
-        >
+        <button data-testid="btn-export-xlsx" className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100" onClick={handleExportXlsx}>
           xlsx
         </button>
-        <button
-          data-testid="btn-export-csv"
-          className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100"
-          onClick={handleExportCsv}
-        >
+        <button data-testid="btn-export-csv" className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100" onClick={handleExportCsv}>
           csv
         </button>
       </div>
