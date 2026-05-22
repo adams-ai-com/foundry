@@ -92,6 +92,13 @@ export function useHyperFormula(initialData?: SheetData, onChange?: (data: Sheet
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tick])
 
+  const addSheet = useCallback((name: string) => {
+    if (!hfRef.current) return
+    hfRef.current.addSheet(name)
+    setTick(t => t + 1)
+    if (onChangeRef.current) onChangeRef.current(serializeHF(hfRef.current))
+  }, [])
+
   const loadSheets = useCallback((newData: SheetData) => {
     import('hyperformula').then(({ HyperFormula }) => {
       const sheets = Object.keys(newData).length > 0 ? newData : { Sheet1: [] }
@@ -101,5 +108,5 @@ export function useHyperFormula(initialData?: SheetData, onChange?: (data: Sheet
     })
   }, [])
 
-  return { getCellValue, getCellFormula, setCellValue, getSerializedData, getSheetNames, loadSheets }
+  return { getCellValue, getCellFormula, setCellValue, getSerializedData, getSheetNames, addSheet, loadSheets }
 }

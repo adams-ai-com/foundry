@@ -14,27 +14,38 @@ export type CellFormat = {
 // keyed: sheetName → "row:col" → CellFormat (sparse — only formatted cells present)
 export type CellFormats = Record<string, Record<string, CellFormat>>
 
+export type ChartDef = {
+  id: string
+  type: 'bar' | 'line' | 'pie'
+  title: string
+  sheet: string
+  range: string
+  firstRowHeader: boolean
+  firstColLabel: boolean
+}
+
 export interface Spreadsheet {
   id: string
   title: string
   data: SheetData
   formats: CellFormats
+  charts: ChartDef[]
   created_at: string
   updated_at: string
 }
 
-export async function listSpreadsheets(): Promise<Omit<Spreadsheet, 'data' | 'formats'>[]> {
-  return sql<Omit<Spreadsheet, 'data' | 'formats'>[]>`
+export async function listSpreadsheets(): Promise<Omit<Spreadsheet, 'data' | 'formats' | 'charts'>[]> {
+  return sql<Omit<Spreadsheet, 'data' | 'formats' | 'charts'>[]>`
     SELECT id, title, created_at, updated_at FROM spreadsheets ORDER BY updated_at DESC
   `
 }
 
 export async function getSpreadsheet(id: string): Promise<Spreadsheet | null> {
-  const rows = await sql<(Omit<Spreadsheet, 'formats'> & { formats: CellFormats | null })[]>`
-    SELECT id, title, data, formats, created_at, updated_at FROM spreadsheets WHERE id = ${id}
+  const rows = await sql<(Omit<Spreadsheet, 'formats' | 'charts'> & { formats: CellFormats | null; charts: ChartDef[] | null })[]>`
+    SELECT id, title, data, formats, charts, created_at, updated_at FROM spreadsheets WHERE id = ${id}
   `
   if (!rows[0]) return null
-  return { ...rows[0], formats: rows[0].formats ?? {} }
+  return { ...rows[0], formats: rows[0].formats ?? {}, charts: rows[0].charts ?? [] }
 }
 
 export async function createSpreadsheet() {
@@ -44,17 +55,17 @@ export async function createSpreadsheet() {
   redirect(`/editor/${rows[0].id}`)
 }
 
-export async function updateSpreadsheet(id: string, title: string, data: SheetData, formats: CellFormats) {
+export async function updateSpreadsheet(id: string, title: string, data: SheetData, formats: CellFormats, charts: ChartDef[]) {
   await sql`
     UPDATE spreadsheets
     SET title = ${title},
         data = ${sql.json(data as Parameters<typeof sql.json>[0])},
-        formats = ${sql.json(formats as Parameters<typeof sql.json>[0])}
+        formats = ${sql.json(formats as Parameters<typeof sql.json>[0])},
+        charts = ${sql.json(charts as Parameters<typeof sql.json>[0])}
     WHERE id = ${id}
   `
 }
 
 export async function deleteSpreadsheet(id: string) {
   await sql`DELETE FROM spreadsheets WHERE id = ${id}`
-  redirect('/')
 }

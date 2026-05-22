@@ -1,6 +1,5 @@
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType } from 'docx'
 
-// ProseMirror JSON node types we handle
 type PMNode = {
   type: string
   content?: PMNode[]
@@ -44,8 +43,17 @@ function nodeToDocxParagraph(node: PMNode): Paragraph | Table | null {
     return new Paragraph({ children: nodeToChildren(node) })
   }
 
-  if (node.type === 'bulletList' || node.type === 'orderedList') {
-    return null // handled by iterating children with list style
+  if (node.type === 'blockquote') {
+    const children = nodeToChildren({ type: 'blockquote', content: node.content })
+    return new Paragraph({ children, indent: { left: 720 } })
+  }
+
+  if (node.type === 'codeBlock') {
+    const text = node.content?.map((n) => n.text ?? '').join('') ?? ''
+    return new Paragraph({
+      children: [new TextRun({ text, font: 'Courier New', size: 18 })],
+      indent: { left: 720 },
+    })
   }
 
   if (node.type === 'table') {
@@ -64,14 +72,11 @@ function nodeToDocxParagraph(node: PMNode): Paragraph | Table | null {
   return null
 }
 
-export async function exportDocx(prosemirrorJson: PMNode, title = 'Document'): Promise<Blob> {
+export async function exportDocxBuffer(prosemirrorJson: Record<string, unknown>, title = 'Document'): Promise<Buffer> {
+  const pm = prosemirrorJson as unknown as PMNode
   const children: (Paragraph | Table)[] = []
 
-  for (const node of prosemirrorJson.content ?? []) {
-    const el = nodeToDocxParagraph(node)
-    if (el) children.push(el)
-
-    // List items
+  for (const node of pm.content ?? []) {
     if (node.type === 'bulletList' || node.type === 'orderedList') {
       const isBullet = node.type === 'bulletList'
       for (const item of node.content ?? []) {
@@ -85,14 +90,18 @@ export async function exportDocx(prosemirrorJson: PMNode, title = 'Document'): P
           )
         }
       }
+    } else {
+      const el = nodeToDocxParagraph(node)
+      if (el) children.push(el)
     }
   }
 
-  const doc = new Document({
-    sections: [{ children }],
-    title,
-  })
+  const doc = new Document({ sections: [{ children }], title })
+  return Packer.toBuffer(doc)
+}
 
-  const blob = await Packer.toBlob(doc)
-  return blob
+// Browser-side export (used in client components)
+export async function exportDocx(prosemirrorJson: Record<string, unknown>, title = 'Document'): Promise<Blob> {
+  const doc = new Document({ sections: [{ children: [] }], title })
+  return Packer.toBlob(doc)
 }

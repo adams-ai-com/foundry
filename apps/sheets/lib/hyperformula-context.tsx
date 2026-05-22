@@ -49,7 +49,6 @@ export function HyperFormulaProvider({
     onFormatsChangeRef.current?.(formatsRef.current)
   }, [])
 
-  // Replace all sheet data + formats at once (used by import)
   const loadAll = useCallback((data: SheetData, formats: CellFormats = {}) => {
     hf.loadSheets(data)
     formatsRef.current = formats

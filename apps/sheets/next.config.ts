@@ -1,8 +1,8 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  transpilePackages: ['@foundry/shared', '@foundry/ui'],
-  // Pyodide requires these headers so SharedArrayBuffer works in the browser
+  basePath: '/sheets',
+  transpilePackages: ['@foundry/shared', '@foundry/ui', '@foundry/auth'],
   async headers() {
     return [
       {

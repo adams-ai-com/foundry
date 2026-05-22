@@ -1,25 +1,36 @@
 import { redirect } from 'next/navigation'
-import { verifyMagicLink } from '@/lib/actions'
+import { cookies } from 'next/headers'
+import { verifyTotp } from '@/lib/actions'
+import { TotpForm } from '@/components/TotpForm'
 
 export const dynamic = 'force-dynamic'
 
-export default async function VerifyPage({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
-  const { token } = await searchParams
-  if (!token) redirect('/login')
+export default async function VerifyPage() {
+  const jar = await cookies()
+  const email = jar.get('foundry_login_email')?.value
+  if (!email) redirect('/login')
 
-  const error = await verifyMagicLink(token)
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
-          <div className="text-4xl mb-4">⚠️</div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">Link {error.error.toLowerCase().includes('expir') ? 'expired' : 'invalid'}</h2>
-          <p className="text-gray-500 text-sm mb-6">{error.error}</p>
-          <a href="/login" className="text-indigo-600 text-sm hover:underline">Request a new link →</a>
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-600 rounded-xl mb-4">
+            <span className="text-white font-bold text-xl">F</span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900">Foundry</h1>
+          <p className="text-gray-500 text-sm mt-1">Open-source workspace</p>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+          <h2 className="text-lg font-semibold text-gray-900 mb-1">Authenticator code</h2>
+          <p className="text-gray-500 text-sm mb-6">
+            Open <strong>Microsoft Authenticator</strong> and enter the 6-digit code for Foundry.
+          </p>
+          <TotpForm action={verifyTotp} buttonLabel="Sign in" />
+          <a href="/login" className="block text-center text-sm text-gray-400 hover:text-gray-600 mt-4">
+            ← Back
+          </a>
         </div>
       </div>
-    )
-  }
-
-  redirect('/')
+    </div>
+  )
 }

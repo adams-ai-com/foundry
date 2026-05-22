@@ -1,26 +1,21 @@
 'use client'
 
 import { useState } from 'react'
-import { requestMagicLink } from '@/lib/actions'
-import { useRouter } from 'next/navigation'
+import { submitEmail } from '@/lib/actions'
 
 export function LoginForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const router = useRouter()
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setLoading(true)
     setError(null)
     const fd = new FormData(e.currentTarget)
-    const result = await requestMagicLink(fd)
+    const result = await submitEmail(fd)
     if (result?.error) {
       setError(result.error)
       setLoading(false)
-    } else {
-      const email = fd.get('email') as string
-      router.push(`/login?sent=${encodeURIComponent(email)}`)
     }
   }
 
@@ -44,7 +39,7 @@ export function LoginForm() {
         disabled={loading}
         className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium py-2.5 rounded-xl text-sm transition-colors"
       >
-        {loading ? 'Sending…' : 'Send sign-in link'}
+        {loading ? 'Checking…' : 'Continue →'}
       </button>
     </form>
   )

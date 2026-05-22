@@ -1,27 +1,58 @@
 'use client'
 
-import { cellAddress } from '@foundry/shared'
+import { colIndexToLetter } from '@foundry/shared'
 import type { CellAddress } from '@foundry/shared'
 import { useHyperFormulaContext } from '@/lib/hyperformula-context'
 
 interface FormulaBarProps {
   selected: CellAddress
+  selectionEnd: CellAddress | null
 }
 
-export function FormulaBar({ selected }: FormulaBarProps) {
-  const { getCellFormula, getCellValue } = useHyperFormulaContext()
+function cellAddr(row: number, col: number): string {
+  return `${colIndexToLetter(col)}${row + 1}`
+}
+
+function rangeAddr(start: CellAddress, end: CellAddress | null): string {
+  const s = cellAddr(start.row, start.col)
+  if (!end) return s
+  const e = cellAddr(end.row, end.col)
+  return s === e ? s : `${s}:${e}`
+}
+
+export function FormulaBar({ selected, selectionEnd }: FormulaBarProps) {
+  const { getCellFormula, getCellValue, setCellValue } = useHyperFormulaContext()
   const formula = getCellFormula(selected)
   const value = getCellValue(selected)
-  const display = formula ?? String(value ?? '')
+  const original = formula ?? String(value ?? '')
+
+  function commit(newValue: string) {
+    if (newValue !== original) {
+      setCellValue(selected, newValue)
+    }
+  }
 
   return (
-    <div className="flex items-center border-b border-gray-200 bg-white h-8 text-sm">
-      <div data-testid="formula-address" className="px-2 border-r border-gray-200 text-gray-500 font-mono text-xs w-16 text-center flex-shrink-0">
-        {cellAddress(selected.row, selected.col)}
+    <div className="flex items-center border-b border-gray-200 bg-white h-8 text-sm shrink-0">
+      <div
+        data-testid="formula-address"
+        className="px-2 border-r border-gray-200 text-gray-500 font-mono text-xs w-24 text-center flex-shrink-0"
+      >
+        {rangeAddr(selected, selectionEnd)}
       </div>
-      <div className="flex items-center px-2 gap-1 flex-1">
-        {formula && <span className="text-gray-400 font-mono text-xs">fx</span>}
-        <span data-testid="formula-value" className="font-mono text-xs text-gray-700 truncate">{display}</span>
+      <div className="flex items-center px-2 gap-1.5 flex-1 min-w-0">
+        {formula && <span className="text-blue-500 font-mono text-xs shrink-0">fx</span>}
+        <input
+          key={`${selected.sheet}-${selected.row}-${selected.col}`}
+          data-testid="formula-value"
+          className="flex-1 font-mono text-xs text-gray-700 bg-transparent outline-none min-w-0"
+          defaultValue={original}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { commit(e.currentTarget.value); e.currentTarget.blur() }
+            if (e.key === 'Escape') { e.currentTarget.value = original; e.currentTarget.blur() }
+          }}
+          onBlur={(e) => commit(e.currentTarget.value)}
+        />
       </div>
     </div>
   )

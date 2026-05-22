@@ -7,7 +7,6 @@ interface ToolbarProps {
   editor: TipTapEditor | null
 }
 
-// SVG icons for alignment — the unicode ≡ chars were identical
 function AlignLeftIcon() {
   return (
     <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -82,68 +81,41 @@ export function Toolbar({ editor }: ToolbarProps) {
       <Separator />
 
       {/* Inline formatting */}
-      <IconButton
-        label="Bold (Ctrl+B)"
-        active={editor.isActive('bold')}
-        onClick={() => editor.chain().focus().toggleBold().run()}
-      >
+      <IconButton label="Bold (Ctrl+B)" active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()}>
         <strong className="text-sm leading-none">B</strong>
       </IconButton>
-      <IconButton
-        label="Italic (Ctrl+I)"
-        active={editor.isActive('italic')}
-        onClick={() => editor.chain().focus().toggleItalic().run()}
-      >
+      <IconButton label="Italic (Ctrl+I)" active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()}>
         <em className="text-sm leading-none">I</em>
       </IconButton>
-      <IconButton
-        label="Underline (Ctrl+U)"
-        active={editor.isActive('underline')}
-        onClick={() => editor.chain().focus().toggleUnderline().run()}
-      >
+      <IconButton label="Underline (Ctrl+U)" active={editor.isActive('underline')} onClick={() => editor.chain().focus().toggleUnderline().run()}>
         <span className="underline text-sm leading-none">U</span>
       </IconButton>
-      <IconButton
-        label="Strikethrough"
-        active={editor.isActive('strike')}
-        onClick={() => editor.chain().focus().toggleStrike().run()}
-      >
+      <IconButton label="Strikethrough" active={editor.isActive('strike')} onClick={() => editor.chain().focus().toggleStrike().run()}>
         <span className="line-through text-sm leading-none">S</span>
+      </IconButton>
+      <IconButton label="Inline code" active={editor.isActive('code')} onClick={() => editor.chain().focus().toggleCode().run()}>
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+        </svg>
       </IconButton>
 
       <Separator />
 
-      {/* Alignment — SVG icons so they're visually distinct */}
-      <IconButton
-        label="Align left"
-        active={editor.isActive({ textAlign: 'left' })}
-        onClick={() => editor.chain().focus().setTextAlign('left').run()}
-      >
+      {/* Alignment */}
+      <IconButton label="Align left" active={editor.isActive({ textAlign: 'left' })} onClick={() => editor.chain().focus().setTextAlign('left').run()}>
         <AlignLeftIcon />
       </IconButton>
-      <IconButton
-        label="Align center"
-        active={editor.isActive({ textAlign: 'center' })}
-        onClick={() => editor.chain().focus().setTextAlign('center').run()}
-      >
+      <IconButton label="Align center" active={editor.isActive({ textAlign: 'center' })} onClick={() => editor.chain().focus().setTextAlign('center').run()}>
         <AlignCenterIcon />
       </IconButton>
-      <IconButton
-        label="Align right"
-        active={editor.isActive({ textAlign: 'right' })}
-        onClick={() => editor.chain().focus().setTextAlign('right').run()}
-      >
+      <IconButton label="Align right" active={editor.isActive({ textAlign: 'right' })} onClick={() => editor.chain().focus().setTextAlign('right').run()}>
         <AlignRightIcon />
       </IconButton>
 
       <Separator />
 
       {/* Lists */}
-      <IconButton
-        label="Bullet list"
-        active={editor.isActive('bulletList')}
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
-      >
+      <IconButton label="Bullet list" active={editor.isActive('bulletList')} onClick={() => editor.chain().focus().toggleBulletList().run()}>
         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
           <circle cx="4" cy="7" r="1.5" fill="currentColor" stroke="none" />
           <circle cx="4" cy="12" r="1.5" fill="currentColor" stroke="none" />
@@ -151,11 +123,7 @@ export function Toolbar({ editor }: ToolbarProps) {
           <path strokeLinecap="round" d="M8 7h13M8 12h13M8 17h13" />
         </svg>
       </IconButton>
-      <IconButton
-        label="Numbered list"
-        active={editor.isActive('orderedList')}
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
-      >
+      <IconButton label="Numbered list" active={editor.isActive('orderedList')} onClick={() => editor.chain().focus().toggleOrderedList().run()}>
         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
           <path strokeLinecap="round" d="M10 7h11M10 12h11M10 17h11" />
           <path strokeLinecap="round" strokeLinejoin="round" d="M3 7h1v3M3 10h2M3 14l2-1v4H3" strokeWidth={1.5} />
@@ -164,24 +132,25 @@ export function Toolbar({ editor }: ToolbarProps) {
 
       <Separator />
 
-      {/* Table */}
-      <IconButton
-        label="Insert table"
-        onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
-      >
-        <TableIcon />
+      {/* Block types */}
+      <IconButton label="Blockquote" active={editor.isActive('blockquote')} onClick={() => editor.chain().focus().toggleBlockquote().run()}>
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+        </svg>
+      </IconButton>
+      <IconButton label="Code block" active={editor.isActive('codeBlock')} onClick={() => editor.chain().focus().toggleCodeBlock().run()}>
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8 10l-2 2 2 2M16 10l2 2-2 2M11 15l2-6" strokeWidth={1.5} />
+        </svg>
       </IconButton>
 
       <Separator />
 
-      {/* Export — sits right of separator, not floating */}
-      <button
-        title="Export as .docx"
-        className="text-xs text-gray-500 hover:text-gray-900 px-2.5 py-1 rounded hover:bg-gray-100 transition-colors font-medium whitespace-nowrap"
-        onClick={() => alert('Export coming soon')}
-      >
-        Export .docx
-      </button>
+      {/* Table */}
+      <IconButton label="Insert table" onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>
+        <TableIcon />
+      </IconButton>
     </div>
   )
 }

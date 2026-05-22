@@ -1,65 +1,92 @@
 'use server'
 
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 import db from './db'
 import { createSession, setSessionCookie, destroySession, clearSessionCookie, getSession } from './auth'
-import { sendMagicLink } from './mailer'
+import { generateSecret, verifyCode } from './totp'
 
-const APP_URL = process.env.APP_URL ?? 'http://localhost:3000'
-
-export async function requestMagicLink(formData: FormData) {
-  const email = (formData.get('email') as string ?? '').trim().toLowerCase()
-  if (!email || !email.includes('@')) return { error: 'Valid email required' }
-
-  const slug = formData.get('redirect_slug') as string | null
-
-  // Create or expire existing tokens for this email, then insert new one
-  await db`UPDATE magic_tokens SET used_at = NOW() WHERE email = ${email} AND used_at IS NULL`
-  const rows = await db`
-    INSERT INTO magic_tokens (email, redirect_slug)
-    VALUES (${email}, ${slug ?? null})
-    RETURNING token
-  `
-  const token = rows[0].token as string
-  const url = `${APP_URL}/login/verify?token=${token}`
-  await sendMagicLink(email, url)
-  return { ok: true }
+const ALLOWLIST = new Set(['john@adams-ai.com'])
+const EMAIL_COOKIE = 'foundry_login_email'
+const PENDING_SECRET_COOKIE = 'foundry_totp_pending'
+const COOKIE_OPTS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  path: '/',
 }
 
-export async function verifyMagicLink(token: string): Promise<{ error: string } | null> {
-  const rows = await db`
-    SELECT id, email, redirect_slug, expires_at, used_at
-    FROM magic_tokens
-    WHERE token = ${token}
+export async function submitEmail(formData: FormData) {
+  const email = (formData.get('email') as string ?? '').trim().toLowerCase()
+  if (!email || !email.includes('@')) return { error: 'Valid email required' }
+  if (!ALLOWLIST.has(email)) return { error: 'Access denied' }
+
+  const jar = await cookies()
+  jar.set(EMAIL_COOKIE, email, { ...COOKIE_OPTS, maxAge: 10 * 60 })
+  redirect('/login/verify')
+}
+
+export async function verifyTotp(formData: FormData) {
+  const jar = await cookies()
+  const email = jar.get(EMAIL_COOKIE)?.value
+  if (!email) redirect('/login')
+
+  const code = (formData.get('code') as string ?? '').replace(/\s/g, '')
+  if (!code || code.length !== 6) return { error: 'Enter the 6-digit code' }
+
+  const rows = await db`SELECT id, totp_secret FROM users WHERE email = ${email}`
+  if (!rows.length || !rows[0].totp_secret) redirect('/login/setup')
+
+  const user = rows[0]
+  if (!verifyCode(user.totp_secret as string, code)) return { error: 'Invalid code — try again' }
+
+  jar.delete(EMAIL_COOKIE)
+
+  const memberRows = await db`
+    SELECT org_id FROM org_members WHERE user_id = ${user.id} ORDER BY joined_at ASC LIMIT 1
   `
-  if (!rows.length) return { error: 'Invalid link' }
-  const row = rows[0]
-  if (row.used_at) return { error: 'Link already used' }
-  if (new Date(row.expires_at as string) < new Date()) return { error: 'Link expired' }
+  const orgId = (memberRows[0]?.org_id ?? null) as string | null
+  const sessionId = await createSession(user.id as string, orgId)
+  await setSessionCookie(sessionId)
+  redirect('/')
+}
 
-  await db`UPDATE magic_tokens SET used_at = NOW() WHERE id = ${row.id}`
+export async function startSetup(_formData: FormData) {
+  const jar = await cookies()
+  const email = jar.get(EMAIL_COOKIE)?.value
+  if (!email) redirect('/login')
 
-  // Upsert user
+  const secret = generateSecret()
+  jar.set(PENDING_SECRET_COOKIE, secret, { ...COOKIE_OPTS, maxAge: 10 * 60 })
+  redirect('/login/setup')
+}
+
+export async function confirmTotpSetup(formData: FormData) {
+  const jar = await cookies()
+  const email = jar.get(EMAIL_COOKIE)?.value
+  const secret = jar.get(PENDING_SECRET_COOKIE)?.value
+  if (!email || !secret) redirect('/login')
+
+  const code = (formData.get('code') as string ?? '').replace(/\s/g, '')
+  if (!code || code.length !== 6) return { error: 'Enter the 6-digit code' }
+  if (!verifyCode(secret, code)) return { error: 'Code did not match — scan the QR code and retry' }
+
   const userRows = await db`
-    INSERT INTO users (email) VALUES (${row.email})
-    ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
+    INSERT INTO users (email, totp_secret) VALUES (${email}, ${secret})
+    ON CONFLICT (email) DO UPDATE SET totp_secret = ${secret}
     RETURNING id
   `
   const userId = userRows[0].id as string
+  jar.delete(EMAIL_COOKIE)
+  jar.delete(PENDING_SECRET_COOKIE)
 
-  // Find the user's default org (most recently joined)
   const memberRows = await db`
-    SELECT org_id FROM org_members
-    WHERE user_id = ${userId}
-    ORDER BY joined_at DESC LIMIT 1
+    SELECT org_id FROM org_members WHERE user_id = ${userId} ORDER BY joined_at ASC LIMIT 1
   `
-  const orgId = (row.redirect_slug
-    ? await db`SELECT id FROM orgs WHERE slug = ${row.redirect_slug}`.then(r => r[0]?.id ?? null)
-    : memberRows[0]?.org_id ?? null) as string | null
-
+  const orgId = (memberRows[0]?.org_id ?? null) as string | null
   const sessionId = await createSession(userId, orgId)
   await setSessionCookie(sessionId)
-  return null
+  redirect('/')
 }
 
 export async function createOrg(formData: FormData) {
@@ -69,11 +96,9 @@ export async function createOrg(formData: FormData) {
   const name = (formData.get('name') as string ?? '').trim()
   if (!name) return { error: 'Name required' }
 
-  // Derive slug from name
   const baseSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
   if (!baseSlug) return { error: 'Invalid name' }
 
-  // Make slug unique
   const existing = await db`SELECT slug FROM orgs WHERE slug LIKE ${baseSlug + '%'}`
   const taken = new Set(existing.map(r => r.slug as string))
   let slug = baseSlug
@@ -85,12 +110,7 @@ export async function createOrg(formData: FormData) {
   `
   const org = orgRows[0]
 
-  await db`
-    INSERT INTO org_members (org_id, user_id, role)
-    VALUES (${org.id}, ${session.userId}, 'owner')
-  `
-
-  // Update session to point to new org
+  await db`INSERT INTO org_members (org_id, user_id, role) VALUES (${org.id}, ${session.userId}, 'owner')`
   await db`UPDATE sessions SET org_id = ${org.id} WHERE id = ${session.sessionId}`
 
   redirect(`/org/${org.slug}`)
