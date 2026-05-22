@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { InboxView } from './InboxView'
+import { useEffect, useState, useRef } from 'react'
+import { InboxView, type InboxViewHandle } from './InboxView'
 import { MessageReader } from './MessageReader'
 import { CalendarView } from './CalendarView'
 import { TasksView } from './TasksView'
@@ -10,11 +10,24 @@ import { FilesView } from './FilesView'
 import { ChannelsView } from './ChannelsView'
 import { ComposeModal, type ComposeRequest } from './ComposeModal'
 import type { MailThread, MailboxInfo } from '@foundry/shared'
-import { listMailboxes } from '../lib/api'
+import { listMailboxes, archiveThread, trashThread, starThread, markThreadUnread } from '../lib/api'
 
 type View = 'mail' | 'calendar' | 'contacts' | 'tasks' | 'decisions' | 'files' | 'channels'
 
-const SYSTEM_MAILBOXES = ['inbox', 'sent', 'drafts', 'archive', 'trash', 'spam']
+const SYSTEM_MAILBOXES = ['inbox', 'starred', 'sent', 'drafts', 'archive', 'trash', 'spam']
+
+const SHORTCUTS = [
+  { key: 'j', desc: 'Next thread' },
+  { key: 'k', desc: 'Previous thread' },
+  { key: 'c', desc: 'Compose' },
+  { key: 'r', desc: 'Reply' },
+  { key: 'a', desc: 'Reply all' },
+  { key: 'e', desc: 'Archive' },
+  { key: '#', desc: 'Trash' },
+  { key: 's', desc: 'Star / Unstar' },
+  { key: 'u', desc: 'Mark unread' },
+  { key: '?', desc: 'Show shortcuts' },
+]
 
 export function MailShell() {
   const [view, setView] = useState<View>('mail')
@@ -23,6 +36,8 @@ export function MailShell() {
   const [composing, setComposing] = useState(false)
   const [composeRequest, setComposeRequest] = useState<ComposeRequest | undefined>(undefined)
   const [mailboxes, setMailboxes] = useState<MailboxInfo[]>([])
+  const [showShortcuts, setShowShortcuts] = useState(false)
+  const inboxRef = useRef<InboxViewHandle>(null)
 
   useEffect(() => {
     listMailboxes().then(setMailboxes).catch(() => setMailboxes([]))
@@ -38,6 +53,81 @@ export function MailShell() {
     setComposeRequest(req)
     setComposing(true)
   }
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = async (e: KeyboardEvent) => {
+      // Don't fire in inputs, textareas, select, contenteditable
+      const tag = (e.target as HTMLElement).tagName.toLowerCase()
+      if (['input', 'textarea', 'select'].includes(tag)) return
+      if ((e.target as HTMLElement).isContentEditable) return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (composing) return
+
+      const threads = inboxRef.current?.getThreads() ?? []
+      const idx = threads.findIndex((t) => t.id === selectedThread?.id)
+
+      switch (e.key) {
+        case 'j': {
+          if (view !== 'mail') break
+          const next = threads[idx + 1] ?? threads[0]
+          if (next) setSelectedThread(next)
+          break
+        }
+        case 'k': {
+          if (view !== 'mail') break
+          const prev = threads[idx - 1] ?? threads[threads.length - 1]
+          if (prev) setSelectedThread(prev)
+          break
+        }
+        case 'c':
+          handleCompose()
+          break
+        case 'r':
+          if (selectedThread && view === 'mail') handleCompose({ replyTo: selectedThread })
+          break
+        case 'a':
+          if (selectedThread && view === 'mail') handleCompose({ replyTo: selectedThread, replyAll: true })
+          break
+        case 'e': {
+          if (!selectedThread || view !== 'mail') break
+          const id = selectedThread.id
+          await archiveThread(id)
+          inboxRef.current?.removeThread(id)
+          setSelectedThread(null)
+          break
+        }
+        case '#': {
+          if (!selectedThread || view !== 'mail') break
+          const id = selectedThread.id
+          await trashThread(id)
+          inboxRef.current?.removeThread(id)
+          setSelectedThread(null)
+          break
+        }
+        case 's': {
+          if (!selectedThread || view !== 'mail') break
+          const starred = !selectedThread.isStarred
+          await starThread(selectedThread.id, starred)
+          setSelectedThread((t) => t ? { ...t, isStarred: starred } : t)
+          break
+        }
+        case 'u': {
+          if (!selectedThread || view !== 'mail') break
+          await markThreadUnread(selectedThread.id)
+          setSelectedThread(null)
+          break
+        }
+        case '?':
+          e.preventDefault()
+          setShowShortcuts((v) => !v)
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [view, selectedThread, composing]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const mailboxLabel = (path: string) =>
     path.charAt(0).toUpperCase() + path.slice(1)
@@ -137,6 +227,15 @@ export function MailShell() {
               </button>
             ))}
           </div>
+
+          <div className="mt-auto pt-2 border-t border-gray-200">
+            <button
+              onClick={() => setShowShortcuts(true)}
+              className="flex items-center text-xs text-gray-400 hover:text-gray-600 px-3 py-1.5 w-full text-left"
+            >
+              <span className="mr-1.5 font-mono bg-gray-200 rounded px-1">?</span> Keyboard shortcuts
+            </button>
+          </div>
         </nav>
       </aside>
 
@@ -145,6 +244,7 @@ export function MailShell() {
         {view === 'mail' && (
           <>
             <InboxView
+              ref={inboxRef}
               mailbox={mailbox}
               selectedThread={selectedThread}
               onSelectThread={setSelectedThread}
@@ -188,6 +288,41 @@ export function MailShell() {
           onClose={() => { setComposing(false); setComposeRequest(undefined) }}
           request={composeRequest}
         />
+      )}
+
+      {/* Keyboard shortcuts modal */}
+      {showShortcuts && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+          onClick={() => setShowShortcuts(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl p-6 w-80"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-sm">Keyboard shortcuts</h2>
+              <button
+                onClick={() => setShowShortcuts(false)}
+                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <table className="w-full text-sm">
+              <tbody>
+                {SHORTCUTS.map(({ key, desc }) => (
+                  <tr key={key} className="border-b border-gray-100 last:border-0">
+                    <td className="py-1.5 pr-4">
+                      <kbd className="font-mono bg-gray-100 rounded px-1.5 py-0.5 text-xs">{key}</kbd>
+                    </td>
+                    <td className="py-1.5 text-gray-600">{desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </div>
   )
