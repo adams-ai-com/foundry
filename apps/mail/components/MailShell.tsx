@@ -47,7 +47,6 @@ export function MailShell() {
   const mailboxLabel = (path: string) =>
     path.charAt(0).toUpperCase() + path.slice(1)
 
-  // Merge fetched mailboxes with system mailbox defaults (show system mailboxes even if empty)
   const sidebarMailboxes: { path: string; unreadCount: number }[] = SYSTEM_MAILBOXES.map((path) => {
     const found = mailboxes.find((m) => m.path === path)
     return { path, unreadCount: found?.unreadCount ?? 0 }
@@ -56,19 +55,10 @@ export function MailShell() {
   const customMailboxes = mailboxes.filter((m) => !SYSTEM_MAILBOXES.includes(m.path))
 
   return (
-    <div className="h-screen flex">
+    <div className="h-[calc(100vh-3rem)] flex overflow-hidden">
       {/* Sidebar */}
       <aside className="w-52 border-r border-gray-200 bg-gray-50 flex flex-col flex-shrink-0">
-        <div className="p-4 border-b border-gray-200">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-blue-600 rounded flex items-center justify-center">
-              <span className="text-white font-bold text-sm">M</span>
-            </div>
-            <span className="font-semibold text-sm">Foundry Mail</span>
-          </div>
-        </div>
-
-        <div className="p-2">
+        <div className="p-2 border-b border-gray-200">
           <button
             onClick={handleCompose}
             className="w-full bg-blue-600 text-white text-sm px-3 py-2 rounded hover:bg-blue-700 transition-colors font-medium"
@@ -77,7 +67,7 @@ export function MailShell() {
           </button>
         </div>
 
-        <nav className="p-2 flex flex-col gap-0.5">
+        <nav className="p-2 flex flex-col gap-0.5 overflow-y-auto flex-1">
           {sidebarMailboxes.map(({ path, unreadCount }) => (
             <button
               key={path}
