@@ -13,6 +13,28 @@ type SessionRow = {
   created_at: string
   expires_at: string
   is_self_session: boolean
+  ip_address: string | null
+  user_agent: string | null
+}
+
+function parseDevice(ua: string | null): string {
+  if (!ua) return 'Unknown device'
+  const s = ua.toLowerCase()
+  let os = 'Unknown OS'
+  if (s.includes('windows nt')) os = 'Windows'
+  else if (s.includes('mac os x') || s.includes('macos')) os = 'macOS'
+  else if (s.includes('linux')) os = 'Linux'
+  else if (s.includes('iphone') || s.includes('ipad')) os = 'iOS'
+  else if (s.includes('android')) os = 'Android'
+
+  let browser = 'Unknown browser'
+  if (s.includes('edg/')) browser = 'Edge'
+  else if (s.includes('chrome/') && !s.includes('chromium')) browser = 'Chrome'
+  else if (s.includes('firefox/')) browser = 'Firefox'
+  else if (s.includes('safari/') && !s.includes('chrome')) browser = 'Safari'
+  else if (s.includes('chromium/')) browser = 'Chromium'
+
+  return `${browser} · ${os}`
 }
 
 function timeAgo(ts: string): string {
@@ -59,6 +81,8 @@ export default async function SessionsPage({
       m.role,
       s.created_at,
       s.expires_at,
+      s.ip_address,
+      s.user_agent,
       (s.id = ${session.sessionId}) AS is_self_session
     FROM sessions s
     JOIN users u ON u.id = s.user_id
@@ -69,7 +93,6 @@ export default async function SessionsPage({
     ORDER BY u.email ASC, s.created_at DESC
   ` as unknown as SessionRow[]
 
-  // Group by user
   const byUser = new Map<string, { user: SessionRow; sessions: SessionRow[] }>()
   for (const row of rows) {
     if (!byUser.has(row.user_id)) {
@@ -108,7 +131,6 @@ export default async function SessionsPage({
         </div>
       )}
 
-      {/* Stats */}
       <div className="grid grid-cols-2 gap-3 mb-6">
         <div className="bg-bg-raised border border-border rounded-xl p-4">
           <div className="text-2xl font-bold text-fg-primary">{totalSessions}</div>
@@ -130,7 +152,6 @@ export default async function SessionsPage({
             const canAct = !userSessions.every(s => s.is_self_session) && canActOn(user.role)
             return (
               <div key={user.user_id} className="bg-bg-raised border border-border rounded-xl overflow-hidden">
-                {/* User header */}
                 <div className="flex items-center justify-between gap-4 px-5 py-3 border-b border-border">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center shrink-0">
@@ -168,25 +189,30 @@ export default async function SessionsPage({
                   )}
                 </div>
 
-                {/* Sessions */}
                 <div className="divide-y divide-border">
                   {userSessions.map(s => (
                     <div key={s.session_id} className="flex items-center justify-between gap-4 px-5 py-3">
                       <div className="flex items-center gap-4 min-w-0">
                         <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
                         <div className="min-w-0">
-                          <div className="text-xs font-mono text-fg-tertiary">
-                            {s.session_id.slice(0, 8)}…
+                          <div className="text-xs text-fg-primary font-medium">
+                            {parseDevice(s.user_agent)}
+                            {s.is_self_session && (
+                              <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent font-medium">
+                                This session
+                              </span>
+                            )}
                           </div>
-                          <div className="text-xs text-fg-tertiary mt-0.5">
-                            Started {timeAgo(s.created_at)} · {timeLeft(s.expires_at)}
+                          <div className="text-xs text-fg-tertiary mt-0.5 flex items-center gap-2">
+                            {s.ip_address && (
+                              <span className="font-mono">{s.ip_address}</span>
+                            )}
+                            {s.ip_address && <span>·</span>}
+                            <span>Started {timeAgo(s.created_at)}</span>
+                            <span>·</span>
+                            <span>{timeLeft(s.expires_at)}</span>
                           </div>
                         </div>
-                        {s.is_self_session && (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-accent/10 text-accent font-medium shrink-0">
-                            This session
-                          </span>
-                        )}
                       </div>
 
                       {!s.is_self_session && canAct && (

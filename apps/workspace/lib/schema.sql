@@ -57,3 +57,19 @@ CREATE TABLE IF NOT EXISTS org_group_members (
   added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (group_id, user_id)
 );
+
+-- Session IP/UA (added for session device tracking)
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS ip_address TEXT;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS user_agent TEXT;
+
+-- TOTP rate limiting (added for brute-force protection)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_failed_count INT NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_locked_until TIMESTAMPTZ;
+
+-- Group app access (added for group-level app permissions)
+CREATE TABLE IF NOT EXISTS group_app_access (
+  group_id TEXT NOT NULL REFERENCES org_groups(id) ON DELETE CASCADE,
+  app TEXT NOT NULL CHECK (app IN ('docs','sheets','mail','wiki')),
+  enabled BOOLEAN NOT NULL DEFAULT true,
+  PRIMARY KEY (group_id, app)
+);
