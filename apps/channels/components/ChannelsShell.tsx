@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { SessionUser } from '@foundry/auth'
 import { StreamList } from './StreamList'
+import { PushNotificationSetup } from './PushNotificationSetup'
 import { MessagePanel } from './MessagePanel'
 import { MemoryPanel } from './MemoryPanel'
 import { NotificationBell } from './NotificationBell'
@@ -169,6 +170,7 @@ export function ChannelsShell({
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
+      <PushNotificationSetup />
       {/* Top nav */}
       <header className="h-12 bg-bg-raised border-b border-border flex items-center px-4 gap-4 shrink-0 z-20">
         <a href={`/org/${orgSlug}`} className="flex items-center gap-2 shrink-0">
