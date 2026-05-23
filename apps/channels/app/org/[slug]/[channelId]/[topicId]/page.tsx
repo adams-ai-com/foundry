@@ -8,7 +8,9 @@ export const dynamic = 'force-dynamic'
 
 type Ch  = { id: string; name: string; type: string }
 type Top = { id: string; name: string; last_message_at: string | null; message_count: number; is_resolved: boolean }
-type Msg = { id: string; author_id: string; author_name: string; author_email: string; body: string; reactions: unknown[]; edited_at: string | null; created_at: string }
+type Reaction = { emoji: string; user_ids: string[] }
+type Msg = { id: string; author_id: string; author_name: string; author_email: string; body: string; reactions: Reaction[]; edited_at: string | null; created_at: string }
+type DM  = { id: string; metadata: { participants: { id: string; name: string; email: string }[] }; topic_id: string | null; last_message_at: string | null }
 
 type Props = { params: Promise<{ slug: string; channelId: string; topicId: string }> }
 
@@ -19,11 +21,11 @@ export default async function TopicPage({ params }: Props) {
 
   const orgId = session.orgId!
 
-  const [channelsRaw, activeChannelRaw, topicsRaw, messagesRaw] = await Promise.all([
+  const [channelsRaw, activeChannelRaw, topicsRaw, messagesRaw, dmsRaw] = await Promise.all([
     db`
       SELECT id, name, description, type, is_private
       FROM channels
-      WHERE org_id = ${orgId} AND is_archived = false
+      WHERE org_id = ${orgId} AND is_archived = false AND type = 'stream'
       ORDER BY name ASC
     `,
     db`
@@ -45,18 +47,27 @@ export default async function TopicPage({ params }: Props) {
           ORDER BY created_at ASC
           LIMIT 100
         `,
+    db`
+      SELECT c.id, c.metadata, t.id as topic_id, t.last_message_at
+      FROM channels c
+      JOIN channel_members cm ON cm.channel_id = c.id AND cm.user_id = ${session.userId}
+      LEFT JOIN channel_topics t ON t.channel_id = c.id
+      WHERE c.org_id = ${orgId} AND c.type = 'dm' AND c.is_archived = false
+      ORDER BY t.last_message_at DESC NULLS LAST
+    `,
   ])
 
   const channels = channelsRaw as unknown as Ch[]
   const activeChannel = (activeChannelRaw[0] ?? null) as unknown as { id: string; name: string } | null
   const topics = topicsRaw as unknown as Top[]
   const messages = messagesRaw as unknown as Msg[]
+  const dms = dmsRaw as unknown as DM[]
 
   if (!activeChannel) redirect(`/org/${slug}`)
 
   const activeTopic = topicId === '_new'
     ? null
-    : topics.find(t => t.id === topicId) ?? null
+    : (topics.find(t => t.id === topicId) ?? null)
 
   const jar = await cookies()
   const theme = (jar.get('foundry_theme')?.value ?? 'light') as 'light' | 'dark' | 'warm'
@@ -73,6 +84,7 @@ export default async function TopicPage({ params }: Props) {
       activeTopicId={topicId}
       activeTopic={activeTopic}
       initialMessages={messages}
+      initialDms={dms}
     />
   )
 }
