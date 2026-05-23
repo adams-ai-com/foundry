@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@foundry/auth'
 import db from '@/lib/db'
 import { broadcastToOrg } from '@/lib/sse'
+import { embedText, pgVector } from '@/lib/embed'
 
 export const dynamic = 'force-dynamic'
 
@@ -93,6 +94,15 @@ export async function POST(req: NextRequest, { params }: Params) {
     topicId,
     message,
   })
+
+  // Async embed — does not block the response
+  void embedText(body.trim()).then(async vec => {
+    if (!vec) return
+    await db`
+      UPDATE channel_messages SET embedding = ${pgVector(vec)}::vector
+      WHERE id = ${message.id}
+    `
+  }).catch(err => console.error('[embed] message update failed:', err))
 
   return NextResponse.json(message, { status: 201 })
 }
