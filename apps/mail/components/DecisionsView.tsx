@@ -180,7 +180,6 @@ function DecisionForm({
             <input
               data-testid="decision-subject-input"
               autoFocus
-              data-testid="decision-subject-input"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder="e.g. Pricing model for Q3"
