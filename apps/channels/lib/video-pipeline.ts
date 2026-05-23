@@ -221,9 +221,16 @@ export async function runPostCallPipeline(callId: string, orgId: string): Promis
     } catch {}
   }
 
-  // Attempt Whisper transcription if recording available
+  // Use pre-saved transcript if available (e.g. from VTT/Zoom import), otherwise try Whisper
   let transcript: string | null = null
-  if (call.recording_path) {
+  try {
+    const [existing] = await db`
+      SELECT transcript_text FROM video_transcripts WHERE call_id = ${callId}
+    ` as { transcript_text: string }[]
+    if (existing?.transcript_text) transcript = existing.transcript_text
+  } catch {}
+
+  if (!transcript && call.recording_path) {
     transcript = await transcribeRecording(callId, call.recording_path)
   }
 
