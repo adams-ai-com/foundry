@@ -32,7 +32,7 @@ export async function deactivateUser(userId: string, _fd: FormData): Promise<voi
   if (!canActOn(session.role!, target.role)) redirect(`/admin/users/${userId}?err=Insufficient+permissions+to+deactivate+this+user`)
   if (target.deactivated_at) redirect(`/admin/users/${userId}?err=User+is+already+deactivated`)
 
-  await db`UPDATE users SET deactivated_at = NOW() WHERE id = ${userId}`
+  await db`UPDATE users SET deactivated_at = NOW() WHERE id = ${userId} AND EXISTS (SELECT 1 FROM org_members WHERE user_id = ${userId} AND org_id = ${session.orgId!})`
   await db`DELETE FROM sessions WHERE user_id = ${userId}`
   await writeAudit({ orgId: session.orgId!, actorId: session.userId, actorEmail: session.email, action: 'user.deactivate', targetId: userId, targetEmail: target.email })
 
@@ -47,7 +47,7 @@ export async function reactivateUser(userId: string, _fd: FormData): Promise<voi
   if (!canActOn(session.role!, target.role)) redirect(`/admin/users/${userId}?err=Insufficient+permissions+to+reactivate+this+user`)
   if (!target.deactivated_at) redirect(`/admin/users/${userId}?err=User+is+not+deactivated`)
 
-  await db`UPDATE users SET deactivated_at = NULL WHERE id = ${userId}`
+  await db`UPDATE users SET deactivated_at = NULL WHERE id = ${userId} AND EXISTS (SELECT 1 FROM org_members WHERE user_id = ${userId} AND org_id = ${session.orgId!})`
   await writeAudit({ orgId: session.orgId!, actorId: session.userId, actorEmail: session.email, action: 'user.reactivate', targetId: userId, targetEmail: target.email })
 
   redirect(`/admin/users/${userId}?msg=User+reactivated`)
@@ -78,7 +78,7 @@ export async function resetTotp(userId: string, _fd: FormData): Promise<void> {
   const rows = await db`SELECT totp_secret FROM users WHERE id = ${userId}`
   if (!rows.length || !rows[0].totp_secret) redirect(`/admin/users/${userId}?err=User+has+no+TOTP+enrolled`)
 
-  await db`UPDATE users SET totp_secret = NULL WHERE id = ${userId}`
+  await db`UPDATE users SET totp_secret = NULL, totp_failed_count = 0, totp_locked_until = NULL WHERE id = ${userId} AND EXISTS (SELECT 1 FROM org_members WHERE user_id = ${userId} AND org_id = ${session.orgId!})`
   await db`DELETE FROM sessions WHERE user_id = ${userId}`
   await writeAudit({ orgId: session.orgId!, actorId: session.userId, actorEmail: session.email, action: 'user.totp_reset', targetId: userId, targetEmail: target.email })
 
@@ -324,8 +324,10 @@ export async function setPrimaryDomain(domainId: string, _fd: FormData): Promise
   const row = rows[0] as { verified_at: string | null; domain: string }
   if (!row.verified_at) redirect('/admin/domains?err=Verify+the+domain+before+setting+it+as+primary')
 
-  await db`UPDATE domains SET is_primary = false WHERE org_id = ${session.orgId!}`
-  await db`UPDATE domains SET is_primary = true  WHERE id = ${domainId}`
+  await db.begin(async sql => {
+    await sql`UPDATE domains SET is_primary = false WHERE org_id = ${session.orgId!}`
+    await sql`UPDATE domains SET is_primary = true  WHERE id = ${domainId}`
+  })
 
   redirect(`/admin/domains?msg=${encodeURIComponent(row.domain + ' is now the primary domain')}`)
 }

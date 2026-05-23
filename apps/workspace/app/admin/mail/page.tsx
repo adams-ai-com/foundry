@@ -95,6 +95,17 @@ function timeAgo(ts: string): string {
   return `${Math.floor(secs / 86400)}d ago`
 }
 
+async function checkMailServerHealth(): Promise<'Running' | 'Down'> {
+  try {
+    const res = await fetch('http://localhost:3100/health', {
+      signal: AbortSignal.timeout(2000),
+    })
+    return res.ok ? 'Running' : 'Down'
+  } catch {
+    return 'Down'
+  }
+}
+
 export default async function MailAdminPage({
   searchParams,
 }: {
@@ -103,11 +114,9 @@ export default async function MailAdminPage({
   const session = await requireAdmin()
   const params = await searchParams
 
-  const rows = await db`SELECT * FROM smtp_config WHERE org_id = ${session.orgId!}`
-  const cfg: SmtpConfig = rows.length ? rows[0] as unknown as SmtpConfig : DEFAULTS
-
-  // Message volume from foundry_mail
-  const [volRows, deliveryRows, failureRows] = await Promise.all([
+  const [rows, mailStatus, volRows, deliveryRows, failureRows] = await Promise.all([
+    db`SELECT * FROM smtp_config WHERE org_id = ${session.orgId!}`,
+    checkMailServerHealth(),
     mailDb`
       SELECT
         COUNT(*) FILTER (WHERE mb.type != 'sent' AND m.received_at > NOW() - INTERVAL '24 hours') AS received_24h,
@@ -138,11 +147,12 @@ export default async function MailAdminPage({
     `,
   ])
 
+  const cfg: SmtpConfig = rows.length ? rows[0] as unknown as SmtpConfig : DEFAULTS
   const vol = volRows[0] as unknown as VolumeStats
   const delivery = deliveryRows[0] as unknown as DeliveryStats
   const failures = failureRows as unknown as RecentFailure[]
 
-  const MAIL_SERVER_IP = '142.93.61.78'
+  const MAIL_SERVER_IP = process.env.MAIL_SERVER_IP ?? '142.93.61.78'
   const MAIL_SERVER_PORT = 3100
 
   return (
@@ -173,11 +183,15 @@ export default async function MailAdminPage({
             { label: 'Host',    value: MAIL_SERVER_IP },
             { label: 'Port',    value: String(MAIL_SERVER_PORT) },
             { label: 'Service', value: 'foundry-mail.service' },
-            { label: 'Status',  value: 'Running' },
+            { label: 'Status',  value: mailStatus },
           ].map(({ label, value }) => (
             <div key={label} className="bg-bg-base border border-border rounded-lg px-3 py-2">
               <div className="text-xs text-fg-tertiary">{label}</div>
-              <div className={`text-xs font-mono mt-0.5 ${label === 'Status' ? 'text-emerald-600' : 'text-fg-primary'}`}>
+              <div className={`text-xs font-mono mt-0.5 ${
+                label === 'Status'
+                  ? mailStatus === 'Running' ? 'text-emerald-600' : 'text-red-500'
+                  : 'text-fg-primary'
+              }`}>
                 {value}
               </div>
             </div>

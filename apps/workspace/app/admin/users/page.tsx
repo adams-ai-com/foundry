@@ -32,7 +32,7 @@ async function getUsers(orgId: string, q: string, page: number) {
       MAX(s.created_at) AS last_sign_in,
       COUNT(CASE WHEN s.expires_at > NOW() THEN 1 END)::int AS active_sessions
     FROM users u
-    LEFT JOIN org_members m ON m.user_id = u.id AND m.org_id = ${orgId}
+    JOIN org_members m ON m.user_id = u.id AND m.org_id = ${orgId}
     LEFT JOIN sessions s ON s.user_id = u.id
     WHERE (${q} = '' OR u.email ILIKE ${search} OR COALESCE(u.name, '') ILIKE ${search})
     GROUP BY u.id, u.email, u.name, m.role, m.joined_at
@@ -43,7 +43,7 @@ async function getUsers(orgId: string, q: string, page: number) {
   const countRows = await db`
     SELECT COUNT(DISTINCT u.id)::int AS n
     FROM users u
-    LEFT JOIN org_members m ON m.user_id = u.id AND m.org_id = ${orgId}
+    JOIN org_members m ON m.user_id = u.id AND m.org_id = ${orgId}
     WHERE (${q} = '' OR u.email ILIKE ${search} OR COALESCE(u.name, '') ILIKE ${search})
   `
 

@@ -1,6 +1,7 @@
 import { requireAdmin } from '@/lib/auth'
 import db from '@/lib/db'
 import { forceSignOut, forceSignOutAll } from '@/lib/admin-actions'
+import ConfirmForm from '@/components/ConfirmForm'
 
 export const dynamic = 'force-dynamic'
 
@@ -178,14 +179,17 @@ export default async function SessionsPage({
                   </div>
 
                   {canAct && (
-                    <form action={forceSignOutAll.bind(null, user.user_id)}>
+                    <ConfirmForm
+                      action={forceSignOutAll.bind(null, user.user_id)}
+                      message={`Sign out all sessions for ${user.user_email}?`}
+                    >
                       <button
                         type="submit"
                         className="text-xs font-medium text-red-500 border border-red-500/30 hover:bg-red-500/5 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
                       >
                         Sign out all
                       </button>
-                    </form>
+                    </ConfirmForm>
                   )}
                 </div>
 
@@ -216,14 +220,17 @@ export default async function SessionsPage({
                       </div>
 
                       {!s.is_self_session && canAct && (
-                        <form action={forceSignOut.bind(null, s.session_id)}>
+                        <ConfirmForm
+                          action={forceSignOut.bind(null, s.session_id)}
+                          message={`Sign out this ${parseDevice(s.user_agent)} session for ${user.user_email}?`}
+                        >
                           <button
                             type="submit"
                             className="text-xs font-medium text-fg-secondary hover:text-red-600 border border-border hover:border-red-500/30 hover:bg-red-500/5 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
                           >
                             Sign out
                           </button>
-                        </form>
+                        </ConfirmForm>
                       )}
                     </div>
                   ))}
