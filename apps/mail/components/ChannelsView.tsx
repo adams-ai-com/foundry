@@ -157,6 +157,7 @@ export function ChannelsView() {
         <div className="px-3 pt-4 pb-2 flex items-center justify-between">
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Channels</span>
           <button
+            data-testid="new-channel-button"
             onClick={() => setShowNewChannel(true)}
             className="text-gray-400 hover:text-gray-200 text-lg leading-none"
             title="New channel"
@@ -172,6 +173,7 @@ export function ChannelsView() {
             {channels.map((ch) => (
               <button
                 key={ch.id}
+                data-testid={`channel-item-${ch.name}`}
                 onClick={() => setActiveChannel(ch)}
                 className={`w-full text-left flex items-center justify-between px-2 py-1.5 rounded text-sm group ${
                   activeChannel?.id === ch.id
@@ -262,6 +264,7 @@ export function ChannelsView() {
               <div className="flex items-end gap-2 bg-gray-800 rounded-lg px-3 py-2">
                 <textarea
                   ref={inputRef}
+                  data-testid="message-input"
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={handleKeyDown}
@@ -276,6 +279,7 @@ export function ChannelsView() {
                   }}
                 />
                 <button
+                  data-testid="message-send-button"
                   onClick={handleSend}
                   disabled={!draft.trim() || sending}
                   className="text-blue-400 hover:text-blue-300 disabled:opacity-30 flex-shrink-0 pb-0.5"
@@ -344,6 +348,7 @@ function NewChannelModal({
               <span className="text-gray-500 text-sm mr-1">#</span>
               <input
                 autoFocus
+                data-testid="channel-name-input"
                 value={name}
                 onChange={(e) => setName(e.target.value.toLowerCase().replace(/\s/g, '-'))}
                 placeholder="e.g. engineering"
@@ -364,6 +369,7 @@ function NewChannelModal({
             </button>
             <button
               type="submit"
+              data-testid="channel-create-button"
               disabled={saving || !name.trim()}
               className="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-1.5 rounded"
             >

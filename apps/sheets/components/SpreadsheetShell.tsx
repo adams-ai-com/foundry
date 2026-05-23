@@ -137,34 +137,34 @@ function SheetContent({
         />
 
         {chartOpen && (
-          <div className="w-80 border-l border-gray-200 flex-shrink-0 overflow-y-auto">
+          <div className="w-80 border-l border-border flex-shrink-0 overflow-y-auto bg-bg-raised">
             <ChartPanel charts={charts} selection={selection} onChartsChange={onChartsChange} />
           </div>
         )}
 
         {pythonOpen && (
-          <div className="w-96 border-l border-gray-200 flex-shrink-0">
+          <div className="w-96 border-l border-border flex-shrink-0 bg-bg-raised">
             <PythonPanel />
           </div>
         )}
       </div>
 
       {/* Sheet tabs */}
-      <div className="flex items-center border-t border-gray-200 bg-gray-50 px-2 h-8 gap-1 shrink-0">
+      <div className="flex items-center border-t border-border bg-bg-surface px-2 h-8 gap-1 shrink-0">
         {sheetNames.map(name => (
           <button
             key={name}
             onClick={() => onSheetSwitch(name)}
             className={`text-xs px-3 py-0.5 rounded border font-medium transition-colors ${
               name === activeSheet
-                ? 'bg-white border-gray-300 text-gray-800 shadow-sm'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-white hover:border-gray-200'
+                ? 'bg-bg-raised border-border text-fg-primary shadow-sm'
+                : 'border-transparent text-fg-secondary hover:text-fg-primary hover:bg-bg-raised hover:border-border'
             }`}
           >
             {name}
           </button>
         ))}
-        <button onClick={handleAddSheet} className="text-xs px-2 py-0.5 text-gray-400 hover:text-gray-600 transition-colors">
+        <button onClick={handleAddSheet} className="text-xs px-2 py-0.5 text-fg-tertiary hover:text-fg-secondary transition-colors">
           + Add sheet
         </button>
       </div>

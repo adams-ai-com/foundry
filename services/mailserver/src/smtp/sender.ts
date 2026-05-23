@@ -4,6 +4,7 @@ import { config } from '../config.js'
 import { sql, newId } from '../db.js'
 import { storeInboundMessage } from '../storage/messages.js'
 import { parseMail } from '../parser/mime.js'
+import { getFile } from '../storage/files.js'
 
 export interface SendOptions {
   accountId: string
@@ -18,6 +19,7 @@ export interface SendOptions {
   inReplyTo?: string
   references?: string
   threadId?: string
+  attachmentIds?: string[]
 }
 
 function buildTransport() {
@@ -41,12 +43,45 @@ function loadDkimKey(): string | null {
   return readFileSync(config.dkim.privateKeyPath, 'utf-8')
 }
 
+async function logDelivery(
+  accountId: string,
+  fromEmail: string,
+  toCount: number,
+  messageId: string | null,
+  status: 'sent' | 'failed',
+  error?: string,
+): Promise<void> {
+  try {
+    await sql`
+      INSERT INTO mail_delivery_log (account_id, from_email, to_count, message_id, status, error)
+      VALUES (${accountId}, ${fromEmail}, ${toCount}, ${messageId}, ${status}, ${error ?? null})
+    `
+  } catch {
+    // Never block the caller on log write failure
+  }
+}
+
 export async function sendMessage(opts: SendOptions): Promise<string> {
   const transport = buildTransport()
   const dkimKey = loadDkimKey()
 
   const fromDomain = opts.from.split('@')[1] ?? config.domain
   const messageIdValue = `<${newId()}@${fromDomain}>`
+
+  // Resolve file attachments
+  const nodemailerAttachments: Array<{ filename: string; path: string; contentType: string }> = []
+  if (opts.attachmentIds?.length) {
+    for (const fileId of opts.attachmentIds) {
+      const file = await getFile(opts.accountId, fileId)
+      if (file) {
+        nodemailerAttachments.push({
+          filename: file.filename,
+          path: file.storage_path,
+          contentType: file.content_type,
+        })
+      }
+    }
+  }
 
   const mailOptions: SendMailOptions = {
     messageId: messageIdValue,
@@ -59,6 +94,7 @@ export async function sendMessage(opts: SendOptions): Promise<string> {
     text: opts.bodyText ?? undefined,
     inReplyTo: opts.inReplyTo ?? undefined,
     references: opts.references ?? undefined,
+    attachments: nodemailerAttachments.length ? nodemailerAttachments : undefined,
     ...(dkimKey && {
       dkim: {
         domainName: fromDomain,
@@ -68,7 +104,13 @@ export async function sendMessage(opts: SendOptions): Promise<string> {
     }),
   }
 
-  await transport.sendMail(mailOptions)
+  try {
+    await transport.sendMail(mailOptions)
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err)
+    await logDelivery(opts.accountId, opts.from, opts.to.length, messageIdValue, 'failed', errMsg)
+    throw err
+  }
 
   // Store a copy in Sent
   const sentParsed = await parseMail(
@@ -96,6 +138,18 @@ export async function sendMessage(opts: SendOptions): Promise<string> {
     WHERE mb.account_id = ${opts.accountId} AND mb.type = 'sent'
       AND m.id = ${messageId}
   `
+
+  // Link uploaded attachments to the sent message
+  if (opts.attachmentIds?.length) {
+    for (const fileId of opts.attachmentIds) {
+      await sql`
+        UPDATE files SET message_id = ${messageId}
+        WHERE id = ${fileId} AND account_id = ${opts.accountId}
+      `
+    }
+  }
+
+  await logDelivery(opts.accountId, opts.from, opts.to.length, messageIdValue, 'sent')
 
   return messageId
 }

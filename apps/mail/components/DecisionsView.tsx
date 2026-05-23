@@ -36,6 +36,7 @@ export function DecisionsView() {
           <p className="text-xs text-gray-500 mt-0.5">Explicit outcomes, searchable forever</p>
         </div>
         <button
+          data-testid="log-decision-button"
           onClick={() => { setEditingDecision(null); setShowForm(true) }}
           className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded"
         >
@@ -57,7 +58,7 @@ export function DecisionsView() {
         ) : (
           <ul className="divide-y divide-gray-800">
             {decisions.map((d) => (
-              <li key={d.id} className="px-4 py-3 hover:bg-gray-800/40 group">
+              <li key={d.id} data-testid="decision-item" className="px-4 py-3 hover:bg-gray-800/40 group">
                 <div
                   className="cursor-pointer"
                   onClick={() => setExpanded(expanded === d.id ? null : d.id)}
@@ -82,6 +83,7 @@ export function DecisionsView() {
                         Edit
                       </button>
                       <button
+                        data-testid={`decision-delete-${d.id}`}
                         onClick={(e) => { e.stopPropagation(); handleDelete(d.id) }}
                         className="text-xs text-gray-400 hover:text-red-400 px-1"
                       >
@@ -177,6 +179,7 @@ function DecisionForm({
             <label className="text-xs text-gray-400 block mb-1">What was decided?</label>
             <input
               autoFocus
+              data-testid="decision-subject-input"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder="e.g. Pricing model for Q3"
@@ -186,6 +189,7 @@ function DecisionForm({
           <div>
             <label className="text-xs text-gray-400 block mb-1">Outcome</label>
             <textarea
+              data-testid="decision-outcome-input"
               value={outcome}
               onChange={(e) => setOutcome(e.target.value)}
               placeholder="e.g. We will charge $49/mo per seat, billed annually. No freemium tier."
@@ -219,6 +223,7 @@ function DecisionForm({
             </button>
             <button
               type="submit"
+              data-testid="decision-save-button"
               disabled={saving || !subject.trim() || !outcome.trim()}
               className="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-1.5 rounded"
             >

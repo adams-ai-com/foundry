@@ -1,0 +1,15 @@
+{
+  "cookies": [
+    {
+      "name": "foundry_session",
+      "value": "e2e-test-session-fixed",
+      "domain": "localhost",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": []
+}

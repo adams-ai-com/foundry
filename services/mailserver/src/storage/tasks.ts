@@ -23,9 +23,12 @@ export async function listTasks(
 ): Promise<{ tasks: Task[]; total: number }> {
   const { status, limit = 50, offset = 0 } = opts
 
-  const where = status
-    ? db`account_id = ${accountId} AND status = ${status}`
-    : db`account_id = ${accountId}`
+  const where =
+    status === 'active'
+      ? db`account_id = ${accountId} AND status IN ('todo', 'in_progress')`
+      : status
+      ? db`account_id = ${accountId} AND status = ${status}`
+      : db`account_id = ${accountId}`
 
   const [{ count }] = await db<{ count: string }[]>`
     SELECT COUNT(*) FROM tasks WHERE ${where}`

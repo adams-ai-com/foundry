@@ -1,5 +1,6 @@
 export { Button } from './Button'
 export { IconButton } from './IconButton'
 export { Separator } from './Separator'
+export { ThemeSwitcher } from './ThemeSwitcher'
 export { Tooltip } from './Tooltip'
 export { TopNav } from './TopNav'
