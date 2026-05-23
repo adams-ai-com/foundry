@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import db from '@/lib/db'
 import { broadcastToOrg } from '@/lib/sse'
 import { callGuardianTool, isGuardianConfigured } from '@/lib/guardian'
+import { embedText, pgVector } from '@/lib/embed'
 
 type ActionItem = { text: string; assignee_guess: string | null }
 type Decision   = { text: string }
@@ -51,9 +52,18 @@ async function transcribeRecording(
       ON CONFLICT (call_id) DO UPDATE
         SET transcript_text = EXCLUDED.transcript_text, processed_at = EXCLUDED.processed_at
       RETURNING id
-    `
+    ` as { id: string }[]
     console.log(`[pipeline] ${callId}: transcript saved (${result.text.length} chars)`)
-    void transcript // referenced to satisfy lint
+
+    // Async embed the transcript text
+    void embedText(result.text).then(async vec => {
+      if (!vec) return
+      await db`
+        UPDATE video_transcripts SET embedding = ${pgVector(vec)}::vector
+        WHERE id = ${transcript.id}
+      `
+    }).catch(err => console.error(`[pipeline] ${callId}: transcript embed failed:`, err))
+
     return result.text
   } catch (err) {
     console.error(`[pipeline] ${callId}: Whisper transcription failed:`, err)
