@@ -1,18 +1,26 @@
 type SendFn = (data: object) => void
 
-const clients = new Map<string, Set<SendFn>>()
+type SSEClient = {
+  send: SendFn
+  topicFilter?: string[]  // guests: only deliver events for their allowed topics
+}
 
-export function addSSEClient(orgId: string, send: SendFn): () => void {
+const clients = new Map<string, Set<SSEClient>>()
+
+export function addSSEClient(orgId: string, send: SendFn, topicFilter?: string[]): () => void {
   if (!clients.has(orgId)) clients.set(orgId, new Set())
-  clients.get(orgId)!.add(send)
+  const client: SSEClient = { send, topicFilter }
+  clients.get(orgId)!.add(client)
   return () => {
-    clients.get(orgId)?.delete(send)
+    clients.get(orgId)?.delete(client)
     if (clients.get(orgId)?.size === 0) clients.delete(orgId)
   }
 }
 
 export function broadcastToOrg(orgId: string, data: object): void {
-  clients.get(orgId)?.forEach(send => {
-    try { send(data) } catch {}
+  const topicId = (data as Record<string, unknown>).topicId as string | undefined
+  clients.get(orgId)?.forEach(client => {
+    if (client.topicFilter && topicId && !client.topicFilter.includes(topicId)) return
+    try { client.send(data) } catch {}
   })
 }
