@@ -9,18 +9,23 @@ export default async function NewOrgPage() {
   if (!session) redirect('/login')
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-bg-base relative overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div className="w-[600px] h-[600px] rounded-full bg-accent/5 blur-3xl" />
+      </div>
+      <div className="relative w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-600 rounded-xl mb-4">
-            <span className="text-white font-bold text-xl">F</span>
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-accent mb-4 shadow-md">
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 text-accent-fg" aria-hidden="true">
+              <path d="M4 5a1 1 0 0 1 1-1h14a1 1 0 0 1 0 2H5a1 1 0 0 1-1-1zm0 6a1 1 0 0 1 1-1h10a1 1 0 0 1 0 2H5a1 1 0 0 1-1-1zm0 6a1 1 0 0 1 1-1h6a1 1 0 0 1 0 2H5a1 1 0 0 1-1-1z"/>
+            </svg>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Create your workspace</h1>
-          <p className="text-gray-500 text-sm mt-1">You're signed in as {session.email}</p>
+          <h1 className="text-xl font-semibold text-fg-primary tracking-tight">Create workspace</h1>
+          <p className="text-fg-secondary text-sm mt-0.5">{session.email}</p>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-          <h2 className="text-lg font-semibold text-gray-900 mb-1">Name your organization</h2>
-          <p className="text-gray-500 text-sm mb-6">This is the name of your company or team.</p>
+        <div className="bg-bg-raised rounded-xl border border-border shadow-card p-7">
+          <h2 className="text-sm font-semibold text-fg-primary mb-0.5">Name your organization</h2>
+          <p className="text-fg-secondary text-xs mb-5">Your company or team name.</p>
           <NewOrgForm />
         </div>
       </div>

@@ -47,12 +47,11 @@ test.describe('CSV Import', () => {
   })
 
   test('CSV import replaces existing cell content', async ({ page }) => {
-    // Type something first
     await page.locator('[data-testid="cell-0-0"]').click()
     const inp = page.locator('[data-testid="cell-0-0"] input.cell-input')
     await inp.waitFor({ state: 'visible' })
     await setCellInputValue(inp, 'old data')
-    await page.keyboard.press('Enter')
+    await inp.press('Enter')
 
     const fileInput = page.locator('input[type="file"]')
     await fileInput.setInputFiles({
@@ -76,6 +75,7 @@ test.describe('CSV Import', () => {
     await page.locator('[data-testid="cell-5-5"]').click()
 
     await expect(page.locator('[data-testid="cell-0-0"]')).toContainText('hello')
+    await expect(page.locator('[data-testid="cell-0-0"]')).toContainText('hello')
     await expect(page.locator('[data-testid="save-state"]')).toContainText('Saved', { timeout: 8000 })
     await page.reload()
     // Click a cell not being checked to deselect cell-0-0
@@ -90,25 +90,25 @@ test.describe('CSV Export', () => {
 
   test.beforeEach(async ({ page }) => {
     title = await createTestSheet(page, 'ExportCSVTest')
-    // Populate some cells
+    // Populate some cells using direct input.press() to avoid focus issues
     await page.locator('[data-testid="cell-0-0"]').click()
     let inp = page.locator('[data-testid="cell-0-0"] input.cell-input')
     await inp.waitFor({ state: 'visible' })
     await setCellInputValue(inp, 'Name')
-    await page.keyboard.press('Tab')
+    await inp.press('Tab')
     inp = page.locator('[data-testid="cell-0-1"] input.cell-input')
     await inp.waitFor({ state: 'visible' })
     await setCellInputValue(inp, 'Score')
-    await page.keyboard.press('Enter')
+    await inp.press('Enter')
     await page.locator('[data-testid="cell-1-0"]').click()
     inp = page.locator('[data-testid="cell-1-0"] input.cell-input')
     await inp.waitFor({ state: 'visible' })
     await setCellInputValue(inp, 'Alice')
-    await page.keyboard.press('Tab')
+    await inp.press('Tab')
     inp = page.locator('[data-testid="cell-1-1"] input.cell-input')
     await inp.waitFor({ state: 'visible' })
     await setCellInputValue(inp, '95')
-    await page.keyboard.press('Enter')
+    await inp.press('Enter')
   })
 
   test.afterEach(async ({ page }) => {
@@ -167,7 +167,7 @@ test.describe('Excel (.xlsx) Export', () => {
     const inp = page.locator('[data-testid="cell-0-0"] input.cell-input')
     await inp.waitFor({ state: 'visible' })
     await setCellInputValue(inp, 'Hello')
-    await page.keyboard.press('Enter')
+    await inp.press('Enter')
   })
 
   test.afterEach(async ({ page }) => {

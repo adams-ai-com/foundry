@@ -9,7 +9,9 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@foundry/auth": "workspace:*",
     "@foundry/shared": "workspace:*",
+    "@foundry/ui": "workspace:*",
     "@tiptap/core": "^2.4.0",
     "@tiptap/extension-image": "^2.4.0",
     "@tiptap/extension-link": "^2.4.0",

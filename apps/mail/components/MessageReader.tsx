@@ -25,7 +25,7 @@ export function MessageReader({ thread, onCompose }: MessageReaderProps) {
 
   if (!thread) {
     return (
-      <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+      <div className="flex-1 flex items-center justify-center text-fg-tertiary text-sm bg-bg-base">
         Select a message to read
       </div>
     )
@@ -34,10 +34,10 @@ export function MessageReader({ thread, onCompose }: MessageReaderProps) {
   const lastMessage = messages[messages.length - 1]
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-200 flex-shrink-0">
-        <h1 className="text-lg font-semibold">{thread.subject}</h1>
-        <div className="text-sm text-gray-500 mt-1">
+    <div className="flex-1 flex flex-col overflow-hidden bg-bg-base">
+      <div className="px-6 py-4 border-b border-border flex-shrink-0 bg-bg-raised">
+        <h1 className="text-lg font-semibold text-fg-primary">{thread.subject}</h1>
+        <div className="text-sm text-fg-secondary mt-1">
           {thread.participants.map((p) => p.name ?? p.email).join(', ')}
           {' · '}
           {thread.messageCount} {thread.messageCount === 1 ? 'message' : 'messages'}
@@ -46,11 +46,10 @@ export function MessageReader({ thread, onCompose }: MessageReaderProps) {
 
       <div className="flex-1 overflow-y-auto">
         {loading && (
-          <div className="flex items-center justify-center py-12 text-gray-400 text-sm">
+          <div className="flex items-center justify-center py-12 text-fg-tertiary text-sm">
             Loading…
           </div>
         )}
-
         {!loading && messages.map((msg, i) => (
           <MessageBubble
             key={msg.id}
@@ -61,17 +60,17 @@ export function MessageReader({ thread, onCompose }: MessageReaderProps) {
         ))}
       </div>
 
-      <div className="border-t border-gray-200 px-6 py-3 flex gap-2 flex-shrink-0">
+      <div className="border-t border-border px-6 py-3 flex gap-2 flex-shrink-0 bg-bg-raised">
         <button
           onClick={() => onCompose({ replyTo: thread })}
-          className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded transition-colors font-medium"
+          className="text-sm bg-bg-hover hover:bg-bg-active text-fg-primary px-3 py-1.5 rounded-lg transition-colors font-medium border border-border"
         >
           Reply
         </button>
         {thread.participants.length > 1 && (
           <button
             onClick={() => onCompose({ replyTo: thread, replyAll: true })}
-            className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded transition-colors font-medium"
+            className="text-sm bg-bg-hover hover:bg-bg-active text-fg-primary px-3 py-1.5 rounded-lg transition-colors font-medium border border-border"
           >
             Reply All
           </button>
@@ -79,7 +78,7 @@ export function MessageReader({ thread, onCompose }: MessageReaderProps) {
         {lastMessage && (
           <button
             onClick={() => onCompose({ forwardMessage: lastMessage })}
-            className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded transition-colors font-medium"
+            className="text-sm bg-bg-hover hover:bg-bg-active text-fg-primary px-3 py-1.5 rounded-lg transition-colors font-medium border border-border"
           >
             Forward
           </button>
@@ -107,27 +106,27 @@ function MessageBubble({
   const date = message.receivedAt.toLocaleString()
 
   return (
-    <div className="border-b border-gray-100 last:border-0">
+    <div className="border-b border-border last:border-0">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-6 py-3 hover:bg-gray-50 text-left"
+        className="w-full flex items-center justify-between px-6 py-3 hover:bg-bg-hover text-left transition-colors"
       >
         <div>
-          <span className={`text-sm ${!message.isRead ? 'font-semibold' : 'text-gray-700'}`}>
+          <span className={`text-sm ${!message.isRead ? 'font-semibold text-fg-primary' : 'text-fg-secondary'}`}>
             {fromLabel}
           </span>
           {!open && (
-            <span className="text-xs text-gray-400 ml-3 truncate max-w-xs inline-block align-middle">
+            <span className="text-xs text-fg-tertiary ml-3 truncate max-w-xs inline-block align-middle">
               {message.bodyText?.slice(0, 80) ?? ''}
             </span>
           )}
         </div>
-        <span className="text-xs text-gray-400 flex-shrink-0 ml-4">{date}</span>
+        <span className="text-xs text-fg-tertiary flex-shrink-0 ml-4">{date}</span>
       </button>
 
       {open && (
         <div className="px-6 pb-4">
-          <div className="text-xs text-gray-400 mb-3">
+          <div className="text-xs text-fg-tertiary mb-3">
             To: {message.to.map((a) => a.name ?? a.email).join(', ')}
             {message.cc.length > 0 &&
               ` · CC: ${message.cc.map((a) => a.name ?? a.email).join(', ')}`}
@@ -136,21 +135,21 @@ function MessageBubble({
             <iframe
               srcDoc={message.bodyHtml}
               sandbox="allow-popups"
-              className="w-full min-h-[200px] border-0"
+              className="w-full min-h-[200px] border-0 rounded-lg"
               onLoad={(e) => {
                 const f = e.currentTarget
                 f.style.height = `${f.contentDocument?.body?.scrollHeight ?? 200}px`
               }}
             />
           ) : (
-            <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">
+            <pre className="text-sm text-fg-secondary whitespace-pre-wrap font-sans">
               {message.bodyText}
             </pre>
           )}
           <div className="mt-3 flex gap-2">
             <button
               onClick={onForward}
-              className="text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 px-2 py-1 rounded transition-colors"
+              className="text-xs text-fg-secondary hover:text-fg-primary hover:bg-bg-hover px-2 py-1 rounded-lg transition-colors border border-border"
             >
               Forward
             </button>

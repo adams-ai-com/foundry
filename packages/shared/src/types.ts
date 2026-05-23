@@ -1,51 +1,4 @@
-// Docs
-
-export interface Document {
-  id: string
-  title: string
-  content: object  // ProseMirror JSON
-  createdAt: Date
-  updatedAt: Date
-}
-
-// Sheets
-
-export interface Workbook {
-  id: string
-  title: string
-  sheets: Sheet[]
-  createdAt: Date
-  updatedAt: Date
-}
-
-export interface Sheet {
-  name: string
-  data: CellData[][]
-}
-
-export interface CellData {
-  value: string | number | boolean | null
-  formula?: string
-  format?: CellFormat
-}
-
-export interface CellFormat {
-  bold?: boolean
-  italic?: boolean
-  underline?: boolean
-  numberFormat?: string
-  align?: 'left' | 'center' | 'right'
-  backgroundColor?: string
-  textColor?: string
-}
-
-export interface CellAddress {
-  sheet: string
-  row: number
-  col: number
-}
-
-// Mail
+export * from './utils'
 
 export interface MailThread {
   id: string
@@ -57,11 +10,14 @@ export interface MailThread {
   snippet: string
   isArchived: boolean
   isSpam: boolean
+  isStarred: boolean
+  snoozedUntil?: Date | null
 }
 
 export interface MailMessage {
   id: string
   threadId: string
+  messageId?: string
   from: MailAddress
   to: MailAddress[]
   cc: MailAddress[]
@@ -72,6 +28,14 @@ export interface MailMessage {
   isRead: boolean
   isStarred: boolean
   protocol: 'smtp' | 'internal'
+  attachments: MailAttachment[]
+}
+
+export interface MailAttachment {
+  id: string
+  filename: string
+  contentType: string
+  size: number
 }
 
 export interface MailAddress {
@@ -87,20 +51,13 @@ export interface MailboxInfo {
   unreadCount: number
 }
 
-export interface Attachment {
-  id: string
-  name: string
-  size: number
-  contentType: string
-}
-
 export interface CalendarEvent {
   id: string
   title: string
+  description?: string
+  location?: string
   startAt: Date
   endAt: Date
   allDay: boolean
-  description?: string
-  location?: string
   attendees: MailAddress[]
 }

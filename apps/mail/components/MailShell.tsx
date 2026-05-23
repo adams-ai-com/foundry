@@ -185,7 +185,7 @@ export function MailShell({ defaultTheme = 'light' }: { defaultTheme?: Theme }) 
 
         <div className="px-3 py-3">
           <button data-testid="compose-button" onClick={() => { handleCompose(); closeSidebarOnMobile() }}
-            className="w-full flex items-center justify-center gap-2 bg-accent text-accent-fg text-sm px-3 py-2 rounded-lg hover:bg-accent-hover transition-colors font-medium">
+            className="w-full flex items-center justify-center gap-2 bg-accent text-accent-fg text-sm px-3 py-2 rounded-lg hover:bg-accent-h transition-colors font-medium">
             <PencilIcon className="w-3.5 h-3.5" />
             Compose
           </button>

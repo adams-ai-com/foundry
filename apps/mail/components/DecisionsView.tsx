@@ -83,6 +83,7 @@ export function DecisionsView() {
                         Edit
                       </button>
                       <button
+                        data-testid={`decision-delete-${d.id}`}
                         onClick={(e) => { e.stopPropagation(); handleDelete(d.id) }}
                         className="text-xs text-gray-400 hover:text-red-400 px-1"
                       >
@@ -179,6 +180,7 @@ function DecisionForm({
             <input
               data-testid="decision-subject-input"
               autoFocus
+              data-testid="decision-subject-input"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder="e.g. Pricing model for Q3"
@@ -223,6 +225,7 @@ function DecisionForm({
             <button
               data-testid="decision-save-button"
               type="submit"
+              data-testid="decision-save-button"
               disabled={saving || !subject.trim() || !outcome.trim()}
               className="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-1.5 rounded"
             >

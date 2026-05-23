@@ -51,10 +51,8 @@ test.describe('Editor', () => {
     const input00 = page.locator('[data-testid="cell-0-0"] input.cell-input')
     await input00.waitFor({ state: 'visible' })
     await setCellInputValue(input00, 'hello')
-    await page.keyboard.press('Enter')
-    // A1 should now show "hello"
+    await input00.press('Enter')
     await expect(page.locator('[data-testid="cell-0-0"]')).toContainText('hello')
-    // Focus should have moved to A2
     await expect(page.locator('[data-testid="formula-address"]')).toHaveText('A2')
   })
 
@@ -63,7 +61,7 @@ test.describe('Editor', () => {
     const input00 = page.locator('[data-testid="cell-0-0"] input.cell-input')
     await input00.waitFor({ state: 'visible' })
     await setCellInputValue(input00, 'first')
-    await page.keyboard.press('Tab')
+    await input00.press('Tab')
     await expect(page.locator('[data-testid="cell-0-0"]')).toContainText('first')
     await expect(page.locator('[data-testid="formula-address"]')).toHaveText('B1')
   })
@@ -74,8 +72,7 @@ test.describe('Editor', () => {
     const input00 = page.locator('[data-testid="cell-0-0"] input.cell-input')
     await input00.waitFor({ state: 'visible' })
     await setCellInputValue(input00, 'overwrite')
-    await page.keyboard.press('Escape')
-    // Click away so cell-0-0 shows its text value rather than the input
+    await input00.press('Escape')
     await page.locator('[data-testid="cell-5-5"]').click()
     await expect(page.locator('[data-testid="cell-0-0"]')).toContainText('original')
   })
@@ -104,7 +101,7 @@ test.describe('Editor', () => {
   test('formula bar reflects the selected cell value', async ({ page }) => {
     await typeInCell(page, 0, 0, '42')
     await page.locator('[data-testid="cell-0-0"]').click()
-    await expect(page.locator('[data-testid="formula-value"]')).toHaveText('42')
+    await expect(page.locator('[data-testid="formula-value"]')).toHaveValue('42')
   })
 
   test('formula bar shows the raw formula for formula cells', async ({ page }) => {
@@ -114,9 +111,9 @@ test.describe('Editor', () => {
     const input20 = page.locator('[data-testid="cell-2-0"] input.cell-input')
     await input20.waitFor({ state: 'visible' })
     await setCellInputValue(input20, '=SUM(A1:A2)')
-    await page.keyboard.press('Enter')
+    await input20.press('Enter')
     await page.locator('[data-testid="cell-2-0"]').click()
-    await expect(page.locator('[data-testid="formula-value"]')).toHaveText('=SUM(A1:A2)')
+    await expect(page.locator('[data-testid="formula-value"]')).toHaveValue('=SUM(A1:A2)')
   })
 
   // ── Formula evaluation ────────────────────────────────────────────────────
@@ -129,15 +126,19 @@ test.describe('Editor', () => {
     const input30 = page.locator('[data-testid="cell-3-0"] input.cell-input')
     await input30.waitFor({ state: 'visible' })
     await setCellInputValue(input30, '=SUM(A1:A3)')
-    await page.keyboard.press('Enter')
+    await input30.press('Enter')
     await expect(page.locator('[data-testid="cell-3-0"]')).toContainText('60')
   })
 
   test('formula result updates when a referenced cell changes', async ({ page }) => {
     await typeInCell(page, 0, 0, '5')
     await typeInCell(page, 1, 0, '=A1*2')
+    // After typeInCell A2, Enter moved selection to A3 — A2 shows display value '10'
     await expect(page.locator('[data-testid="cell-1-0"]')).toContainText('10')
     await typeInCell(page, 0, 0, '7')
+    // After typeInCell A1=7, Enter moves selection to A2 (A2 now selected, shows input not display)
+    // Click elsewhere to deselect A2 so it shows the updated display value '14'
+    await page.locator('[data-testid="cell-5-5"]').click()
     await expect(page.locator('[data-testid="cell-1-0"]')).toContainText('14')
   })
 
@@ -149,7 +150,7 @@ test.describe('Editor', () => {
     const input03 = page.locator('[data-testid="cell-0-3"] input.cell-input')
     await input03.waitFor({ state: 'visible' })
     await setCellInputValue(input03, '=AVERAGE(A1:C1)')
-    await page.keyboard.press('Enter')
+    await input03.press('Enter')
     await expect(page.locator('[data-testid="cell-0-3"]')).toContainText('20')
   })
 
@@ -159,7 +160,7 @@ test.describe('Editor', () => {
     const input01 = page.locator('[data-testid="cell-0-1"] input.cell-input')
     await input01.waitFor({ state: 'visible' })
     await setCellInputValue(input01, '=IF(A1>5,"big","small")')
-    await page.keyboard.press('Enter')
+    await input01.press('Enter')
     await expect(page.locator('[data-testid="cell-0-1"]')).toContainText('big')
   })
 
@@ -169,7 +170,6 @@ test.describe('Editor', () => {
     await typeInCell(page, 0, 0, 'persisted')
     await expect(page.locator('[data-testid="save-state"]')).toContainText('Saved', { timeout: 8000 })
     await page.reload()
-    // After reload cell-0-0 is auto-selected; click away to see its text content
     await page.locator('[data-testid="cell-0-1"]').click()
     await expect(page.locator('[data-testid="cell-0-0"]')).toContainText('persisted')
   })
@@ -180,10 +180,9 @@ test.describe('Editor', () => {
     const input01 = page.locator('[data-testid="cell-0-1"] input.cell-input')
     await input01.waitFor({ state: 'visible' })
     await setCellInputValue(input01, '=A1+1')
-    await page.keyboard.press('Tab')
+    await input01.press('Tab')
     await expect(page.locator('[data-testid="save-state"]')).toContainText('Saved', { timeout: 8000 })
     await page.reload()
-    // Click away so cell-0-1 shows its text value rather than the input
     await page.locator('[data-testid="cell-5-5"]').click()
     await expect(page.locator('[data-testid="cell-0-1"]')).toContainText('101')
   })
@@ -192,22 +191,20 @@ test.describe('Editor', () => {
 
   test('back button returns to home', async ({ page }) => {
     await page.click('button:has-text("Sheets")')
-    await page.waitForURL('/')
-    await expect(page).toHaveURL('/')
+    await page.waitForURL('/sheets')
+    await expect(page).toHaveURL('/sheets')
   })
 
   test('going back on an empty Untitled sheet deletes it', async ({ page }) => {
-    // Count any pre-existing Untitled sheets (accumulated from prior test runs)
-    await page.goto('/')
+    await page.goto('/sheets')
     const before = await page.locator('[data-testid="sheet-row"]').filter({ hasText: 'Untitled' }).count()
-    // Create a fresh untitled sheet and go back without editing
     await page.click('button:has-text("New spreadsheet")')
     await page.waitForURL(/\/editor\//)
     const currentTitle = await page.locator('[data-testid="spreadsheet-title"]').inputValue()
     expect(currentTitle).toBe('Untitled')
     await page.click('button:has-text("Sheets")')
-    await page.waitForURL('/')
-    // The newly created Untitled sheet should have been deleted (count back to pre-test level)
+    await page.waitForURL('/sheets')
+    await page.waitForLoadState('networkidle')
     await expect(page.locator('[data-testid="sheet-row"]').filter({ hasText: 'Untitled' })).toHaveCount(before)
   })
 })
