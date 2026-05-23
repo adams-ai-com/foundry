@@ -10,7 +10,7 @@ type Member = { id: string; name: string; email: string }
 
 type Message = {
   id: string; author_id: string; author_name: string; author_email: string
-  body: string; reactions: Reaction[]; edited_at: string | null; created_at: string
+  body: string; reactions: Reaction[]; edited_at: string | null; created_at: string; is_guest?: boolean
 }
 
 interface Props {
@@ -69,6 +69,12 @@ export function MessagePanel({
   const [members, setMembers] = useState<Member[]>([])
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [mentionRange, setMentionRange] = useState<{ start: number; end: number } | null>(null)
+  const [showInvite, setShowInvite] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteLoading, setInviteLoading] = useState(false)
+  const [inviteError, setInviteError] = useState('')
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null)
+  const [inviteCopied, setInviteCopied] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -115,6 +121,38 @@ export function MessagePanel({
   async function deleteMsg(msgId: string) {
     const res = await fetch(`/api/channels/${channelId}/topics/${topicId}/messages/${msgId}`, { method: 'DELETE' })
     if (res.ok) { onDeleteMessage(msgId) }
+  }
+
+  async function generateInvite() {
+    if (!inviteEmail.trim() || inviteLoading) return
+    setInviteLoading(true); setInviteError('')
+    try {
+      const res = await fetch(`/api/channels/${channelId}/topics/${topicId}/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: inviteEmail.trim() }),
+      })
+      const data = await res.json() as { inviteUrl?: string; error?: string }
+      if (!res.ok) { setInviteError(data.error ?? 'Failed to generate invite'); return }
+      setInviteUrl(data.inviteUrl ?? null)
+    } catch { setInviteError('Something went wrong') }
+    finally { setInviteLoading(false) }
+  }
+
+  function copyInviteUrl() {
+    if (!inviteUrl) return
+    navigator.clipboard.writeText(inviteUrl).then(() => {
+      setInviteCopied(true)
+      setTimeout(() => setInviteCopied(false), 2000)
+    })
+  }
+
+  function closeInvite() {
+    setShowInvite(false)
+    setInviteEmail('')
+    setInviteError('')
+    setInviteUrl(null)
+    setInviteCopied(false)
   }
 
   async function react(msgId: string, emoji: string) {
@@ -169,7 +207,7 @@ export function MessagePanel({
   const isNew = topicId === '_new'
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="flex-1 flex flex-col overflow-hidden relative">
       {/* Header */}
       <div className="h-12 border-b border-border flex items-center px-4 gap-2 shrink-0 bg-bg-base">
         <span className="text-fg-tertiary font-medium">#</span>
@@ -183,20 +221,32 @@ export function MessagePanel({
           </>
         )}
         {topicName && !isNew && (
-          <button
-            onClick={onToggleResolve}
-            title={isResolved ? 'Reopen topic' : 'Resolve topic'}
-            className={`ml-auto flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors ${
-              isResolved
-                ? 'border-accent/40 text-accent bg-accent/10 hover:bg-accent/20'
-                : 'border-border text-fg-tertiary hover:text-fg-secondary hover:border-border-hover'
-            }`}
-          >
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
-              <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/>
-            </svg>
-            {isResolved ? 'Resolved' : 'Resolve'}
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => setShowInvite(true)}
+              title="Invite a guest to this topic"
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-border text-fg-tertiary hover:text-fg-secondary hover:border-border-hover transition-colors"
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                <path d="M8 8a3 3 0 100-6 3 3 0 000 6zm-4 7a4 4 0 018 0H4zm9-7a.75.75 0 01.75.75v1.5h1.5a.75.75 0 010 1.5h-1.5v1.5a.75.75 0 01-1.5 0v-1.5h-1.5a.75.75 0 010-1.5h1.5v-1.5A.75.75 0 0113 8z"/>
+              </svg>
+              Invite
+            </button>
+            <button
+              onClick={onToggleResolve}
+              title={isResolved ? 'Reopen topic' : 'Resolve topic'}
+              className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                isResolved
+                  ? 'border-accent/40 text-accent bg-accent/10 hover:bg-accent/20'
+                  : 'border-border text-fg-tertiary hover:text-fg-secondary hover:border-border-hover'
+              }`}
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/>
+              </svg>
+              {isResolved ? 'Resolved' : 'Resolve'}
+            </button>
+          </div>
         )}
       </div>
 
@@ -267,8 +317,12 @@ export function MessagePanel({
                           </span>
                         </div>
                       ) : (
-                        <div className="w-8 h-8 shrink-0 bg-accent/15 rounded-full flex items-center justify-center mt-0.5">
-                          <span className="text-accent text-xs font-semibold">{initials(msg.author_name)}</span>
+                        <div className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center mt-0.5 ${
+                          msg.is_guest ? 'bg-bg-surface border border-border' : 'bg-accent/15'
+                        }`}>
+                          <span className={`text-xs font-semibold ${msg.is_guest ? 'text-fg-secondary' : 'text-accent'}`}>
+                            {initials(msg.author_name)}
+                          </span>
                         </div>
                       )}
 
@@ -276,6 +330,11 @@ export function MessagePanel({
                         {!isGrouped && (
                           <div className="flex items-baseline gap-2 mb-0.5">
                             <span className="font-semibold text-sm text-fg-primary">{msg.author_name}</span>
+                            {msg.is_guest && (
+                              <span className="text-[9px] font-medium text-fg-tertiary border border-border rounded px-1 py-px">
+                                Guest
+                              </span>
+                            )}
                             <span className="text-[11px] text-fg-tertiary">{formatTime(msg.created_at)}</span>
                           </div>
                         )}
@@ -390,6 +449,84 @@ export function MessagePanel({
           </>
         )}
       </div>
+
+      {/* Invite Guest modal */}
+      {showInvite && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/30">
+          <div className="bg-bg-surface border border-border rounded-2xl p-6 shadow-lg w-full max-w-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-fg-primary text-sm">Invite a guest</h2>
+              <button onClick={closeInvite} className="text-fg-tertiary hover:text-fg-primary transition-colors">
+                <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                  <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                </svg>
+              </button>
+            </div>
+
+            <p className="text-xs text-fg-secondary mb-4">
+              They&apos;ll get a one-time link granting access to{' '}
+              <span className="font-medium text-fg-primary">#{channelName} › {topicName}</span>.
+            </p>
+
+            {!inviteUrl ? (
+              <>
+                <label className="block text-xs font-medium text-fg-secondary mb-1.5">
+                  Guest email
+                </label>
+                <input
+                  autoFocus
+                  type="email"
+                  value={inviteEmail}
+                  onChange={e => setInviteEmail(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && generateInvite()}
+                  placeholder="guest@example.com"
+                  className="w-full px-3 py-2 bg-bg-raised border border-border rounded-lg text-sm text-fg-primary placeholder:text-fg-tertiary focus:outline-none focus:border-accent transition-colors mb-3"
+                />
+                {inviteError && <p className="text-danger text-xs mb-3">{inviteError}</p>}
+                <button
+                  onClick={generateInvite}
+                  disabled={!inviteEmail.trim() || inviteLoading}
+                  className="w-full py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-accent-fg text-sm font-medium rounded-xl transition-colors"
+                >
+                  {inviteLoading ? 'Generating…' : 'Generate invite link'}
+                </button>
+              </>
+            ) : (
+              <>
+                <label className="block text-xs font-medium text-fg-secondary mb-1.5">
+                  Invite link (expires in 7 days)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    readOnly
+                    value={inviteUrl}
+                    className="flex-1 min-w-0 px-3 py-2 bg-bg-raised border border-border rounded-lg text-xs text-fg-secondary focus:outline-none"
+                  />
+                  <button
+                    onClick={copyInviteUrl}
+                    className={`shrink-0 px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
+                      inviteCopied
+                        ? 'bg-success/10 border-success/40 text-success'
+                        : 'bg-bg-raised border-border text-fg-secondary hover:text-fg-primary'
+                    }`}
+                  >
+                    {inviteCopied ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
+                <p className="text-[10px] text-fg-tertiary mt-3">
+                  Share this link with <span className="font-medium">{inviteEmail}</span>. It can only be used once.
+                </p>
+                <button
+                  onClick={() => { setInviteEmail(''); setInviteUrl(null); setInviteCopied(false) }}
+                  className="mt-3 text-xs text-accent hover:underline"
+                >
+                  Invite another person
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Compose */}
       {!isNew && (
