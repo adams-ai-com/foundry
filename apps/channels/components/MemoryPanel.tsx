@@ -37,12 +37,45 @@ type TimelineMessages = {
 type TimelineItem = TimelineCall | TimelineMessages
 type TimelineDay  = { date: string; items: TimelineItem[] }
 
+type WaitingRow = {
+  topic_id: string; topic_name: string
+  channel_id: string; channel_name: string
+  last_message_at: string; last_body: string
+}
+type StaleRow = {
+  topic_id: string; topic_name: string
+  channel_id: string; channel_name: string
+  last_message_at: string; message_count: number
+}
+type ActionRow = {
+  call_id: string; call_title: string; ended_at: string
+  channel_id: string | null; topic_id: string | null
+  channel_name: string | null; topic_name: string | null
+  action_items: { text: string; assignee_guess: string | null }[]
+}
+type Followups = {
+  waiting_on_others: WaitingRow[]
+  stale_topics:      StaleRow[]
+  action_items:      ActionRow[]
+  total:             number
+}
+
 interface Props {
   orgSlug:  string
   onClose:  () => void
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
+
+function fmtAgo(iso: string): string {
+  const ms   = Date.now() - new Date(iso).getTime()
+  const days = Math.floor(ms / 86400000)
+  if (days === 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 30)  return `${days}d ago`
+  const mo = Math.floor(days / 30)
+  return `${mo}mo ago`
+}
 
 function fmtDay(iso: string): string {
   const d = new Date(iso + 'T00:00:00')
@@ -306,10 +339,157 @@ function TimelineTab({ orgSlug }: { orgSlug: string }) {
   )
 }
 
+// ─── Attention tab ────────────────────────────────────────────────────────
+
+function AttentionTab({ orgSlug }: { orgSlug: string }) {
+  const [data,    setData]    = useState<Followups | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/channels/followups')
+      if (res.ok) setData(await res.json() as Followups)
+    } catch {}
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { void load() }, [load])
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <span className="w-5 h-5 border-2 border-border border-t-accent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (!data || data.total === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center px-4 text-center gap-3">
+        <div className="w-10 h-10 bg-bg-raised rounded-full flex items-center justify-center">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5 text-fg-muted">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+        </div>
+        <p className="text-xs text-fg-muted">You're all caught up.<br/>No threads need attention right now.</p>
+      </div>
+    )
+  }
+
+  function Section({ title, children }: { title: string; children: React.ReactNode }) {
+    return (
+      <div>
+        <p className="text-[10px] uppercase tracking-wider text-fg-muted font-medium px-4 py-2 sticky top-0 bg-bg-base border-b border-border/50">
+          {title}
+        </p>
+        <div className="divide-y divide-border/50">{children}</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto">
+      {data.waiting_on_others.length > 0 && (
+        <Section title={`Waiting for reply · ${data.waiting_on_others.length}`}>
+          {data.waiting_on_others.map(row => (
+            <a
+              key={row.topic_id}
+              href={`/org/${orgSlug}/${row.channel_id}/${row.topic_id}`}
+              className="flex flex-col gap-1 px-4 py-3 hover:bg-bg-hover transition-colors"
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-xs font-medium text-fg-primary truncate">
+                  #{row.channel_name} · {row.topic_name}
+                </span>
+                <span className="text-[10px] text-fg-muted shrink-0">{fmtAgo(row.last_message_at)}</span>
+              </div>
+              <p className="text-[11px] text-fg-secondary line-clamp-1 italic">"{row.last_body}"</p>
+            </a>
+          ))}
+        </Section>
+      )}
+
+      {data.stale_topics.length > 0 && (
+        <Section title={`Stale discussions · ${data.stale_topics.length}`}>
+          {data.stale_topics.map(row => (
+            <a
+              key={row.topic_id}
+              href={`/org/${orgSlug}/${row.channel_id}/${row.topic_id}`}
+              className="flex items-baseline justify-between gap-2 px-4 py-3 hover:bg-bg-hover transition-colors"
+            >
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-fg-primary truncate">
+                  #{row.channel_name} · {row.topic_name}
+                </p>
+                <p className="text-[11px] text-fg-muted mt-0.5">
+                  {row.message_count} messages · last activity {fmtAgo(row.last_message_at)}
+                </p>
+              </div>
+              <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-fg-muted shrink-0">
+                <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd"/>
+              </svg>
+            </a>
+          ))}
+        </Section>
+      )}
+
+      {data.action_items.length > 0 && (
+        <Section title={`Open action items · ${data.action_items.length} call${data.action_items.length !== 1 ? 's' : ''}`}>
+          {data.action_items.map(row => {
+            const href = row.channel_id && row.topic_id
+              ? `/org/${orgSlug}/${row.channel_id}/${row.topic_id}`
+              : null
+            return (
+              <div key={row.call_id} className="px-4 py-3">
+                <div className="flex items-baseline justify-between gap-2 mb-2">
+                  {href
+                    ? <a href={href} className="text-xs font-medium text-fg-primary hover:text-accent transition-colors">📞 {row.call_title}</a>
+                    : <span className="text-xs font-medium text-fg-primary">📞 {row.call_title}</span>
+                  }
+                  <span className="text-[10px] text-fg-muted shrink-0">{fmtAgo(row.ended_at)}</span>
+                </div>
+                <ul className="space-y-1.5">
+                  {row.action_items.map((item, idx) => (
+                    <li key={idx} className="flex items-start gap-1.5 text-[11px] text-fg-secondary">
+                      <span className="mt-0.5 w-3 h-3 rounded border border-border shrink-0" />
+                      <span className="leading-snug">
+                        {item.assignee_guess && (
+                          <span className="text-accent font-medium">{item.assignee_guess}: </span>
+                        )}
+                        {item.text}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
+          })}
+        </Section>
+      )}
+    </div>
+  )
+}
+
 // ─── Main MemoryPanel ─────────────────────────────────────────────────────
 
 export function MemoryPanel({ orgSlug, onClose }: Props) {
-  const [tab, setTab] = useState<'ask' | 'timeline'>('ask')
+  const [tab,            setTab]            = useState<'ask' | 'timeline' | 'attention'>('ask')
+  const [followupCount,  setFollowupCount]  = useState<number | null>(null)
+
+  // Fetch count eagerly so the badge is visible before the tab is opened
+  useEffect(() => {
+    fetch('/api/channels/followups')
+      .then(r => r.ok ? r.json() as Promise<Followups> : null)
+      .then(d => { if (d) setFollowupCount(d.total) })
+      .catch(() => {})
+  }, [])
+
+  const tabs = [
+    { id: 'ask',       label: 'Ask AI' },
+    { id: 'timeline',  label: 'Timeline' },
+    { id: 'attention', label: 'Attention', badge: followupCount ?? 0 },
+  ] as const
 
   return (
     <div className="flex flex-col flex-1 bg-bg-base border-l border-border overflow-hidden">
@@ -328,24 +508,30 @@ export function MemoryPanel({ orgSlug, onClose }: Props) {
 
       {/* Tabs */}
       <div className="shrink-0 flex border-b border-border px-4">
-        {(['ask', 'timeline'] as const).map(t => (
+        {tabs.map(t => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`py-2.5 px-3 text-xs font-medium border-b-2 transition-colors -mb-px ${
-              tab === t
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`relative py-2.5 px-3 text-xs font-medium border-b-2 transition-colors -mb-px ${
+              tab === t.id
                 ? 'border-accent text-accent'
                 : 'border-transparent text-fg-muted hover:text-fg-primary'
             }`}
           >
-            {t === 'ask' ? 'Ask AI' : 'Timeline'}
+            {t.label}
+            {'badge' in t && t.badge > 0 && (
+              <span className="ml-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold rounded-full bg-red-500 text-white">
+                {t.badge}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
       {/* Content */}
-      {tab === 'ask'      ? <AskTab      orgSlug={orgSlug} /> : null}
-      {tab === 'timeline' ? <TimelineTab orgSlug={orgSlug} /> : null}
+      {tab === 'ask'       ? <AskTab       orgSlug={orgSlug} /> : null}
+      {tab === 'timeline'  ? <TimelineTab  orgSlug={orgSlug} /> : null}
+      {tab === 'attention' ? <AttentionTab orgSlug={orgSlug} /> : null}
     </div>
   )
 }
