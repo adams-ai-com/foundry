@@ -59,7 +59,7 @@ export async function createSession(
   userId: string,
   orgId: string | null,
   meta?: { ip?: string | null; ua?: string | null },
-): Promise<string> {
+): Promise<{ sessionId: string; timeoutHours: number }> {
   let timeoutHours = SESSION_DAYS_DEFAULT * 24
   let maxSessions = 10
 
@@ -93,27 +93,27 @@ export async function createSession(
     VALUES (
       ${userId},
       ${orgId},
-      NOW() + INTERVAL '${db.unsafe(String(timeoutHours))} hours',
+      NOW() + (${timeoutHours} * INTERVAL '1 hour'),
       ${meta?.ip ?? null},
       ${meta?.ua ?? null}
     )
     RETURNING id
   `
-  return rows[0].id as string
+  return { sessionId: rows[0].id as string, timeoutHours }
 }
 
 export async function destroySession(sessionId: string) {
   await db`DELETE FROM sessions WHERE id = ${sessionId}`
 }
 
-export async function setSessionCookie(sessionId: string) {
+export async function setSessionCookie(sessionId: string, timeoutHours: number = SESSION_DAYS_DEFAULT * 24) {
   const jar = await cookies()
   jar.set(SESSION_COOKIE, sessionId, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
     path: '/',
-    maxAge: SESSION_DAYS_DEFAULT * 24 * 60 * 60,
+    maxAge: timeoutHours * 60 * 60,
   })
 }
 

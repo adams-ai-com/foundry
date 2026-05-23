@@ -34,6 +34,8 @@ const ACTION_LABELS: Record<string, string> = {
   'session.force_sign_out':    'Force sign-out',
   'session.force_sign_out_all':'Force sign-out all',
   'mail.smtp_config_update':   'Updated SMTP config',
+  'invite.revoke':             'Revoked invite',
+  'auth.sign_in_failed':       'Failed sign-in',
 }
 
 const ACTION_COLORS: Record<string, string> = {
