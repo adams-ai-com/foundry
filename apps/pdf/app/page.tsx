@@ -44,7 +44,7 @@ export default function PdfHome() {
       const res = await fetch('/pdf/api/pdf/upload', { method: 'POST', body: form })
       if (!res.ok) throw new Error(await res.text())
       const { jobId } = await res.json()
-      router.push(`/pdf/viewer/${jobId}`)
+      router.push(`/pdf/editor/${jobId}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed')
       setUploading(false)
@@ -146,7 +146,7 @@ function RecentFiles() {
       {files.map(f => (
         <li key={f.jobId}>
           <a
-            href={`/pdf/viewer/${f.jobId}`}
+            href={`/pdf/editor/${f.jobId}`}
             className="flex items-center gap-3 px-4 py-3 hover:bg-bg-hover transition-colors"
           >
             <div className="w-7 h-7 rounded-md bg-bg-surface border border-border flex items-center justify-center shrink-0">
