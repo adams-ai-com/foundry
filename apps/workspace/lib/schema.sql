@@ -40,3 +40,20 @@ CREATE TABLE IF NOT EXISTS magic_tokens (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS magic_tokens_token ON magic_tokens(token);
+
+CREATE TABLE IF NOT EXISTS org_groups (
+  id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  org_id      TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  description TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(org_id, name)
+);
+CREATE INDEX IF NOT EXISTS org_groups_org ON org_groups(org_id);
+
+CREATE TABLE IF NOT EXISTS org_group_members (
+  group_id TEXT NOT NULL REFERENCES org_groups(id) ON DELETE CASCADE,
+  user_id  TEXT NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
+  added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (group_id, user_id)
+);
