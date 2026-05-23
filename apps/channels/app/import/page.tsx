@@ -39,13 +39,15 @@ export default async function ImportPage() {
             </div>
             <span className="ml-auto text-gray-300 group-hover:text-indigo-400 text-xl">→</span>
           </Link>
-          <div className="flex items-start gap-4 bg-white border border-gray-100 rounded-xl p-5 opacity-50 cursor-not-allowed">
+          <Link href="/import/gchat"
+            className="flex items-start gap-4 bg-white border border-gray-200 rounded-xl p-5 hover:border-indigo-400 hover:shadow-sm transition-all group">
             <span className="text-3xl">🔵</span>
             <div>
-              <div className="font-semibold text-gray-900">Google Chat</div>
-              <div className="text-sm text-gray-500 mt-0.5">Coming soon — C14</div>
+              <div className="font-semibold text-gray-900 group-hover:text-indigo-600">Google Chat</div>
+              <div className="text-sm text-gray-500 mt-0.5">Import spaces and threaded conversations from a Google Takeout ZIP.</div>
             </div>
-          </div>
+            <span className="ml-auto text-gray-300 group-hover:text-indigo-400 text-xl">→</span>
+          </Link>
         </div>
       </div>
     </div>
