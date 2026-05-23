@@ -52,7 +52,7 @@ export default async function DomainsPage({
   const hasVerified = domains.some(d => d.verified_at)
 
   return (
-    <div className="max-w-2xl">
+    <div className="p-8 max-w-2xl">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-xl font-semibold text-fg-primary">Domains</h1>

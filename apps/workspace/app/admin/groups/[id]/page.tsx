@@ -1,8 +1,10 @@
 import { notFound } from 'next/navigation'
 import { requireAdmin } from '@/lib/auth'
 import db from '@/lib/db'
-import { updateGroup, deleteGroup, addGroupMember, removeGroupMember, updateGroupAppAccess } from '@/lib/admin-actions'
+import { updateGroup, deleteGroup, removeGroupMember, updateGroupAppAccess } from '@/lib/admin-actions'
 import ConfirmForm from '@/components/ConfirmForm'
+import GroupMemberPicker from '@/components/GroupMemberPicker'
+import { addGroupMember } from '@/lib/admin-actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,14 +39,14 @@ async function getGroup(orgId: string, groupId: string): Promise<GroupDetail | n
   return rows.length ? rows[0] as unknown as GroupDetail : null
 }
 
-async function getMembers(groupId: string): Promise<MemberRow[]> {
+async function getMembers(groupId: string, orgId: string): Promise<MemberRow[]> {
   const rows = await db`
     SELECT
       u.id AS user_id, u.email, u.name,
       m.role, gm.added_at
     FROM org_group_members gm
     JOIN users u ON u.id = gm.user_id
-    LEFT JOIN org_members m ON m.user_id = gm.user_id
+    LEFT JOIN org_members m ON m.user_id = gm.user_id AND m.org_id = ${orgId}
     WHERE gm.group_id = ${groupId}
     ORDER BY u.email ASC
   `
@@ -111,7 +113,7 @@ export default async function GroupDetailPage({
   if (!group) notFound()
 
   const [members, nonMembers, appAccess] = await Promise.all([
-    getMembers(groupId),
+    getMembers(groupId, session.orgId),
     getNonMembers(session.orgId, groupId),
     getGroupAppAccess(groupId),
   ])
@@ -226,25 +228,7 @@ export default async function GroupDetailPage({
         </div>
 
         {nonMembers.length > 0 && (
-          <form action={addMemberWithId} className="flex gap-2 mb-4">
-            <select
-              name="user_id"
-              className="flex-1 px-3 py-2 bg-bg-base border border-border rounded-lg text-sm text-fg-primary focus:outline-none focus:ring-2 focus:ring-accent/30"
-            >
-              <option value="">Select a member to add…</option>
-              {nonMembers.map(u => (
-                <option key={u.id} value={u.id}>
-                  {u.name ? `${u.name} (${u.email})` : u.email}
-                </option>
-              ))}
-            </select>
-            <button
-              type="submit"
-              className="px-3 py-2 text-sm font-medium bg-accent hover:bg-accent-hover text-accent-fg rounded-lg transition-colors flex-shrink-0"
-            >
-              Add
-            </button>
-          </form>
+          <GroupMemberPicker nonMembers={nonMembers} action={addMemberWithId} />
         )}
 
         {members.length === 0 ? (
@@ -272,14 +256,17 @@ export default async function GroupDetailPage({
                     </span>
                   )}
                   <span className="text-xs text-fg-tertiary hidden sm:block">{fmtDate(member.added_at)}</span>
-                  <form action={removeMember}>
+                  <ConfirmForm
+                    action={removeMember}
+                    message={`Remove ${member.email} from "${group.name}"?`}
+                  >
                     <button
                       type="submit"
                       className="text-xs text-fg-tertiary hover:text-red-500 transition-colors px-2 py-1 rounded"
                     >
                       Remove
                     </button>
-                  </form>
+                  </ConfirmForm>
                 </div>
               )
             })}
