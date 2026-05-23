@@ -385,3 +385,32 @@ export async function postChannelMessage(
 export async function deleteChannelMessage(channelId: string, messageId: string): Promise<void> {
   await req(`channels/${channelId}/messages/${messageId}`, { method: 'DELETE' })
 }
+
+export async function editChannelMessage(channelId: string, messageId: string, body: string): Promise<ChannelMessage> {
+  const raw = await req<RawChannelMessage>(`channels/${channelId}/messages/${messageId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ body }),
+  })
+  return toChannelMessage(raw)
+}
+
+export interface Reaction {
+  emoji: string
+  count: number
+  selfReacted: boolean
+}
+
+export async function listChannelReactions(channelId: string): Promise<Record<string, Reaction[]>> {
+  return req<Record<string, Reaction[]>>(`channels/${channelId}/reactions`)
+}
+
+export async function toggleChannelReaction(
+  channelId: string,
+  messageId: string,
+  emoji: string,
+): Promise<{ added: boolean }> {
+  return req<{ added: boolean }>(`channels/${channelId}/messages/${messageId}/reactions`, {
+    method: 'PUT',
+    body: JSON.stringify({ emoji }),
+  })
+}

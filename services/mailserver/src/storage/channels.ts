@@ -131,3 +131,69 @@ export async function deleteMessage(
     WHERE id = ${messageId} AND channel_id = ${channelId} AND account_id = ${accountId}`
   return result.count > 0
 }
+
+export async function editMessage(
+  channelId: string,
+  accountId: string,
+  messageId: string,
+  body: string,
+): Promise<ChannelMessage | null> {
+  const [row] = await sql<ChannelMessage[]>`
+    UPDATE channel_messages
+    SET body = ${body}, edited_at = NOW()
+    WHERE id = ${messageId} AND channel_id = ${channelId} AND account_id = ${accountId}
+    RETURNING id, channel_id, account_id, sender_name, sender_email, body, edited_at, created_at`
+  return row ?? null
+}
+
+// ─── Reactions ─────────────────────────────────────────────────────────────
+
+export interface Reaction {
+  emoji: string
+  count: number
+  selfReacted: boolean
+}
+
+export async function listChannelReactions(
+  channelId: string,
+  accountId: string,
+): Promise<Record<string, Reaction[]>> {
+  const rows = await sql<{ message_id: string; emoji: string; count: string; self_reacted: boolean }[]>`
+    SELECT
+      r.message_id,
+      r.emoji,
+      COUNT(*)::text AS count,
+      BOOL_OR(r.account_id = ${accountId}) AS self_reacted
+    FROM channel_message_reactions r
+    JOIN channel_messages m ON m.id = r.message_id
+    WHERE m.channel_id = ${channelId}
+    GROUP BY r.message_id, r.emoji
+    ORDER BY MIN(r.created_at) ASC`
+
+  const out: Record<string, Reaction[]> = {}
+  for (const row of rows) {
+    if (!out[row.message_id]) out[row.message_id] = []
+    out[row.message_id].push({
+      emoji: row.emoji,
+      count: parseInt(row.count),
+      selfReacted: row.self_reacted,
+    })
+  }
+  return out
+}
+
+export async function toggleReaction(
+  messageId: string,
+  accountId: string,
+  emoji: string,
+): Promise<{ added: boolean }> {
+  const del = await sql`
+    DELETE FROM channel_message_reactions
+    WHERE message_id = ${messageId} AND account_id = ${accountId} AND emoji = ${emoji}`
+  if (del.count > 0) return { added: false }
+  await sql`
+    INSERT INTO channel_message_reactions (message_id, account_id, emoji)
+    VALUES (${messageId}, ${accountId}, ${emoji})
+    ON CONFLICT DO NOTHING`
+  return { added: true }
+}

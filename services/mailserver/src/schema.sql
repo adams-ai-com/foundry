@@ -238,3 +238,14 @@ CREATE TABLE IF NOT EXISTS decisions (
   source_meeting_id TEXT,                           -- future: calendar event link
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- ─── Channel message reactions ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS channel_message_reactions (
+  message_id TEXT NOT NULL REFERENCES channel_messages(id) ON DELETE CASCADE,
+  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  emoji      TEXT NOT NULL CHECK (char_length(emoji) <= 10),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (message_id, account_id, emoji)
+);
+
+CREATE INDEX IF NOT EXISTS channel_reactions_message ON channel_message_reactions(message_id);
