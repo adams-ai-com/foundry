@@ -1,11 +1,11 @@
 'use server'
 
 import { redirect } from 'next/navigation'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import db from './db'
 import { createSession, setSessionCookie, destroySession, clearSessionCookie, getSession, requireAdmin } from './auth'
 import { generateSecret, verifyCode } from './totp'
-import { sendInvite } from './mailer'
+import { sendInvite, sendSecurityAlert } from './mailer'
 import { writeAudit } from './audit'
 
 const ALLOWLIST = new Set(['john@adams-ai.com'])
@@ -17,6 +17,19 @@ const COOKIE_OPTS = {
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'lax' as const,
   path: '/',
+}
+
+// Rate limit: lock after this many bad codes
+const TOTP_LOCK_THRESHOLD = 5
+const TOTP_LOCK_MINUTES = 15
+
+async function getRequestMeta(): Promise<{ ip: string | null; ua: string | null }> {
+  const hdrs = await headers()
+  const ip = hdrs.get('x-forwarded-for')?.split(',')[0]?.trim()
+    ?? hdrs.get('x-real-ip')
+    ?? null
+  const ua = hdrs.get('user-agent') ?? null
+  return { ip, ua }
 }
 
 export async function submitEmail(formData: FormData) {
@@ -49,20 +62,52 @@ export async function verifyTotp(formData: FormData) {
   const code = (formData.get('code') as string ?? '').replace(/\s/g, '')
   if (!code || code.length !== 6) return { error: 'Enter the 6-digit code' }
 
-  const rows = await db`SELECT id, totp_secret, deactivated_at FROM users WHERE email = ${email}`
+  const rows = await db`
+    SELECT id, totp_secret, deactivated_at, totp_failed_count, totp_locked_until
+    FROM users WHERE email = ${email}
+  `
   if (!rows.length || !rows[0].totp_secret) redirect('/login/setup')
 
   const user = rows[0]
+
   if (user.deactivated_at) {
     const orgRows = await db`SELECT org_id FROM org_members WHERE user_id = ${user.id} LIMIT 1`
     await writeAudit({ orgId: (orgRows[0]?.org_id ?? null) as string | null, actorId: user.id as string, actorEmail: email, action: 'auth.sign_in_failed', metadata: { reason: 'deactivated' } })
     return { error: 'This account has been deactivated. Contact your administrator.' }
   }
+
+  // Check rate-limit lock
+  if (user.totp_locked_until && new Date(user.totp_locked_until as string) > new Date()) {
+    const mins = Math.ceil((new Date(user.totp_locked_until as string).getTime() - Date.now()) / 60000)
+    return { error: `Too many failed attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.` }
+  }
+
   if (!verifyCode(user.totp_secret as string, code)) {
     const orgRows = await db`SELECT org_id FROM org_members WHERE user_id = ${user.id} LIMIT 1`
-    await writeAudit({ orgId: (orgRows[0]?.org_id ?? null) as string | null, actorId: user.id as string, actorEmail: email, action: 'auth.sign_in_failed', metadata: { reason: 'bad_totp' } })
-    return { error: 'Invalid code — try again' }
+    const orgId = (orgRows[0]?.org_id ?? null) as string | null
+    await writeAudit({ orgId, actorId: user.id as string, actorEmail: email, action: 'auth.sign_in_failed', metadata: { reason: 'bad_totp' } })
+
+    const newCount = (user.totp_failed_count as number) + 1
+    const shouldLock = newCount >= TOTP_LOCK_THRESHOLD
+    await db`
+      UPDATE users SET
+        totp_failed_count = ${newCount},
+        totp_locked_until = ${shouldLock ? db.unsafe(`NOW() + INTERVAL '${TOTP_LOCK_MINUTES} minutes'`) : db`totp_locked_until`}
+      WHERE id = ${user.id}
+    `
+
+    if (shouldLock) {
+      // Alert the org's contact email
+      void sendLockAlert(user.id as string, email, orgId).catch(() => {})
+      return { error: `Too many failed attempts. Account locked for ${TOTP_LOCK_MINUTES} minutes.` }
+    }
+
+    const remaining = TOTP_LOCK_THRESHOLD - newCount
+    return { error: `Invalid code — try again. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining before lockout.` }
   }
+
+  // Success — reset failure counter
+  await db`UPDATE users SET totp_failed_count = 0, totp_locked_until = NULL WHERE id = ${user.id}`
 
   jar.delete(EMAIL_COOKIE)
 
@@ -76,13 +121,29 @@ export async function verifyTotp(formData: FormData) {
     orgId = await acceptInvite(user.id as string, inviteToken, jar) ?? orgId
   }
 
-  const sessionId = await createSession(user.id as string, orgId)
+  const { ip, ua } = await getRequestMeta()
+  const sessionId = await createSession(user.id as string, orgId, { ip, ua })
   await setSessionCookie(sessionId)
   await writeAudit({ orgId, actorId: user.id as string, actorEmail: user.email as string, action: 'auth.sign_in' })
 
   const returnTo = jar.get('foundry_return_to')?.value
   jar.delete('foundry_return_to')
   redirect(returnTo && returnTo.startsWith('/') ? returnTo : '/')
+}
+
+async function sendLockAlert(userId: string, email: string, orgId: string | null) {
+  if (!orgId) return
+  const orgRows = await db`SELECT contact_email, name FROM orgs WHERE id = ${orgId}`
+  if (!orgRows.length || !orgRows[0].contact_email) return
+
+  const contactEmail = orgRows[0].contact_email as string
+  const orgName = orgRows[0].name as string
+
+  await sendSecurityAlert(
+    contactEmail,
+    `[Foundry] Account locked — ${email}`,
+    `A Foundry account has been locked due to ${TOTP_LOCK_THRESHOLD} consecutive failed TOTP attempts.\n\nAccount: ${email}\nOrganization: ${orgName}\nLocked for: ${TOTP_LOCK_MINUTES} minutes\n\nIf this was not the account owner, consider deactivating the account from your admin panel: https://foundry.adams-ai.com/admin/users`,
+  )
 }
 
 export async function startSetup(_formData: FormData) {
@@ -124,7 +185,8 @@ export async function confirmTotpSetup(formData: FormData) {
     orgId = await acceptInvite(userId, inviteToken, jar) ?? orgId
   }
 
-  const sessionId = await createSession(userId, orgId)
+  const { ip, ua } = await getRequestMeta()
+  const sessionId = await createSession(userId, orgId, { ip, ua })
   await setSessionCookie(sessionId)
   await writeAudit({ orgId, actorId: userId, actorEmail: email, action: 'auth.totp_setup' })
   redirect('/')
@@ -152,7 +214,6 @@ async function acceptInvite(
   await db`UPDATE invites SET accepted_at = NOW() WHERE id = ${invite.id}`
   jar.delete(INVITE_TOKEN_COOKIE)
 
-  // Apply org's default app access — only write rows for disabled apps
   const disabledDefaults = await db`
     SELECT app FROM org_app_defaults
     WHERE org_id = ${invite.org_id} AND enabled = false
@@ -229,6 +290,7 @@ export async function createInvite(formData: FormData) {
 
   await sendInvite(email, inviteUrl, session.email, role)
 
+  await writeAudit({ orgId: session.orgId!, actorId: session.userId, actorEmail: session.email, action: 'user.invite', targetEmail: email, metadata: { role } })
   redirect(`/admin/users/invite?created=${invite.id}`)
 }
 

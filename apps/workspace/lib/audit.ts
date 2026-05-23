@@ -23,7 +23,8 @@ export async function writeAudit(params: {
         ${JSON.stringify(params.metadata ?? {})}::jsonb
       )
     `
-  } catch {
-    // Audit write must never block the caller
+  } catch (e) {
+    console.error('[audit] write failed:', params.action, e)
+    throw e
   }
 }

@@ -128,6 +128,7 @@ export async function updateOrgProfile(formData: FormData): Promise<void> {
     WHERE id = ${session.orgId}
   `
 
+  await writeAudit({ orgId: session.orgId!, actorId: session.userId, actorEmail: session.email, action: 'org.profile_update', metadata: { name } })
   redirect('/admin/org?msg=Settings+saved')
 }
 
@@ -238,6 +239,7 @@ export async function generateDkimKeys(domainId: string, _fd: FormData): Promise
           dkim_public_key  = EXCLUDED.dkim_public_key,
           updated_at       = NOW()
   `
+  await writeAudit({ orgId: session.orgId!, actorId: session.userId, actorEmail: session.email, action: 'domain.dkim_generate', metadata: { domain: rows[0].domain } })
   redirect(`/admin/domains/${domainId}?msg=DKIM+keys+generated`)
 }
 
@@ -258,6 +260,7 @@ export async function updateDmarcPolicy(domainId: string, formData: FormData): P
       SET dmarc_policy = EXCLUDED.dmarc_policy,
           updated_at   = NOW()
   `
+  await writeAudit({ orgId: session.orgId!, actorId: session.userId, actorEmail: session.email, action: 'domain.dmarc_update', metadata: { domainId, policy } })
   redirect(`/admin/domains/${domainId}?msg=DMARC+policy+saved`)
 }
 
@@ -433,7 +436,9 @@ export async function checkAllDomainHealth(_fd: FormData): Promise<void> {
     dkim_selector: string | null; dkim_public_key: string | null; dmarc_policy: string | null
   }>
 
-  await Promise.all(rows.map(async row => {
+  // Process DNS checks in batches of 3 to avoid flooding the resolver
+  for (let i = 0; i < rows.length; i += 3) {
+    await Promise.all(rows.slice(i, i + 3).map(async row => {
     const emailConfig = row.dkim_selector ? {
       dkim_selector: row.dkim_selector, dkim_public_key: row.dkim_public_key, dmarc_policy: row.dmarc_policy
     } : null
@@ -446,6 +451,7 @@ export async function checkAllDomainHealth(_fd: FormData): Promise<void> {
       WHERE id = ${row.id}
     `
   }))
+  }
 
   redirect('/admin/domains?msg=Health+check+complete')
 }
@@ -472,6 +478,7 @@ export async function updateAppAccess(userId: string, formData: FormData): Promi
     `
   }))
 
+  await writeAudit({ orgId: session.orgId!, actorId: session.userId, actorEmail: session.email, action: 'user.app_access_change', targetId: userId, targetEmail: target.email })
   redirect(`/admin/users/${userId}?msg=App+access+updated`)
 }
 
@@ -490,6 +497,8 @@ export async function updateOrgAppDefaults(formData: FormData): Promise<void> {
     `
   }))
 
+  const defaults = Object.fromEntries(VALID_APPS.map(app => [app, formData.get(`app_${app}`) === 'on']))
+  await writeAudit({ orgId: session.orgId!, actorId: session.userId, actorEmail: session.email, action: 'org.app_defaults_update', metadata: { defaults } })
   redirect('/admin/apps?msg=Default+app+access+saved')
 }
 
@@ -707,4 +716,103 @@ export async function removeGroupMember(groupId: string, userId: string, _fd: Fo
     })
   }
   redirect(`/admin/groups/${groupId}?msg=Member+removed`)
+}
+
+// ── Invite management ─────────────────────────────────────────────────────────
+
+export async function revokeInvite(inviteId: string, _fd: FormData): Promise<void> {
+  const session = await requireAdmin()
+  const rows = await db`
+    SELECT email FROM invites WHERE id = ${inviteId} AND org_id = ${session.orgId!}
+      AND accepted_at IS NULL AND expires_at > NOW()
+  `
+  if (!rows.length) redirect('/admin/invites?err=Invite+not+found+or+already+used')
+
+  await db`UPDATE invites SET expires_at = NOW() WHERE id = ${inviteId}`
+  await writeAudit({
+    orgId: session.orgId!, actorId: session.userId, actorEmail: session.email,
+    action: 'invite.revoke', metadata: { inviteId, email: rows[0].email },
+  })
+  redirect('/admin/invites?msg=Invite+revoked')
+}
+
+// ── Bulk user actions ─────────────────────────────────────────────────────────
+
+export async function bulkDeactivate(formData: FormData): Promise<void> {
+  const session = await requireAdmin()
+  const userIds = (formData.getAll('user_id') as string[]).filter(id => id !== session.userId)
+  if (!userIds.length) redirect('/admin/users?err=No+users+selected')
+
+  const roleFilter = session.role === 'owner' ? db`` : db`AND m.role = 'member'`
+  const targets = await db`
+    SELECT u.id, u.email, m.role
+    FROM users u
+    JOIN org_members m ON m.user_id = u.id AND m.org_id = ${session.orgId!}
+    WHERE u.id = ANY(${userIds}) AND u.deactivated_at IS NULL ${roleFilter}
+  ` as unknown as Array<{ id: string; email: string; role: string }>
+
+  if (!targets.length) redirect('/admin/users?err=No+eligible+users+to+deactivate')
+
+  const targetIds = targets.map(t => t.id)
+  await db`UPDATE users SET deactivated_at = NOW() WHERE id = ANY(${targetIds})`
+  await db`DELETE FROM sessions WHERE user_id = ANY(${targetIds})`
+  await Promise.all(targets.map(t => writeAudit({
+    orgId: session.orgId!, actorId: session.userId, actorEmail: session.email,
+    action: 'user.deactivate', targetId: t.id, targetEmail: t.email,
+  })))
+
+  const count = targets.length
+  redirect(`/admin/users?msg=Deactivated+${count}+user${count === 1 ? '' : 's'}`)
+}
+
+export async function bulkRemove(formData: FormData): Promise<void> {
+  const session = await requireAdmin()
+  const userIds = (formData.getAll('user_id') as string[]).filter(id => id !== session.userId)
+  if (!userIds.length) redirect('/admin/users?err=No+users+selected')
+
+  const roleFilter = session.role === 'owner' ? db`` : db`AND m.role = 'member'`
+  const targets = await db`
+    SELECT u.id, u.email, m.role
+    FROM users u
+    JOIN org_members m ON m.user_id = u.id AND m.org_id = ${session.orgId!}
+    WHERE u.id = ANY(${userIds}) ${roleFilter}
+  ` as unknown as Array<{ id: string; email: string; role: string }>
+
+  if (!targets.length) redirect('/admin/users?err=No+eligible+users+to+remove')
+
+  const targetIds = targets.map(t => t.id)
+  await db`DELETE FROM org_members WHERE user_id = ANY(${targetIds}) AND org_id = ${session.orgId}`
+  await db`UPDATE sessions SET org_id = NULL WHERE user_id = ANY(${targetIds}) AND org_id = ${session.orgId}`
+  await Promise.all(targets.map(t => writeAudit({
+    orgId: session.orgId!, actorId: session.userId, actorEmail: session.email,
+    action: 'user.remove', targetId: t.id, targetEmail: t.email,
+  })))
+
+  const count = targets.length
+  redirect(`/admin/users?msg=Removed+${count}+user${count === 1 ? '' : 's'}+from+organization`)
+}
+
+// ── Group app access ──────────────────────────────────────────────────────────
+
+export async function updateGroupAppAccess(groupId: string, formData: FormData): Promise<void> {
+  const session = await requireAdmin()
+  if (!session.orgId) redirect(`/admin/groups/${groupId}`)
+
+  const group = await db`SELECT id FROM org_groups WHERE id = ${groupId} AND org_id = ${session.orgId}`
+  if (!group.length) redirect(`/admin/groups/${groupId}?err=Group+not+found`)
+
+  await Promise.all(VALID_APPS.map(app => {
+    const enabled = formData.get(`app_${app}`) === 'on'
+    return db`
+      INSERT INTO group_app_access (group_id, app, enabled)
+      VALUES (${groupId}, ${app}, ${enabled})
+      ON CONFLICT (group_id, app) DO UPDATE SET enabled = EXCLUDED.enabled
+    `
+  }))
+
+  await writeAudit({
+    orgId: session.orgId, actorId: session.userId, actorEmail: session.email,
+    action: 'group.app_access_update', metadata: { groupId },
+  })
+  redirect(`/admin/groups/${groupId}?msg=App+access+saved`)
 }

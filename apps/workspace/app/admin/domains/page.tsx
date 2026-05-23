@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { requireAdmin } from '@/lib/auth'
 import db from '@/lib/db'
 import { addDomain, verifyDomain, removeDomain, setPrimaryDomain, checkDomainHealth, checkAllDomainHealth } from '@/lib/admin-actions'
+import ConfirmForm from '@/components/ConfirmForm'
 
 export const dynamic = 'force-dynamic'
 
@@ -188,14 +189,17 @@ export default async function DomainsPage({
                       Email setup →
                     </Link>
                   )}
-                  <form action={removeDomain.bind(null, d.id)}>
+                  <ConfirmForm
+                    action={removeDomain.bind(null, d.id)}
+                    message={`Remove ${d.domain}? This cannot be undone.`}
+                  >
                     <button
                       type="submit"
                       className="px-3 py-1.5 text-xs font-medium bg-bg-base hover:bg-red-500/10 text-fg-secondary hover:text-red-600 border border-border rounded-lg transition-colors"
                     >
                       Remove
                     </button>
-                  </form>
+                  </ConfirmForm>
                 </div>
               </div>
             </div>

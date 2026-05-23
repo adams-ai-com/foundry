@@ -1,4 +1,5 @@
 import { requireAdmin } from '@/lib/auth'
+import { getOrgTimezone } from '@/lib/timezone'
 import db from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
@@ -23,6 +24,7 @@ const ACTION_LABELS: Record<string, string> = {
   'domain.remove':         'Removed domain',
   'domain.set_primary':    'Set primary domain',
   'domain.dkim_generate':  'Generated DKIM keys',
+  'domain.dmarc_update':   'Updated DMARC policy',
   'group.create':          'Created group',
   'group.update':          'Updated group',
   'group.delete':          'Deleted group',
@@ -88,6 +90,7 @@ export default async function AuditPage({
   const sp = await searchParams
 
   const q = (sp.q ?? '').trim()
+  const tz = await getOrgTimezone(session.orgId!)
   const cat = sp.cat ?? ''
   const page = Math.max(1, parseInt(sp.page ?? '1', 10))
   const offset = (page - 1) * PAGE_SIZE
@@ -166,6 +169,19 @@ export default async function AuditPage({
           </a>
         )}
       </form>
+
+      {/* Export */}
+      <div className="flex justify-end mb-3">
+        <a
+          href={`/admin/audit/export${q || cat ? `?${new URLSearchParams({ ...(q ? { q } : {}), ...(cat ? { cat } : {}) })}` : ''}`}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-fg-secondary border border-border hover:bg-bg-hover px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+            <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+          </svg>
+          Export CSV
+        </a>
+      </div>
 
       {/* Results summary */}
       <p className="text-xs text-fg-tertiary mb-3">

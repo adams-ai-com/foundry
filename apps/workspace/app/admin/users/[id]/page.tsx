@@ -1,7 +1,9 @@
 import { notFound } from 'next/navigation'
 import { requireAdmin } from '@/lib/auth'
+import { getOrgTimezone } from '@/lib/timezone'
 import db from '@/lib/db'
 import { deactivateUser, reactivateUser, removeFromOrg, resetTotp, changeRole, updateAppAccess } from '@/lib/admin-actions'
+import ConfirmForm from '@/components/ConfirmForm'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,9 +37,9 @@ async function getUserDetail(orgId: string, userId: string): Promise<UserDetail 
   return rows.length ? rows[0] as unknown as UserDetail : null
 }
 
-function fmtDate(ts: string | null) {
+function fmtDate(ts: string | null, tz = 'UTC') {
   if (!ts) return '—'
-  return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: tz })
 }
 
 function initials(email: string, name: string | null) {
@@ -65,6 +67,7 @@ export default async function UserDetailPage({
   const err = sp.err ? decodeURIComponent(sp.err) : null
 
   if (!session.orgId) return <div className="p-8 text-fg-secondary">No active organization.</div>
+  const tz = await getOrgTimezone(session.orgId)
 
   const user = await getUserDetail(session.orgId, id)
   if (!user) notFound()
@@ -156,11 +159,11 @@ export default async function UserDetailPage({
           </div>
           <div>
             <div className="text-xs text-fg-tertiary mb-0.5">Last sign-in</div>
-            <div className="text-sm font-medium text-fg-primary">{fmtDate(user.last_sign_in)}</div>
+            <div className="text-sm font-medium text-fg-primary">{fmtDate(user.last_sign_in, tz)}</div>
           </div>
           <div>
             <div className="text-xs text-fg-tertiary mb-0.5">Member since</div>
-            <div className="text-sm font-medium text-fg-primary">{fmtDate(user.joined_at)}</div>
+            <div className="text-sm font-medium text-fg-primary">{fmtDate(user.joined_at, tz)}</div>
           </div>
           <div>
             <div className="text-xs text-fg-tertiary mb-0.5">TOTP</div>
@@ -222,14 +225,17 @@ export default async function UserDetailPage({
               </div>
             </div>
             {canAct && user.has_totp ? (
-              <form action={resetTotpWithId}>
+              <ConfirmForm
+                action={resetTotpWithId}
+                message={`Reset TOTP for ${user.email}? They will be signed out of all sessions and must re-enroll their authenticator.`}
+              >
                 <button
                   type="submit"
                   className="text-xs font-medium text-amber-600 border border-amber-500/30 hover:bg-amber-500/5 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
                 >
                   Reset TOTP
                 </button>
-              </form>
+              </ConfirmForm>
             ) : (
               <span className="text-xs text-fg-tertiary">
                 {!user.has_totp ? 'Not enrolled' : isSelf ? 'Cannot modify own account' : 'Insufficient permissions'}
@@ -270,14 +276,17 @@ export default async function UserDetailPage({
                   </button>
                 </form>
               ) : (
-                <form action={deactivateWithId}>
+                <ConfirmForm
+                action={deactivateWithId}
+                message={`Deactivate ${user.email}? They will be signed out of all sessions immediately.`}
+              >
                   <button
                     type="submit"
                     className="text-xs font-medium text-red-500 border border-red-500/30 hover:bg-red-500/5 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
                   >
                     Deactivate
                   </button>
-                </form>
+                </ConfirmForm>
               )
             ) : (
               <span className="text-xs text-fg-tertiary">{isSelf ? 'Cannot modify own account' : 'Insufficient permissions'}</span>
@@ -324,14 +333,17 @@ export default async function UserDetailPage({
               <div className="text-xs text-fg-tertiary">Revoke org access. The user account itself is not deleted.</div>
             </div>
             {canAct ? (
-              <form action={removeWithId}>
+              <ConfirmForm
+                action={removeWithId}
+                message={`Remove ${user.email} from the organization? Their access will be revoked immediately.`}
+              >
                 <button
                   type="submit"
                   className="text-xs font-medium text-red-500 border border-red-500/30 hover:bg-red-500/5 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
                 >
                   Remove
                 </button>
-              </form>
+              </ConfirmForm>
             ) : (
               <span className="text-xs text-fg-tertiary">{isSelf ? 'Cannot modify own account' : 'Insufficient permissions'}</span>
             )}
