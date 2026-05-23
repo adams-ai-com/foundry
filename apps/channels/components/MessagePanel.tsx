@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { SessionUser } from '@foundry/auth'
 import { EmojiPicker } from './EmojiPicker'
+import { TopicSummary } from './TopicSummary'
 
 type Reaction = { emoji: string; user_ids: string[] }
 type Member = { id: string; name: string; email: string }
@@ -20,6 +21,7 @@ interface Props {
   topicId:        string
   topicName:      string | null
   isResolved:     boolean
+  existingSummary:{ bullets: string[]; action_items: string[]; generated_at: string } | null
   messages:       Message[]
   onNewMessage:   (msg: Message) => void
   onEditMessage:  (msg: Message) => void
@@ -54,7 +56,7 @@ function initials(name: string) { return name.slice(0, 2).toUpperCase() }
 
 export function MessagePanel({
   orgSlug, session, channelId, channelName,
-  topicId, topicName, isResolved,
+  topicId, topicName, isResolved, existingSummary,
   messages, onNewMessage, onEditMessage, onDeleteMessage, onReactMessage, onToggleResolve,
 }: Props) {
   const [body, setBody] = useState('')
@@ -197,6 +199,17 @@ export function MessagePanel({
           </button>
         )}
       </div>
+
+      {/* Summary (only for non-new topics with messages) */}
+      {!isNew && topicName && messages.length > 0 && (
+        <div className="shrink-0 px-4 pt-2 pb-1">
+          <TopicSummary
+            channelId={channelId}
+            topicId={topicId}
+            existingSummary={existingSummary}
+          />
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-3">

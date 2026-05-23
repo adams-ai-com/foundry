@@ -55,6 +55,38 @@ export async function POST(req: NextRequest, { params }: Params) {
     WHERE id = ${topicId}
   `
 
+  // Detect @mentions and insert notifications
+  const mentionMatches = [...body.matchAll(/@(\w+)/g)].map(m => m[1].toLowerCase())
+  if (mentionMatches.length > 0) {
+    const mentioned = await db`
+      SELECT DISTINCT ON (author_id) author_id
+      FROM channel_messages
+      WHERE org_id = ${session.orgId}
+        AND lower(author_name) = ANY(${mentionMatches})
+        AND author_id != ${session.userId}
+        AND deleted_at IS NULL
+      ORDER BY author_id, created_at DESC
+    `
+    for (const u of mentioned) {
+      await db`
+        INSERT INTO channel_notifications
+          (org_id, user_id, channel_id, topic_id, message_id, type)
+        VALUES
+          (${session.orgId}, ${u.author_id}, ${id}, ${topicId}, ${message.id}, 'mention')
+      `
+    }
+    if (mentioned.length > 0) {
+      const mentionedTyped = mentioned as unknown as { author_id: string }[]
+      broadcastToOrg(session.orgId, {
+        type:      'mention:new',
+        userIds:   mentionedTyped.map(u => u.author_id),
+        channelId: id,
+        topicId,
+        messageId: message.id,
+      })
+    }
+  }
+
   broadcastToOrg(session.orgId, {
     type:      'message:new',
     channelId: id,

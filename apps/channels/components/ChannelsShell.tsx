@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import type { SessionUser } from '@foundry/auth'
 import { StreamList } from './StreamList'
 import { MessagePanel } from './MessagePanel'
+import { NotificationBell } from './NotificationBell'
 
 type Channel = { id: string; name: string; type: string }
 type Topic   = { id: string; name: string; last_message_at: string | null; message_count: number; is_resolved: boolean }
@@ -22,29 +23,35 @@ interface Props {
   activeTopic:     { id: string; name: string; is_resolved: boolean } | null
   initialMessages: Message[]
   initialDms:      DM[]
+  initialSummary:  { bullets: string[]; action_items: string[]; generated_at: string } | null
 }
 
 export function ChannelsShell({
   session, orgSlug, theme,
   channels, activeChannelId, activeChannel,
-  topics, activeTopicId, activeTopic, initialMessages, initialDms,
+  topics, activeTopicId, activeTopic, initialMessages, initialDms, initialSummary,
 }: Props) {
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [liveTopics, setLiveTopics] = useState<Topic[]>(topics)
   const [liveActiveTopic, setLiveActiveTopic] = useState(activeTopic)
   const [dms, setDms] = useState<DM[]>(initialDms)
   const [unread, setUnread] = useState<Record<string, number>>({})
+  const [notifCount, setNotifCount] = useState(0)
   const sseRef = useRef<EventSource | null>(null)
 
   useEffect(() => { setMessages(initialMessages) }, [activeTopicId, initialMessages])
   useEffect(() => { setLiveTopics(topics) }, [topics])
   useEffect(() => { setLiveActiveTopic(activeTopic) }, [activeTopic])
 
-  // Load unread counts
+  // Load unread counts + notification count
   useEffect(() => {
     fetch('/api/channels/unread')
       .then(r => r.json())
       .then((data: Record<string, number>) => setUnread(data))
+      .catch(() => {})
+    fetch('/api/notifications')
+      .then(r => r.json())
+      .then((data: { count: number }) => setNotifCount(data.count))
       .catch(() => {})
   }, [activeTopicId])
 
@@ -101,6 +108,13 @@ export function ChannelsShell({
         if (event.type === 'message:reaction' && event.message) {
           if (event.channelId === activeChannelId && event.topicId === activeTopicId) {
             setMessages(prev => prev.map(m => m.id === event.message!.id ? event.message! : m))
+          }
+        }
+
+        if (event.type === 'mention:new') {
+          const ev = event as unknown as { type: string; userIds: string[] }
+          if (ev.userIds?.includes(session.userId)) {
+            setNotifCount(prev => prev + 1)
           }
         }
 
@@ -168,7 +182,8 @@ export function ChannelsShell({
         </nav>
 
         <div className="flex-1" />
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <NotificationBell orgSlug={orgSlug} count={notifCount} onCountChange={setNotifCount} />
           <div className="w-7 h-7 bg-accent/15 rounded-full flex items-center justify-center">
             <span className="text-accent text-xs font-semibold">
               {(session.name ?? session.email).slice(0, 2).toUpperCase()}
@@ -199,6 +214,7 @@ export function ChannelsShell({
           topicId={activeTopicId}
           topicName={liveActiveTopic?.name ?? null}
           isResolved={liveActiveTopic?.is_resolved ?? false}
+          existingSummary={initialSummary}
           messages={messages}
           onNewMessage={msg => setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg])}
           onEditMessage={msg => setMessages(prev => prev.map(m => m.id === msg.id ? msg : m))}
