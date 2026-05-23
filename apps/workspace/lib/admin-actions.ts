@@ -707,7 +707,11 @@ export async function removeGroupMember(groupId: string, userId: string, _fd: Fo
   const group = await db`SELECT id, name FROM org_groups WHERE id = ${groupId} AND org_id = ${session.orgId}`
   if (!group.length) redirect(`/admin/groups/${groupId}?err=Group+not+found`)
 
-  const userRows = await db`SELECT email FROM users WHERE id = ${userId}`
+  const userRows = await db`
+    SELECT u.email FROM users u
+    JOIN org_members m ON m.user_id = u.id AND m.org_id = ${session.orgId}
+    WHERE u.id = ${userId}
+  `
   await db`DELETE FROM org_group_members WHERE group_id = ${groupId} AND user_id = ${userId}`
 
   if (userRows.length) {
@@ -737,6 +741,38 @@ export async function revokeInvite(inviteId: string, _fd: FormData): Promise<voi
   })
   redirect('/admin/invites?msg=Invite+revoked')
 }
+
+export async function resendInvite(inviteId: string, _fd: FormData): Promise<void> {
+  const session = await requireAdmin()
+
+  const rows = await db`
+    SELECT email, role FROM invites
+    WHERE id = ${inviteId} AND org_id = ${session.orgId!}
+      AND accepted_at IS NULL AND expires_at <= NOW()
+  `
+  if (!rows.length) redirect('/admin/invites?err=Invite+not+found+or+not+expired')
+
+  const { email, role } = rows[0] as { email: string; role: string }
+
+  const pending = await db`
+    SELECT id FROM invites
+    WHERE email = ${email} AND org_id = ${session.orgId!}
+      AND accepted_at IS NULL AND expires_at > NOW()
+  `
+  if (pending.length) redirect('/admin/invites?filter=pending&err=A+pending+invite+already+exists+for+this+email')
+
+  await db`
+    INSERT INTO invites (email, role, org_id, invited_by)
+    VALUES (${email}, ${role}, ${session.orgId!}, ${session.userId})
+  `
+  await writeAudit({
+    orgId: session.orgId!, actorId: session.userId, actorEmail: session.email,
+    action: 'user.invite', metadata: { email, role, resent: true },
+  })
+  redirect(`/admin/invites?filter=pending&msg=${encodeURIComponent('Invite resent to ' + email)}`)
+}
+
+
 
 // ── Bulk user actions ─────────────────────────────────────────────────────────
 

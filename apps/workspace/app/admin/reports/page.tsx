@@ -96,7 +96,7 @@ export default async function ReportsPage() {
   return (
     <div className="max-w-3xl">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-fg-primary">Reports</h1>
+        <h1 className="text-xl font-semibold text-fg-primary">Security Reports</h1>
         <p className="text-sm text-fg-secondary mt-1">Failed sign-in attempts and suspicious activity.</p>
       </div>
 

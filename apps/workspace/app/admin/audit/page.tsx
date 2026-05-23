@@ -29,7 +29,8 @@ const ACTION_LABELS: Record<string, string> = {
   'group.update':          'Updated group',
   'group.delete':          'Deleted group',
   'group.member_add':      'Added group member',
-  'group.member_remove':   'Removed group member',
+  'group.member_remove':     'Removed group member',
+  'group.app_access_update': 'Updated group app access',
   'session.force_sign_out':    'Force sign-out',
   'session.force_sign_out_all':'Force sign-out all',
   'mail.smtp_config_update':   'Updated SMTP config',
@@ -210,6 +211,7 @@ export default async function AuditPage({
                   <tr key={row.id} className="hover:bg-bg-hover transition-colors">
                     <td className="px-4 py-3 text-xs text-fg-tertiary whitespace-nowrap">
                       {new Date(row.created_at).toLocaleString('en-US', {
+                        timeZone: tz,
                         month: 'short', day: 'numeric',
                         hour: '2-digit', minute: '2-digit',
                       })}

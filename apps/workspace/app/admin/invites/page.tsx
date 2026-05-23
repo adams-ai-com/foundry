@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { requireAdmin } from '@/lib/auth'
 import db from '@/lib/db'
-import { revokeInvite } from '@/lib/admin-actions'
+import { revokeInvite, resendInvite } from '@/lib/admin-actions'
+import ConfirmForm from '@/components/ConfirmForm'
 
 export const dynamic = 'force-dynamic'
 
@@ -155,7 +156,9 @@ export default async function InvitesPage({
             <tbody className="divide-y divide-border">
               {visible.map(invite => {
                 const isPending = !invite.accepted_at && new Date(invite.expires_at) > now
+                const isExpired = !invite.accepted_at && new Date(invite.expires_at) <= now
                 const revokeWithId = revokeInvite.bind(null, invite.id)
+                const resendWithId = resendInvite.bind(null, invite.id)
                 return (
                   <tr key={invite.id} className="hover:bg-bg-hover transition-colors">
                     <td className="px-4 py-3 font-medium text-fg-primary text-xs">{invite.email}</td>
@@ -169,12 +172,22 @@ export default async function InvitesPage({
                     </td>
                     <td className="px-4 py-3 text-right">
                       {isPending && (
-                        <form action={revokeWithId}>
+                        <ConfirmForm action={revokeWithId} message={`Revoke invite for ${invite.email}?`}>
                           <button
                             type="submit"
                             className="text-xs font-medium text-red-500 hover:text-red-600 transition-colors"
                           >
                             Revoke
+                          </button>
+                        </ConfirmForm>
+                      )}
+                      {isExpired && (
+                        <form action={resendWithId}>
+                          <button
+                            type="submit"
+                            className="text-xs font-medium text-accent hover:text-accent-hover transition-colors"
+                          >
+                            Resend
                           </button>
                         </form>
                       )}
