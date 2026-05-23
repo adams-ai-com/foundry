@@ -224,7 +224,6 @@ function DecisionForm({
             <button
               data-testid="decision-save-button"
               type="submit"
-              data-testid="decision-save-button"
               disabled={saving || !subject.trim() || !outcome.trim()}
               className="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-1.5 rounded"
             >
