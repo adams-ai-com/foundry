@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root, [data-theme="light"] {
+  --bg-base:    255 255 255;
+  --bg-surface: 248 250 252;
+  --bg-raised:  255 255 255;
+  --bg-hover:   241 245 249;
+  --bg-active:  219 234 254;
+  --fg-primary:   2 6 23;
+  --fg-secondary: 100 116 139;
+  --fg-tertiary:  148 163 184;
+  --border:     226 232 240;
+  --accent:     5 150 105;
+  --accent-h:   4 120 87;
+  --accent-fg:  255 255 255;
+  --danger:     220 38 38;
+  --shadow-card: 0 0 0 1px rgb(0 0 0/.05), 0 4px 16px rgb(0 0 0/.07);
+}
+
+[data-theme="dark"] {
+  --bg-base:    10 10 15;
+  --bg-surface: 18 18 26;
+  --bg-raised:  26 26 40;
+  --bg-hover:   34 34 52;
+  --bg-active:  30 27 75;
+  --fg-primary:   248 248 255;
+  --fg-secondary: 148 148 172;
+  --fg-tertiary:  82 82 106;
+  --border:     39 39 58;
+  --accent:     52 211 153;
+  --accent-h:   16 185 129;
+  --accent-fg:  255 255 255;
+  --danger:     252 165 165;
+  --shadow-card: 0 0 0 1px rgb(255 255 255/.06), 0 4px 24px rgb(0 0 0/.4);
+}
+
+[data-theme="warm"] {
+  --bg-base:    254 252 248;
+  --bg-surface: 250 247 241;
+  --bg-raised:  255 253 250;
+  --bg-hover:   245 240 231;
+  --bg-active:  254 243 199;
+  --fg-primary:   28 25 23;
+  --fg-secondary: 120 113 108;
+  --fg-tertiary:  168 162 158;
+  --border:     231 229 228;
+  --accent:     5 150 105;
+  --accent-h:   4 120 87;
+  --accent-fg:  255 255 255;
+  --danger:     185 28 28;
+  --shadow-card: 0 0 0 1px rgb(0 0 0/.04), 0 4px 20px rgb(0 0 0/.07);
+}
+
+@layer base {
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { background-color: rgb(var(--bg-base)); color: rgb(var(--fg-primary)); }
+}
