@@ -23,11 +23,13 @@ interface Props {
   isResolved:     boolean
   existingSummary:{ bullets: string[]; action_items: string[]; generated_at: string } | null
   messages:       Message[]
+  activeCallId?:  string | null
   onNewMessage:   (msg: Message) => void
   onEditMessage:  (msg: Message) => void
   onDeleteMessage:(id: string) => void
   onReactMessage: (msg: Message) => void
   onToggleResolve:() => void
+  onCallStarted?: (callId: string) => void
 }
 
 function formatTime(iso: string): string {
@@ -44,12 +46,14 @@ function formatDate(iso: string): string {
 }
 
 function renderBody(body: string): React.ReactNode {
-  const parts = body.split(/(@\w+)/g)
-  return parts.map((part, i) =>
-    /^@\w+$/.test(part)
-      ? <span key={i} className="text-accent font-medium">{part}</span>
-      : part
-  )
+  const parts = body.split(/(https?:\/\/[^\s]+|@\w+)/g)
+  return parts.map((part, i) => {
+    if (/^@\w+$/.test(part))
+      return <span key={i} className="text-accent font-medium">{part}</span>
+    if (/^https?:\/\//.test(part))
+      return <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-accent underline underline-offset-2 hover:opacity-80">{part}</a>
+    return part
+  })
 }
 
 function initials(name: string) { return name.slice(0, 2).toUpperCase() }
@@ -57,7 +61,8 @@ function initials(name: string) { return name.slice(0, 2).toUpperCase() }
 export function MessagePanel({
   orgSlug, session, channelId, channelName,
   topicId, topicName, isResolved, existingSummary,
-  messages, onNewMessage, onEditMessage, onDeleteMessage, onReactMessage, onToggleResolve,
+  messages, activeCallId, onNewMessage, onEditMessage, onDeleteMessage, onReactMessage,
+  onToggleResolve, onCallStarted,
 }: Props) {
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
@@ -75,6 +80,7 @@ export function MessagePanel({
   const [inviteError, setInviteError] = useState('')
   const [inviteUrl, setInviteUrl] = useState<string | null>(null)
   const [inviteCopied, setInviteCopied] = useState(false)
+  const [startingCall, setStartingCall] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -155,6 +161,24 @@ export function MessagePanel({
     setInviteCopied(false)
   }
 
+  async function startCall() {
+    if (startingCall || topicId === '_new') return
+    setStartingCall(true)
+    try {
+      const res = await fetch('/api/video/calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelId, topicId, title: topicName ?? channelName }),
+      })
+      const data = await res.json() as { callId?: string; error?: string }
+      if (data.callId) {
+        onCallStarted?.(data.callId)
+        window.open(`/call/${data.callId}`, '_blank', 'noopener')
+      }
+    } catch {}
+    finally { setStartingCall(false) }
+  }
+
   async function react(msgId: string, emoji: string) {
     const res = await fetch(`/api/channels/${channelId}/topics/${topicId}/messages/${msgId}/reactions`, {
       method: 'POST',
@@ -222,6 +246,30 @@ export function MessagePanel({
         )}
         {topicName && !isNew && (
           <div className="ml-auto flex items-center gap-2">
+            {/* Video call */}
+            {activeCallId ? (
+              <a
+                href={`/call/${activeCallId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-success/40 text-success bg-success/10 hover:bg-success/20 transition-colors"
+              >
+                <span className="w-1.5 h-1.5 bg-success rounded-full animate-pulse" />
+                Live – Join
+              </a>
+            ) : (
+              <button
+                onClick={startCall}
+                disabled={startingCall}
+                title="Start video call"
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-border text-fg-tertiary hover:text-fg-secondary hover:border-border-hover disabled:opacity-40 transition-colors"
+              >
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                  <path d="M0 5a2 2 0 012-2h7.5a2 2 0 011.983 1.738l3.11-1.382A1 1 0 0116 4.269v7.462a1 1 0 01-1.406.913l-3.111-1.382A2 2 0 019.5 13H2a2 2 0 01-2-2V5z"/>
+                </svg>
+                Call
+              </button>
+            )}
             <button
               onClick={() => setShowInvite(true)}
               title="Invite a guest to this topic"

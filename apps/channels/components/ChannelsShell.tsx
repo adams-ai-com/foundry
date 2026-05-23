@@ -12,24 +12,26 @@ type Message = { id: string; author_id: string; author_name: string; author_emai
 type DM      = { id: string; metadata: { participants: { id: string; name: string; email: string }[] }; topic_id: string | null; last_message_at: string | null }
 
 interface Props {
-  session:         SessionUser
-  orgSlug:         string
-  theme:           'light' | 'dark' | 'warm'
-  channels:        Channel[]
-  activeChannelId: string
-  activeChannel:   { id: string; name: string }
-  topics:          Topic[]
-  activeTopicId:   string
-  activeTopic:     { id: string; name: string; is_resolved: boolean } | null
-  initialMessages: Message[]
-  initialDms:      DM[]
-  initialSummary:  { bullets: string[]; action_items: string[]; generated_at: string } | null
+  session:          SessionUser
+  orgSlug:          string
+  theme:            'light' | 'dark' | 'warm'
+  channels:         Channel[]
+  activeChannelId:  string
+  activeChannel:    { id: string; name: string }
+  topics:           Topic[]
+  activeTopicId:    string
+  activeTopic:      { id: string; name: string; is_resolved: boolean } | null
+  initialMessages:  Message[]
+  initialDms:       DM[]
+  initialSummary:   { bullets: string[]; action_items: string[]; generated_at: string } | null
+  initialActiveCall:{ id: string; title: string; createdByName: string } | null
 }
 
 export function ChannelsShell({
   session, orgSlug, theme,
   channels, activeChannelId, activeChannel,
   topics, activeTopicId, activeTopic, initialMessages, initialDms, initialSummary,
+  initialActiveCall,
 }: Props) {
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [liveTopics, setLiveTopics] = useState<Topic[]>(topics)
@@ -37,11 +39,13 @@ export function ChannelsShell({
   const [dms, setDms] = useState<DM[]>(initialDms)
   const [unread, setUnread] = useState<Record<string, number>>({})
   const [notifCount, setNotifCount] = useState(0)
+  const [activeCallId, setActiveCallId] = useState<string | null>(initialActiveCall?.id ?? null)
   const sseRef = useRef<EventSource | null>(null)
 
   useEffect(() => { setMessages(initialMessages) }, [activeTopicId, initialMessages])
   useEffect(() => { setLiveTopics(topics) }, [topics])
   useEffect(() => { setLiveActiveTopic(activeTopic) }, [activeTopic])
+  useEffect(() => { setActiveCallId(initialActiveCall?.id ?? null) }, [activeTopicId, initialActiveCall])
 
   // Load unread counts + notification count
   useEffect(() => {
@@ -116,6 +120,16 @@ export function ChannelsShell({
           if (ev.userIds?.includes(session.userId)) {
             setNotifCount(prev => prev + 1)
           }
+        }
+
+        if (event.type === 'call:started') {
+          const ev = event as unknown as { callId: string; topicId?: string | null }
+          if (ev.topicId === activeTopicId) setActiveCallId(ev.callId)
+        }
+
+        if (event.type === 'call:ended') {
+          const ev = event as unknown as { callId: string; topicId?: string | null }
+          if (ev.topicId === activeTopicId) setActiveCallId(null)
         }
 
         if (event.type === 'topic:resolve' && event.topic) {
@@ -216,11 +230,13 @@ export function ChannelsShell({
           isResolved={liveActiveTopic?.is_resolved ?? false}
           existingSummary={initialSummary}
           messages={messages}
+          activeCallId={activeCallId}
           onNewMessage={msg => setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg])}
           onEditMessage={msg => setMessages(prev => prev.map(m => m.id === msg.id ? msg : m))}
           onDeleteMessage={id => setMessages(prev => prev.filter(m => m.id !== id))}
           onReactMessage={msg => setMessages(prev => prev.map(m => m.id === msg.id ? msg : m))}
           onToggleResolve={toggleResolve}
+          onCallStarted={callId => setActiveCallId(callId)}
         />
       </div>
     </div>
