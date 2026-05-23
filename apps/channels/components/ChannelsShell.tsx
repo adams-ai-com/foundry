@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import type { SessionUser } from '@foundry/auth'
 import { StreamList } from './StreamList'
 import { MessagePanel } from './MessagePanel'
+import { MemoryPanel } from './MemoryPanel'
 import { NotificationBell } from './NotificationBell'
 
 type Channel = { id: string; name: string; type: string }
@@ -40,6 +41,7 @@ export function ChannelsShell({
   const [unread, setUnread] = useState<Record<string, number>>({})
   const [notifCount, setNotifCount] = useState(0)
   const [activeCallId, setActiveCallId] = useState<string | null>(initialActiveCall?.id ?? null)
+  const [showMemory, setShowMemory] = useState(false)
   const sseRef = useRef<EventSource | null>(null)
 
   useEffect(() => { setMessages(initialMessages) }, [activeTopicId, initialMessages])
@@ -197,6 +199,19 @@ export function ChannelsShell({
 
         <div className="flex-1" />
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowMemory(m => !m)}
+            title="Workspace Memory — Ask AI or view Timeline"
+            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+              showMemory
+                ? 'bg-accent/15 text-accent'
+                : 'text-fg-muted hover:text-fg-primary hover:bg-bg-hover'
+            }`}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
+            </svg>
+          </button>
           <NotificationBell orgSlug={orgSlug} count={notifCount} onCountChange={setNotifCount} />
           <div className="w-7 h-7 bg-accent/15 rounded-full flex items-center justify-center">
             <span className="text-accent text-xs font-semibold">
@@ -220,24 +235,27 @@ export function ChannelsShell({
           dms={dms}
         />
 
-        <MessagePanel
-          orgSlug={orgSlug}
-          session={session}
-          channelId={activeChannelId}
-          channelName={activeChannel.name}
-          topicId={activeTopicId}
-          topicName={liveActiveTopic?.name ?? null}
-          isResolved={liveActiveTopic?.is_resolved ?? false}
-          existingSummary={initialSummary}
-          messages={messages}
-          activeCallId={activeCallId}
-          onNewMessage={msg => setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg])}
-          onEditMessage={msg => setMessages(prev => prev.map(m => m.id === msg.id ? msg : m))}
-          onDeleteMessage={id => setMessages(prev => prev.filter(m => m.id !== id))}
-          onReactMessage={msg => setMessages(prev => prev.map(m => m.id === msg.id ? msg : m))}
-          onToggleResolve={toggleResolve}
-          onCallStarted={callId => setActiveCallId(callId)}
-        />
+        {showMemory
+          ? <MemoryPanel orgSlug={orgSlug} onClose={() => setShowMemory(false)} />
+          : <MessagePanel
+              orgSlug={orgSlug}
+              session={session}
+              channelId={activeChannelId}
+              channelName={activeChannel.name}
+              topicId={activeTopicId}
+              topicName={liveActiveTopic?.name ?? null}
+              isResolved={liveActiveTopic?.is_resolved ?? false}
+              existingSummary={initialSummary}
+              messages={messages}
+              activeCallId={activeCallId}
+              onNewMessage={msg => setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg])}
+              onEditMessage={msg => setMessages(prev => prev.map(m => m.id === msg.id ? msg : m))}
+              onDeleteMessage={id => setMessages(prev => prev.filter(m => m.id !== id))}
+              onReactMessage={msg => setMessages(prev => prev.map(m => m.id === msg.id ? msg : m))}
+              onToggleResolve={toggleResolve}
+              onCallStarted={callId => setActiveCallId(callId)}
+            />
+        }
       </div>
     </div>
   )
