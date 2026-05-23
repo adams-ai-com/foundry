@@ -8,7 +8,8 @@
     "type-check": "turbo type-check",
     "dev:docs": "turbo dev --filter=@foundry/docs",
     "dev:sheets": "turbo dev --filter=@foundry/sheets",
-    "dev:mail": "turbo dev --filter=@foundry/mail"
+    "dev:mail": "turbo dev --filter=@foundry/mail",
+    "dev:sites": "turbo dev --filter=@foundry/sites"
   },
   "devDependencies": {
     "turbo": "^2.0.0",
