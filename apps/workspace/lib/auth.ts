@@ -54,7 +54,11 @@ export async function requireAdmin(): Promise<SessionUser> {
   return session
 }
 
-export async function createSession(userId: string, orgId: string | null): Promise<string> {
+export async function createSession(
+  userId: string,
+  orgId: string | null,
+  meta?: { ip?: string | null; ua?: string | null },
+): Promise<string> {
   let timeoutHours = SESSION_DAYS_DEFAULT * 24
   let maxSessions = 10
 
@@ -68,7 +72,6 @@ export async function createSession(userId: string, orgId: string | null): Promi
     }
   }
 
-  // Evict oldest sessions when at the cap
   if (maxSessions > 0) {
     await db`
       DELETE FROM sessions
@@ -85,8 +88,14 @@ export async function createSession(userId: string, orgId: string | null): Promi
   }
 
   const rows = await db`
-    INSERT INTO sessions (user_id, org_id, expires_at)
-    VALUES (${userId}, ${orgId}, NOW() + INTERVAL '${db.unsafe(String(timeoutHours))} hours')
+    INSERT INTO sessions (user_id, org_id, expires_at, ip_address, user_agent)
+    VALUES (
+      ${userId},
+      ${orgId},
+      NOW() + INTERVAL '${db.unsafe(String(timeoutHours))} hours',
+      ${meta?.ip ?? null},
+      ${meta?.ua ?? null}
+    )
     RETURNING id
   `
   return rows[0].id as string
@@ -101,7 +110,7 @@ export async function setSessionCookie(sessionId: string) {
   jar.set(SESSION_COOKIE, sessionId, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    sameSite: 'strict',
     path: '/',
     maxAge: SESSION_DAYS_DEFAULT * 24 * 60 * 60,
   })
