@@ -32,3 +32,9 @@ export function formatDate(date: Date): string {
     year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,
   }).format(date)
 }
+
+export interface CellAddress {
+  sheet: string
+  row: number
+  col: number
+}

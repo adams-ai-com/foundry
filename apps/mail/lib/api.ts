@@ -1,14 +1,15 @@
 import type { MailThread, MailMessage, MailboxInfo, CalendarEvent } from '@foundry/shared'
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api/mail/${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+  const res = await fetch(`/mail/api/mail/${path}`, {
+    headers: init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' },
     ...init,
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error((err as any).error ?? `HTTP ${res.status}`)
   }
+  if (res.status === 204) return undefined as T
   return res.json()
 }
 
@@ -45,6 +46,7 @@ function toThread(r: RawThread, threadId?: string): MailThread {
     messageCount: r.messageCount,
     unreadCount: r.unreadCount,
     snippet: r.snippet ?? '',
+    isStarred: (r as any).isStarred ?? false,
     isArchived: false,
     isSpam: false,
   }
@@ -63,6 +65,7 @@ function toMessage(r: RawMessage, threadId: string): MailMessage {
     receivedAt: new Date(r.date),
     isRead: r.isRead,
     isStarred: r.isStarred,
+    attachments: (r as any).attachments ?? [],
     protocol: 'smtp',
   }
 }
@@ -95,10 +98,17 @@ export async function listMailboxes(): Promise<MailboxInfo[]> {
   return rows.map(toMailbox)
 }
 
-export async function listThreads(mailbox = 'inbox', page = 1): Promise<MailThread[]> {
-  const q = new URLSearchParams({ mailbox, page: String(page) })
+export async function listThreads(
+  mailbox = 'inbox',
+  page = 1,
+  sort: 'newest' | 'oldest' | 'unread' = 'newest',
+): Promise<{ threads: MailThread[]; total: number }> {
+  const q = new URLSearchParams({ mailbox, page: String(page), sort })
   const data = await req<{ threads: RawThread[]; total: number }>(`threads?${q}`)
-  return (data.threads ?? []).map((t) => toThread(t))
+  return {
+    threads: (data.threads ?? []).map((t) => toThread(t)),
+    total: data.total ?? 0,
+  }
 }
 
 export async function getThread(id: string): Promise<{ thread: MailThread; messages: MailMessage[] }> {
@@ -113,6 +123,26 @@ export async function patchThread(id: string, body: Record<string, unknown>): Pr
   await req(`threads/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 }
 
+export async function archiveThread(id: string): Promise<void> {
+  await patchThread(id, { action: 'archive' })
+}
+
+export async function trashThread(id: string): Promise<void> {
+  await patchThread(id, { action: 'trash' })
+}
+
+export async function starThread(id: string, starred: boolean): Promise<void> {
+  await patchThread(id, { action: starred ? 'star' : 'unstar' })
+}
+
+export async function markThreadUnread(id: string): Promise<void> {
+  await patchThread(id, { action: 'unread' })
+}
+
+export async function permanentlyDeleteThread(id: string): Promise<void> {
+  await req(`threads/${id}`, { method: 'DELETE' })
+}
+
 export async function searchThreads(q: string): Promise<MailThread[]> {
   const rows = await req<RawThread[]>(`search?${new URLSearchParams({ q })}`)
   return rows.map((t) => toThread(t))
@@ -120,11 +150,15 @@ export async function searchThreads(q: string): Promise<MailThread[]> {
 
 export async function sendMail(payload: {
   from: string
-  to: string
+  to: { name?: string; email: string }[]
+  cc?: { name?: string; email: string }[]
+  bcc?: { name?: string; email: string }[]
   subject: string
   bodyText: string
   bodyHtml?: string
   inReplyTo?: string
+  threadId?: string
+  attachmentIds?: string[]
 }): Promise<void> {
   await req('send', { method: 'POST', body: JSON.stringify(payload) })
 }
@@ -143,6 +177,7 @@ export interface Contact {
   email: string
   phone: string | null
   org: string | null
+  lastContactedAt?: string | null
 }
 
 export async function listContacts(q?: string): Promise<Contact[]> {
@@ -247,7 +282,7 @@ export async function listFiles(opts: { page?: number; search?: string } = {}): 
 export async function uploadFile(file: File): Promise<FileItem> {
   const form = new FormData()
   form.append('file', file)
-  const res = await fetch('/api/mail/files', {
+  const res = await fetch('/mail/api/mail/files', {
     method: 'POST',
     body: form,
   })
@@ -259,7 +294,7 @@ export async function uploadFile(file: File): Promise<FileItem> {
 }
 
 export function downloadFileUrl(id: string): string {
-  return `/api/mail/files/${id}/download`
+  return `/mail/api/mail/files/${id}/download`
 }
 
 export async function deleteFile(id: string): Promise<void> {
@@ -286,6 +321,28 @@ export interface ChannelMessage {
   createdAt: string
 }
 
+interface RawChannelMessage {
+  id: string
+  channel_id: string
+  sender_name: string
+  sender_email: string
+  body: string
+  edited_at: string | null
+  created_at: string
+}
+
+function toChannelMessage(r: RawChannelMessage): ChannelMessage {
+  return {
+    id: r.id,
+    channelId: r.channel_id,
+    senderName: r.sender_name,
+    senderEmail: r.sender_email,
+    body: r.body,
+    editedAt: r.edited_at,
+    createdAt: r.created_at,
+  }
+}
+
 export async function listChannels(): Promise<Channel[]> {
   return req<Channel[]>('channels')
 }
@@ -306,14 +363,15 @@ export async function listChannelMessages(
   if (opts.before) q.set('before', opts.before)
   if (opts.after) q.set('after', opts.after)
   if (opts.limit) q.set('limit', String(opts.limit))
-  return req<ChannelMessage[]>(`channels/${channelId}/messages?${q}`)
+  const raw = await req<RawChannelMessage[]>(`channels/${channelId}/messages?${q}`)
+  return raw.map(toChannelMessage)
 }
 
 export async function postChannelMessage(
   channelId: string,
   body: string,
 ): Promise<ChannelMessage> {
-  return req<ChannelMessage>(`channels/${channelId}/messages`, {
+  const raw = await req<RawChannelMessage>(`channels/${channelId}/messages`, {
     method: 'POST',
     body: JSON.stringify({
       body,
@@ -321,6 +379,7 @@ export async function postChannelMessage(
       senderName: process.env.NEXT_PUBLIC_DISPLAY_NAME ?? '',
     }),
   })
+  return toChannelMessage(raw)
 }
 
 export async function deleteChannelMessage(channelId: string, messageId: string): Promise<void> {

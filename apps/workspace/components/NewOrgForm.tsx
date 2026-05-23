@@ -12,32 +12,21 @@ export function NewOrgForm() {
     setLoading(true)
     setError(null)
     const result = await createOrg(new FormData(e.currentTarget))
-    if (result?.error) {
-      setError(result.error)
-      setLoading(false)
-    }
+    if (result?.error) { setError(result.error); setLoading(false) }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-3">
       <div>
-        <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Organization name</label>
+        <label htmlFor="name" className="block text-xs font-medium text-fg-secondary mb-1.5">Organization name</label>
         <input
-          id="name"
-          name="name"
-          type="text"
-          required
-          autoFocus
+          id="name" name="name" type="text" required autoFocus
           placeholder="Acme Corp"
-          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          className="w-full px-3 py-2.5 rounded-lg border border-border bg-bg-surface text-fg-primary text-sm placeholder:text-fg-tertiary focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-all"
         />
       </div>
-      {error && <p className="text-red-500 text-sm">{error}</p>}
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium py-2.5 rounded-xl text-sm transition-colors"
-      >
+      {error && <p className="text-danger text-xs">⚠ {error}</p>}
+      <button type="submit" disabled={loading} className="w-full bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-fg font-medium py-2.5 rounded-lg text-sm transition-all duration-150">
         {loading ? 'Creating…' : 'Create workspace'}
       </button>
     </form>

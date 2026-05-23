@@ -33,19 +33,19 @@ export function FormulaBar({ selected, selectionEnd }: FormulaBarProps) {
   }
 
   return (
-    <div className="flex items-center border-b border-gray-200 bg-white h-8 text-sm shrink-0">
+    <div className="flex items-center border-b border-border bg-bg-raised h-8 text-sm shrink-0">
       <div
         data-testid="formula-address"
-        className="px-2 border-r border-gray-200 text-gray-500 font-mono text-xs w-24 text-center flex-shrink-0"
+        className="px-2 border-r border-border text-fg-tertiary font-mono text-xs w-24 text-center flex-shrink-0"
       >
         {rangeAddr(selected, selectionEnd)}
       </div>
       <div className="flex items-center px-2 gap-1.5 flex-1 min-w-0">
-        {formula && <span className="text-blue-500 font-mono text-xs shrink-0">fx</span>}
+        {formula && <span className="text-accent font-mono text-xs shrink-0">fx</span>}
         <input
           key={`${selected.sheet}-${selected.row}-${selected.col}`}
           data-testid="formula-value"
-          className="flex-1 font-mono text-xs text-gray-700 bg-transparent outline-none min-w-0"
+          className="flex-1 font-mono text-xs text-fg-primary bg-transparent outline-none min-w-0"
           defaultValue={original}
           onKeyDown={(e) => {
             if (e.key === 'Enter') { commit(e.currentTarget.value); e.currentTarget.blur() }

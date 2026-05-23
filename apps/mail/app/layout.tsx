@@ -1,23 +1,24 @@
 import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import { cookies } from 'next/headers'
 import './globals.css'
 import { requireSession } from '@foundry/auth'
-import { TopNav } from '@foundry/ui'
+
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
 
 export const metadata: Metadata = {
   title: 'Foundry Mail',
-  description: 'Mail — part of the Foundry suite',
+  description: 'Email and calendar — part of the Foundry suite',
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const session = await requireSession()
+  await requireSession()
+  const cookieStore = await cookies()
+  const theme = cookieStore.get('foundry_theme')?.value ?? 'light'
 
   return (
-    <html lang="en">
-      <body className="bg-gray-50 text-gray-900 antialiased flex flex-col min-h-screen">
-        <TopNav session={session} activeApp="mail" orgSlug={session.orgSlug ?? undefined} />
-        <main className="flex-1">{children}</main>
-      </body>
+    <html lang="en" data-theme={theme} className={inter.variable}>
+      <body className="bg-bg-base text-fg-primary antialiased overflow-hidden">{children}</body>
     </html>
   )
 }
-

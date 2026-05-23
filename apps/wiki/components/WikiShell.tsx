@@ -1,10 +1,63 @@
 'use client'
 
-import { useState } from "react"
-import Link from "next/link"
-import { WikiEditor } from "./WikiEditor"
-import { createPage, deletePage } from "@/lib/actions"
-import type { WikiPage, PageTreeNode } from "@/lib/actions"
+import { useState } from 'react'
+import Link from 'next/link'
+import { WikiEditor } from './WikiEditor'
+import { createPage, deletePage } from '@/lib/actions'
+import type { WikiPage, PageTreeNode } from '@/lib/actions'
+
+// ── Icons ──────────────────────────────────────────────────────────────────────
+
+function HomeIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}
+         strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+    </svg>
+  )
+}
+function PageIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}
+         strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+    </svg>
+  )
+}
+function PlusIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}
+         strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M12 5v14M5 12h14"/>
+    </svg>
+  )
+}
+function ChevronLeftIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+         strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M15 19l-7-7 7-7"/>
+    </svg>
+  )
+}
+function ChevronRightIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+         strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M9 18l6-6-6-6"/>
+    </svg>
+  )
+}
+function ChevronDownIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+         strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M19 9l-7 7-7-7"/>
+    </svg>
+  )
+}
+
+// ── Shell ──────────────────────────────────────────────────────────────────────
 
 export function WikiShell({
   page,
@@ -29,25 +82,30 @@ export function WikiShell({
 
   return (
     <div className="h-[calc(100vh-3rem)] flex overflow-hidden">
-      {/* Sidebar */}
+
+      {/* ── Sidebar ─────────────────────────────────────────────────────── */}
       {sidebarOpen && (
-        <aside className="w-60 border-r border-gray-100 flex flex-col flex-shrink-0 bg-gray-50">
-          <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Pages</span>
-            <div className="flex items-center gap-1">
+        <aside className="w-60 border-r border-border flex flex-col flex-shrink-0 bg-bg-surface">
+          <div className="px-3 py-2.5 border-b border-border flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-fg-tertiary uppercase tracking-[0.15em]">
+              Pages
+            </span>
+            <div className="flex items-center gap-0.5">
               <button
                 onClick={() => handleNewPage()}
-                className="text-gray-400 hover:text-gray-700 px-1.5 py-1 rounded hover:bg-gray-100 text-sm leading-none"
                 title="New page"
+                className="w-6 h-6 flex items-center justify-center rounded text-fg-tertiary
+                           hover:text-fg-primary hover:bg-bg-hover transition-colors"
               >
-                +
+                <PlusIcon className="w-3.5 h-3.5" />
               </button>
               <button
                 onClick={() => setSidebarOpen(false)}
-                className="text-gray-400 hover:text-gray-600 px-1.5 py-1 rounded hover:bg-gray-100 text-base leading-none"
-                title="Close sidebar"
+                title="Collapse sidebar"
+                className="w-6 h-6 flex items-center justify-center rounded text-fg-tertiary
+                           hover:text-fg-primary hover:bg-bg-hover transition-colors"
               >
-                ‹
+                <ChevronLeftIcon className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -58,29 +116,36 @@ export function WikiShell({
         </aside>
       )}
 
-      {/* Main */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      {/* ── Main ────────────────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-bg-base">
+
         {/* Breadcrumb bar */}
-        <div className="border-b border-gray-100 px-4 py-2 flex items-center gap-2 flex-shrink-0">
+        <div className="border-b border-border px-4 py-2 flex items-center gap-2 flex-shrink-0 bg-bg-raised">
           {!sidebarOpen && (
             <button
               onClick={() => setSidebarOpen(true)}
-              className="text-gray-400 hover:text-gray-600 mr-1 text-base leading-none px-1.5 py-1 rounded hover:bg-gray-100"
-              title="Open sidebar"
+              title="Expand sidebar"
+              className="w-6 h-6 flex items-center justify-center rounded text-fg-tertiary
+                         hover:text-fg-primary hover:bg-bg-hover transition-colors mr-1"
             >
-              ›
+              <ChevronRightIcon className="w-3.5 h-3.5" />
             </button>
           )}
 
           <nav className="flex items-center gap-1 text-sm flex-1 min-w-0 overflow-hidden">
             {breadcrumbs.map((crumb, i) => (
               <span key={crumb.id} className="flex items-center gap-1 min-w-0 shrink-0 last:shrink">
-                {i > 0 && <span className="text-gray-300">/</span>}
+                {i > 0 && <span className="text-fg-tertiary/60">/</span>}
                 {i === breadcrumbs.length - 1 ? (
-                  <span className="text-gray-700 font-medium overflow-hidden text-ellipsis whitespace-nowrap">{crumb.title || "Untitled"}</span>
+                  <span className="text-fg-primary font-medium overflow-hidden text-ellipsis whitespace-nowrap">
+                    {crumb.title || 'Untitled'}
+                  </span>
                 ) : (
-                  <Link href={`/page/${crumb.id}`} className="text-gray-400 hover:text-gray-700 whitespace-nowrap">
-                    {crumb.title || "Untitled"}
+                  <Link
+                    href={`/page/${crumb.id}`}
+                    className="text-fg-tertiary hover:text-fg-primary whitespace-nowrap transition-colors"
+                  >
+                    {crumb.title || 'Untitled'}
                   </Link>
                 )}
               </span>
@@ -90,14 +155,17 @@ export function WikiShell({
           <div className="flex items-center gap-1 flex-shrink-0">
             <button
               onClick={() => handleNewPage(page.id)}
-              className="text-xs text-gray-400 hover:text-gray-700 px-2 py-1 hover:bg-gray-100 rounded whitespace-nowrap"
+              className="flex items-center gap-1 text-xs text-fg-tertiary hover:text-fg-primary
+                         px-2 py-1 hover:bg-bg-hover rounded whitespace-nowrap transition-colors"
             >
-              + Sub-page
+              <PlusIcon className="w-3 h-3" />
+              Sub-page
             </button>
             {!page.isHome && (
               <button
                 onClick={handleDelete}
-                className="text-xs text-gray-400 hover:text-red-500 px-2 py-1 hover:bg-gray-100 rounded"
+                className="text-xs text-fg-tertiary hover:text-danger px-2 py-1
+                           hover:bg-bg-hover rounded transition-colors"
               >
                 Delete
               </button>
@@ -113,6 +181,8 @@ export function WikiShell({
   )
 }
 
+// ── Page tree ──────────────────────────────────────────────────────────────────
+
 function PageTree({
   nodes,
   activePage,
@@ -125,9 +195,10 @@ function PageTree({
   depth?: number
 }) {
   return (
-    <ul className="space-y-0.5">
+    <ul className="space-y-px">
       {nodes.map((node) => (
-        <PageTreeItem key={node.id} node={node} activePage={activePage} onNewChild={onNewChild} depth={depth} />
+        <PageTreeItem key={node.id} node={node} activePage={activePage}
+                      onNewChild={onNewChild} depth={depth} />
       ))}
     </ul>
   )
@@ -145,37 +216,58 @@ function PageTreeItem({
   depth: number
 }) {
   const [expanded, setExpanded] = useState(node.isHome || isAncestor(node, activePage.id))
-  const isActive = node.id === activePage.id
+  const isActive   = node.id === activePage.id
   const hasChildren = node.children.length > 0
 
   return (
     <li>
       <div
-        className={`flex items-center gap-1 group rounded px-2 py-1 ${
-          isActive ? "bg-green-50 text-green-800" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+        className={`flex items-center gap-1 group rounded-md transition-colors ${
+          isActive
+            ? 'bg-accent/10 text-accent'
+            : 'text-fg-secondary hover:bg-bg-hover hover:text-fg-primary'
         }`}
-        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+        style={{ paddingLeft: `${depth * 12 + 6}px`, paddingRight: '4px' }}
       >
+        {/* Expand / collapse */}
         <button
           onClick={() => setExpanded((v) => !v)}
-          className={`w-4 h-4 flex items-center justify-center text-gray-400 flex-shrink-0 ${!hasChildren ? "invisible" : ""}`}
+          className={`w-5 h-5 flex items-center justify-center flex-shrink-0 rounded
+                      text-fg-tertiary hover:text-fg-primary transition-colors
+                      ${!hasChildren ? 'invisible pointer-events-none' : ''}`}
         >
-          <span className="text-xs">{expanded ? "▾" : "▸"}</span>
+          {expanded
+            ? <ChevronDownIcon className="w-3 h-3" />
+            : <ChevronRightIcon className="w-3 h-3" />}
         </button>
-        <Link href={`/page/${node.id}`} className="flex-1 text-sm overflow-hidden text-ellipsis whitespace-nowrap">
-          {node.isHome ? "🏠 Home" : (node.title || "Untitled")}
+
+        {/* Page link */}
+        <Link
+          href={`/page/${node.id}`}
+          className="flex-1 flex items-center gap-1.5 py-1 text-sm overflow-hidden
+                     text-ellipsis whitespace-nowrap"
+        >
+          {node.isHome
+            ? <><HomeIcon className="w-3.5 h-3.5 flex-shrink-0" /><span>Home</span></>
+            : <><PageIcon className="w-3.5 h-3.5 flex-shrink-0 opacity-40" /><span className="truncate">{node.title || 'Untitled'}</span></>
+          }
         </Link>
+
+        {/* Add sub-page (hover) */}
         <button
           onClick={(e) => { e.preventDefault(); onNewChild(node.id) }}
-          className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-700 text-sm leading-none px-0.5 flex-shrink-0"
           title="Add sub-page"
+          className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center
+                     flex-shrink-0 rounded text-fg-tertiary hover:text-fg-primary
+                     hover:bg-bg-active transition-all"
         >
-          +
+          <PlusIcon className="w-3 h-3" />
         </button>
       </div>
 
       {expanded && hasChildren && (
-        <PageTree nodes={node.children} activePage={activePage} onNewChild={onNewChild} depth={depth + 1} />
+        <PageTree nodes={node.children} activePage={activePage}
+                  onNewChild={onNewChild} depth={depth + 1} />
       )}
     </li>
   )

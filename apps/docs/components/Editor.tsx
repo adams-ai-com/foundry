@@ -20,7 +20,6 @@ import { updateDocument, deleteDocument } from '@/lib/actions'
 import type { Document } from '@/lib/actions'
 
 type JSONContent = Record<string, unknown>
-
 const AUTOSAVE_MS = 1500
 
 function isDocEmpty(title: string, content: JSONContent): boolean {
@@ -58,23 +57,17 @@ export function Editor({ doc }: { doc: Document }) {
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
-      Underline,
-      TextStyle,
+      StarterKit, Underline, TextStyle,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Link.configure({ openOnClick: false }),
       Image,
       Table.configure({ resizable: true }),
-      TableRow,
-      TableHeader,
-      TableCell,
+      TableRow, TableHeader, TableCell,
       Placeholder.configure({ placeholder: 'Start writing…' }),
     ],
     content: Object.keys(doc.content).length ? (doc.content as JSONContent) : '',
     editorProps: {
-      attributes: {
-        class: 'tiptap prose max-w-none p-12 min-h-full focus:outline-none',
-      },
+      attributes: { class: 'tiptap prose max-w-none p-12 min-h-full focus:outline-none' },
     },
     onUpdate({ editor }) {
       scheduleSave(titleRef.current, editor.getJSON())
@@ -97,15 +90,9 @@ export function Editor({ doc }: { doc: Document }) {
   }
 
   async function handleBack() {
-    if (saveTimer.current) {
-      clearTimeout(saveTimer.current)
-      saveTimer.current = null
-    }
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
     const content = editor?.getJSON() ?? {}
-    if (isDocEmpty(titleRef.current, content)) {
-      await deleteDocument(doc.id)
-      return
-    }
+    if (isDocEmpty(titleRef.current, content)) { await deleteDocument(doc.id); return }
     await save(titleRef.current, content)
     window.location.href = '/docs'
   }
@@ -150,26 +137,27 @@ export function Editor({ doc }: { doc: Document }) {
   }, [])
 
   const saveIndicator =
-    saveState === 'saving'
-      ? { dot: 'bg-amber-400 animate-pulse', text: 'Saving…', textColor: 'text-gray-400' }
-      : saveState === 'unsaved'
-      ? { dot: 'bg-amber-400', text: 'Unsaved', textColor: 'text-amber-600' }
-      : { dot: 'bg-green-500', text: 'Saved', textColor: 'text-gray-400' }
+    saveState === 'saving'  ? { dot: 'bg-amber-400 animate-pulse', text: 'Saving…',  color: 'text-fg-tertiary' } :
+    saveState === 'unsaved' ? { dot: 'bg-amber-400',               text: 'Unsaved',  color: 'text-amber-500' } :
+                              { dot: 'bg-emerald-500',             text: 'Saved',    color: 'text-fg-tertiary' }
+
+  const panelBtn = (active: boolean) =>
+    `p-1.5 rounded transition-colors ${active ? 'bg-bg-active text-accent' : 'text-fg-tertiary hover:text-fg-primary hover:bg-bg-hover'}`
 
   return (
     <>
-      {/* Header bar */}
-      <div className="flex items-center gap-4 px-4 py-2.5 bg-white border-b border-gray-200 shrink-0">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-2 bg-bg-raised border-b border-border shrink-0">
         <button
           onClick={handleBack}
-          className="flex items-center gap-1.5 text-gray-500 hover:text-gray-900 text-sm font-medium transition-colors shrink-0 group"
+          className="flex items-center gap-1.5 text-fg-secondary hover:text-fg-primary text-sm font-medium transition-colors shrink-0 group"
         >
           <svg className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/>
           </svg>
           Docs
         </button>
-        <div className="w-px h-5 bg-gray-200 shrink-0" />
+        <div className="w-px h-4 bg-border shrink-0" />
         <input
           type="text"
           value={title}
@@ -177,68 +165,47 @@ export function Editor({ doc }: { doc: Document }) {
           onBlur={handleTitleBlur}
           placeholder="Untitled"
           data-testid="doc-title"
-          className="flex-1 text-base font-semibold text-gray-900 bg-transparent border-none outline-none placeholder-gray-300 min-w-0"
+          className="flex-1 text-sm font-semibold text-fg-primary bg-transparent border-none outline-none placeholder:text-fg-tertiary min-w-0"
         />
         <div className="flex items-center gap-1 shrink-0">
-          {/* Save state */}
-          <div className="flex items-center gap-2 mr-2" data-testid="save-state">
-            <span className={`w-2 h-2 rounded-full shrink-0 ${saveIndicator.dot}`} />
-            <span className={`text-xs ${saveIndicator.textColor} hidden sm:block`}>
-              {saveIndicator.text}
-            </span>
+          <div className="flex items-center gap-1.5 mr-2" data-testid="save-state">
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${saveIndicator.dot}`} />
+            <span className={`text-xs ${saveIndicator.color} hidden sm:block`}>{saveIndicator.text}</span>
           </div>
 
-          {/* Import */}
           <input ref={importRef} type="file" accept=".docx" className="hidden" onChange={handleImport} />
           <button
             title="Import .docx"
             disabled={importing}
             onClick={() => importRef.current?.click()}
-            className="text-xs text-gray-500 hover:text-gray-900 px-2.5 py-1.5 rounded hover:bg-gray-100 transition-colors font-medium disabled:opacity-50"
+            className="text-xs text-fg-secondary hover:text-fg-primary px-2.5 py-1.5 rounded hover:bg-bg-hover transition-colors font-medium disabled:opacity-50"
           >
             {importing ? 'Importing…' : 'Import'}
           </button>
-
-          {/* Export */}
           <a
             href={`/docs/api/export/${doc.id}`}
             download
-            title="Export as .docx"
-            className="text-xs text-gray-500 hover:text-gray-900 px-2.5 py-1.5 rounded hover:bg-gray-100 transition-colors font-medium"
+            className="text-xs text-fg-secondary hover:text-fg-primary px-2.5 py-1.5 rounded hover:bg-bg-hover transition-colors font-medium"
           >
             Export
           </a>
 
-          <div className="w-px h-4 bg-gray-200 mx-1" />
+          <div className="w-px h-4 bg-border mx-1" />
 
-          {/* Comments toggle */}
-          <button
-            title="Comments"
-            onClick={() => { setShowComments((v) => !v); setShowHistory(false) }}
-            className={`p-1.5 rounded transition-colors ${showComments ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
+          <button title="Comments" onClick={() => { setShowComments(v => !v); setShowHistory(false) }} className={panelBtn(showComments)}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
           </button>
-
-          {/* Version history toggle */}
-          <button
-            title="Version history"
-            onClick={() => { setShowHistory((v) => !v); setShowComments(false) }}
-            className={`p-1.5 rounded transition-colors ${showHistory ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+          <button title="Version history" onClick={() => { setShowHistory(v => !v); setShowComments(false) }} className={panelBtn(showHistory)}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           </button>
         </div>
       </div>
 
       <Toolbar editor={editor} />
 
-      <div className="flex-1 overflow-y-auto bg-gray-100">
-        <div className="max-w-[816px] mx-auto my-8 mb-16 bg-white shadow-sm border border-gray-200 rounded-sm min-h-[calc(100vh-180px)]">
+      {/* Canvas */}
+      <div className="flex-1 overflow-y-auto bg-bg-surface">
+        <div className="max-w-[816px] mx-auto my-8 mb-16 bg-bg-raised shadow-card border border-border rounded-sm min-h-[calc(100vh-180px)]">
           <EditorContent editor={editor} className="h-full" />
         </div>
       </div>
@@ -252,12 +219,8 @@ export function Editor({ doc }: { doc: Document }) {
           onSaveNamed={handleSaveNamed}
         />
       )}
-
       {showComments && (
-        <Comments
-          documentId={doc.id}
-          onClose={() => setShowComments(false)}
-        />
+        <Comments documentId={doc.id} onClose={() => setShowComments(false)} />
       )}
     </>
   )
