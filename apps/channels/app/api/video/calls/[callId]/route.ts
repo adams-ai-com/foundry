@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@foundry/auth'
 import db from '@/lib/db'
 import { broadcastToOrg } from '@/lib/sse'
+import { runPostCallPipeline } from '@/lib/video-pipeline'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,6 +68,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       channelId: call.channel_id,
       topicId: call.topic_id,
     })
+    // Fire post-call pipeline asynchronously — do not block the response
+    void runPostCallPipeline(callId, session.orgId)
   }
 
   return NextResponse.json({ ok: true })
