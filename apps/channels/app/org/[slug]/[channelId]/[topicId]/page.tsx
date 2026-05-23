@@ -11,7 +11,8 @@ type Summary = { bullets: string[]; action_items: string[]; generated_at: string
 type Top = { id: string; name: string; last_message_at: string | null; message_count: number; is_resolved: boolean; summary: Summary | null }
 type Reaction = { emoji: string; user_ids: string[] }
 type Msg = { id: string; author_id: string; author_name: string; author_email: string; body: string; reactions: Reaction[]; edited_at: string | null; created_at: string }
-type DM  = { id: string; metadata: { participants: { id: string; name: string; email: string }[] }; topic_id: string | null; last_message_at: string | null }
+type DM         = { id: string; metadata: { participants: { id: string; name: string; email: string }[] }; topic_id: string | null; last_message_at: string | null }
+type ActiveCall = { id: string; title: string; createdByName: string }
 
 type Props = { params: Promise<{ slug: string; channelId: string; topicId: string }> }
 
@@ -22,7 +23,7 @@ export default async function TopicPage({ params }: Props) {
 
   const orgId = session.orgId!
 
-  const [channelsRaw, activeChannelRaw, topicsRaw, messagesRaw, dmsRaw] = await Promise.all([
+  const [channelsRaw, activeChannelRaw, topicsRaw, messagesRaw, dmsRaw, activeCallRaw] = await Promise.all([
     db`
       SELECT id, name, description, type, is_private
       FROM channels
@@ -56,6 +57,14 @@ export default async function TopicPage({ params }: Props) {
       WHERE c.org_id = ${orgId} AND c.type = 'dm' AND c.is_archived = false
       ORDER BY t.last_message_at DESC NULLS LAST
     `,
+    topicId === '_new'
+      ? Promise.resolve([])
+      : db`
+          SELECT id, title, created_by_name
+          FROM video_calls
+          WHERE topic_id = ${topicId} AND org_id = ${orgId} AND status IN ('waiting', 'active')
+          ORDER BY created_at DESC LIMIT 1
+        `,
   ])
 
   const channels = channelsRaw as unknown as Ch[]
@@ -63,6 +72,7 @@ export default async function TopicPage({ params }: Props) {
   const topics = topicsRaw as unknown as Top[]
   const messages = messagesRaw as unknown as Msg[]
   const dms = dmsRaw as unknown as DM[]
+  const activeCall = (activeCallRaw[0] ?? null) as unknown as ActiveCall | null
 
   if (!activeChannel) redirect(`/org/${slug}`)
 
@@ -87,6 +97,7 @@ export default async function TopicPage({ params }: Props) {
       initialMessages={messages}
       initialDms={dms}
       initialSummary={activeTopic?.summary ?? null}
+      initialActiveCall={activeCall}
     />
   )
 }
