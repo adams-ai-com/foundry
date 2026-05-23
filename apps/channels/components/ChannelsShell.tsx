@@ -5,40 +5,55 @@ import type { SessionUser } from '@foundry/auth'
 import { StreamList } from './StreamList'
 import { MessagePanel } from './MessagePanel'
 
-type Channel   = { id: string; name: string; type: string }
-type Topic     = { id: string; name: string; last_message_at: string | null; message_count: number; is_resolved: boolean }
-type Message   = { id: string; author_id: string; author_name: string; author_email: string; body: string; reactions: unknown[]; edited_at: string | null; created_at: string }
+type Channel = { id: string; name: string; type: string }
+type Topic   = { id: string; name: string; last_message_at: string | null; message_count: number; is_resolved: boolean }
+type Message = { id: string; author_id: string; author_name: string; author_email: string; body: string; reactions: { emoji: string; user_ids: string[] }[]; edited_at: string | null; created_at: string }
+type DM      = { id: string; metadata: { participants: { id: string; name: string; email: string }[] }; topic_id: string | null; last_message_at: string | null }
 
 interface Props {
-  session:          SessionUser
-  orgSlug:          string
-  theme:            'light' | 'dark' | 'warm'
-  channels:         Channel[]
-  activeChannelId:  string
-  activeChannel:    { id: string; name: string }
-  topics:           Topic[]
-  activeTopicId:    string
-  activeTopic:      { id: string; name: string } | null
-  initialMessages:  Message[]
+  session:         SessionUser
+  orgSlug:         string
+  theme:           'light' | 'dark' | 'warm'
+  channels:        Channel[]
+  activeChannelId: string
+  activeChannel:   { id: string; name: string }
+  topics:          Topic[]
+  activeTopicId:   string
+  activeTopic:     { id: string; name: string; is_resolved: boolean } | null
+  initialMessages: Message[]
+  initialDms:      DM[]
 }
 
 export function ChannelsShell({
   session, orgSlug, theme,
   channels, activeChannelId, activeChannel,
-  topics, activeTopicId, activeTopic, initialMessages,
+  topics, activeTopicId, activeTopic, initialMessages, initialDms,
 }: Props) {
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [liveTopics, setLiveTopics] = useState<Topic[]>(topics)
+  const [liveActiveTopic, setLiveActiveTopic] = useState(activeTopic)
+  const [dms, setDms] = useState<DM[]>(initialDms)
+  const [unread, setUnread] = useState<Record<string, number>>({})
   const sseRef = useRef<EventSource | null>(null)
 
-  // Re-sync when the page navigates to a different topic
-  useEffect(() => {
-    setMessages(initialMessages)
-  }, [activeTopicId, initialMessages])
+  useEffect(() => { setMessages(initialMessages) }, [activeTopicId, initialMessages])
+  useEffect(() => { setLiveTopics(topics) }, [topics])
+  useEffect(() => { setLiveActiveTopic(activeTopic) }, [activeTopic])
 
+  // Load unread counts
   useEffect(() => {
-    setLiveTopics(topics)
-  }, [topics])
+    fetch('/api/channels/unread')
+      .then(r => r.json())
+      .then((data: Record<string, number>) => setUnread(data))
+      .catch(() => {})
+  }, [activeTopicId])
+
+  // Clear unread for current topic
+  useEffect(() => {
+    if (activeTopicId && activeTopicId !== '_new') {
+      setUnread(prev => { const next = { ...prev }; delete next[activeTopicId]; return next })
+    }
+  }, [activeTopicId])
 
   // SSE connection
   useEffect(() => {
@@ -48,23 +63,53 @@ export function ChannelsShell({
     es.onmessage = (e) => {
       try {
         const event = JSON.parse(e.data as string) as {
-          type: string; channelId: string; topicId: string; message: Message
+          type: string
+          channelId: string
+          topicId?: string
+          messageId?: string
+          message?: Message
+          topic?: Topic
         }
-        if (event.type === 'message:new') {
-          // Update message list if we're on that topic
+
+        if (event.type === 'message:new' && event.message) {
           if (event.channelId === activeChannelId && event.topicId === activeTopicId) {
-            setMessages(prev => {
-              if (prev.some(m => m.id === event.message.id)) return prev
-              return [...prev, event.message]
-            })
+            setMessages(prev => prev.some(m => m.id === event.message!.id) ? prev : [...prev, event.message!])
+          } else if (event.topicId && event.topicId !== activeTopicId) {
+            setUnread(prev => ({ ...prev, [event.topicId!]: (prev[event.topicId!] ?? 0) + 1 }))
           }
-          // Update topic last_message_at in sidebar
-          if (event.channelId === activeChannelId) {
+          if (event.channelId === activeChannelId && event.topicId) {
             setLiveTopics(prev => prev.map(t =>
               t.id === event.topicId
-                ? { ...t, last_message_at: event.message.created_at, message_count: t.message_count + 1 }
+                ? { ...t, last_message_at: event.message!.created_at, message_count: t.message_count + 1 }
                 : t
             ))
+          }
+        }
+
+        if (event.type === 'message:edit' && event.message) {
+          if (event.channelId === activeChannelId && event.topicId === activeTopicId) {
+            setMessages(prev => prev.map(m => m.id === event.message!.id ? event.message! : m))
+          }
+        }
+
+        if (event.type === 'message:delete' && event.messageId) {
+          if (event.channelId === activeChannelId && event.topicId === activeTopicId) {
+            setMessages(prev => prev.filter(m => m.id !== event.messageId))
+          }
+        }
+
+        if (event.type === 'message:reaction' && event.message) {
+          if (event.channelId === activeChannelId && event.topicId === activeTopicId) {
+            setMessages(prev => prev.map(m => m.id === event.message!.id ? event.message! : m))
+          }
+        }
+
+        if (event.type === 'topic:resolve' && event.topic) {
+          if (event.channelId === activeChannelId) {
+            setLiveTopics(prev => prev.map(t => t.id === event.topic!.id ? { ...t, ...event.topic! } : t))
+            if (event.topic.id === activeTopicId) {
+              setLiveActiveTopic(prev => prev ? { ...prev, is_resolved: event.topic!.is_resolved } : prev)
+            }
           }
         }
       } catch {}
@@ -72,6 +117,20 @@ export function ChannelsShell({
 
     return () => es.close()
   }, [activeChannelId, activeTopicId])
+
+  async function toggleResolve() {
+    if (!liveActiveTopic) return
+    const res = await fetch(`/api/channels/${activeChannelId}/topics/${activeTopicId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_resolved: !liveActiveTopic.is_resolved }),
+    })
+    if (res.ok) {
+      const updated = await res.json() as Topic
+      setLiveActiveTopic(prev => prev ? { ...prev, is_resolved: updated.is_resolved } : prev)
+      setLiveTopics(prev => prev.map(t => t.id === activeTopicId ? { ...t, is_resolved: updated.is_resolved } : t))
+    }
+  }
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -119,7 +178,7 @@ export function ChannelsShell({
         </div>
       </header>
 
-      {/* Body: sidebar + main */}
+      {/* Body */}
       <div className="flex flex-1 overflow-hidden">
         <StreamList
           orgSlug={orgSlug}
@@ -128,6 +187,8 @@ export function ChannelsShell({
           topics={liveTopics}
           activeTopicId={activeTopicId}
           userId={session.userId}
+          unread={unread}
+          dms={dms}
         />
 
         <MessagePanel
@@ -136,14 +197,14 @@ export function ChannelsShell({
           channelId={activeChannelId}
           channelName={activeChannel.name}
           topicId={activeTopicId}
-          topicName={activeTopic?.name ?? null}
+          topicName={liveActiveTopic?.name ?? null}
+          isResolved={liveActiveTopic?.is_resolved ?? false}
           messages={messages}
-          onNewMessage={(msg) => {
-            setMessages(prev => {
-              if (prev.some(m => m.id === msg.id)) return prev
-              return [...prev, msg]
-            })
-          }}
+          onNewMessage={msg => setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg])}
+          onEditMessage={msg => setMessages(prev => prev.map(m => m.id === msg.id ? msg : m))}
+          onDeleteMessage={id => setMessages(prev => prev.filter(m => m.id !== id))}
+          onReactMessage={msg => setMessages(prev => prev.map(m => m.id === msg.id ? msg : m))}
+          onToggleResolve={toggleResolve}
         />
       </div>
     </div>
