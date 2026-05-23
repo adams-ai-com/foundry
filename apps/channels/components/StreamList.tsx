@@ -28,6 +28,7 @@ export function StreamList({ orgSlug, channels, activeChannelId, topics, activeT
   const [newTopicName, setNewTopicName] = useState('')
   const [showNewTopic, setShowNewTopic] = useState(false)
   const [showResolved, setShowResolved] = useState(false)
+  const [topicSearch, setTopicSearch] = useState('')
   const [creating, setCreating] = useState(false)
 
   async function createChannel() {
@@ -138,7 +139,17 @@ export function StreamList({ orgSlug, channels, activeChannelId, topics, activeT
 
               {isActive && (
                 <div className="ml-5 border-l border-border pl-2">
-                  {visibleTopics.map(topic => {
+                  {channelTopics.length > 4 && (
+                    <div className="px-2 py-1">
+                      <input
+                        value={topicSearch}
+                        onChange={e => setTopicSearch(e.target.value)}
+                        placeholder="Search topics…"
+                        className="w-full bg-bg-raised border border-border rounded px-2 py-0.5 text-xs text-fg-primary placeholder:text-fg-tertiary focus:outline-none focus:border-accent"
+                      />
+                    </div>
+                  )}
+                  {visibleTopics.filter(t => !topicSearch || t.name.toLowerCase().includes(topicSearch.toLowerCase())).map(topic => {
                     const topicUnread = unread[topic.id] ?? 0
                     const isActiveTopic = topic.id === activeTopicId
                     return (
@@ -162,7 +173,7 @@ export function StreamList({ orgSlug, channels, activeChannelId, topics, activeT
                         )}
                       </a>
                     )
-                  })}
+                  }).filter(Boolean)}
 
                   {resolvedCount > 0 && (
                     <button

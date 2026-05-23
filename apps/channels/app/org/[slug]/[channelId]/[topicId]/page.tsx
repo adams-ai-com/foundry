@@ -7,7 +7,8 @@ import { ChannelsShell } from '@/components/ChannelsShell'
 export const dynamic = 'force-dynamic'
 
 type Ch  = { id: string; name: string; type: string }
-type Top = { id: string; name: string; last_message_at: string | null; message_count: number; is_resolved: boolean }
+type Summary = { bullets: string[]; action_items: string[]; generated_at: string }
+type Top = { id: string; name: string; last_message_at: string | null; message_count: number; is_resolved: boolean; summary: Summary | null }
 type Reaction = { emoji: string; user_ids: string[] }
 type Msg = { id: string; author_id: string; author_name: string; author_email: string; body: string; reactions: Reaction[]; edited_at: string | null; created_at: string }
 type DM  = { id: string; metadata: { participants: { id: string; name: string; email: string }[] }; topic_id: string | null; last_message_at: string | null }
@@ -32,7 +33,7 @@ export default async function TopicPage({ params }: Props) {
       SELECT id, name FROM channels WHERE id = ${channelId} AND org_id = ${orgId}
     `,
     db`
-      SELECT id, name, last_message_at, message_count, is_resolved
+      SELECT id, name, last_message_at, message_count, is_resolved, summary
       FROM channel_topics
       WHERE channel_id = ${channelId} AND org_id = ${orgId}
       ORDER BY COALESCE(last_message_at, created_at) DESC
@@ -85,6 +86,7 @@ export default async function TopicPage({ params }: Props) {
       activeTopic={activeTopic}
       initialMessages={messages}
       initialDms={dms}
+      initialSummary={activeTopic?.summary ?? null}
     />
   )
 }
