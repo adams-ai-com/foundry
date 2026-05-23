@@ -328,6 +328,7 @@ export async function setPrimaryDomain(domainId: string, _fd: FormData): Promise
     await sql`UPDATE domains SET is_primary = false WHERE org_id = ${session.orgId!}`
     await sql`UPDATE domains SET is_primary = true  WHERE id = ${domainId}`
   })
+  await writeAudit({ orgId: session.orgId!, actorId: session.userId, actorEmail: session.email, action: 'domain.set_primary', metadata: { domain: row.domain } })
 
   redirect(`/admin/domains?msg=${encodeURIComponent(row.domain + ' is now the primary domain')}`)
 }
@@ -540,7 +541,7 @@ export async function forceSignOutAll(userId: string, _fd: FormData): Promise<vo
   if (!canActOn(session.role!, target.role)) redirect('/admin/sessions?err=Insufficient+permissions')
 
   const result = await db`
-    DELETE FROM sessions WHERE user_id = ${userId} AND org_id = ${session.orgId!}
+    DELETE FROM sessions WHERE user_id = ${userId}
     RETURNING id
   `
   await writeAudit({
@@ -592,7 +593,7 @@ export async function updateSmtpConfig(formData: FormData): Promise<void> {
       relay_host     = EXCLUDED.relay_host,
       relay_port     = EXCLUDED.relay_port,
       relay_username = EXCLUDED.relay_username,
-      relay_password = CASE WHEN EXCLUDED.relay_password = '' THEN smtp_config.relay_password
+      relay_password = CASE WHEN EXCLUDED.relay_password IS NULL THEN smtp_config.relay_password
                             ELSE EXCLUDED.relay_password END,
       from_address   = EXCLUDED.from_address,
       from_name      = EXCLUDED.from_name,

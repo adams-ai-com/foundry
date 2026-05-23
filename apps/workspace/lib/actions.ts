@@ -19,7 +19,6 @@ const COOKIE_OPTS = {
   path: '/',
 }
 
-// Rate limit: lock after this many bad codes
 const TOTP_LOCK_THRESHOLD = 5
 const TOTP_LOCK_MINUTES = 15
 
@@ -85,19 +84,24 @@ export async function verifyTotp(formData: FormData) {
   if (!verifyCode(user.totp_secret as string, code)) {
     const orgRows = await db`SELECT org_id FROM org_members WHERE user_id = ${user.id} LIMIT 1`
     const orgId = (orgRows[0]?.org_id ?? null) as string | null
-    await writeAudit({ orgId, actorId: user.id as string, actorEmail: email, action: 'auth.sign_in_failed', metadata: { reason: 'bad_totp' } })
 
-    const newCount = (user.totp_failed_count as number) + 1
-    const shouldLock = newCount >= TOTP_LOCK_THRESHOLD
-    await db`
+    const updated = await db`
       UPDATE users SET
-        totp_failed_count = ${newCount},
-        totp_locked_until = ${shouldLock ? db.unsafe(`NOW() + INTERVAL '${TOTP_LOCK_MINUTES} minutes'`) : db`totp_locked_until`}
+        totp_failed_count = totp_failed_count + 1,
+        totp_locked_until = CASE
+          WHEN totp_failed_count + 1 >= ${TOTP_LOCK_THRESHOLD}
+          THEN NOW() + (${TOTP_LOCK_MINUTES} * INTERVAL '1 minute')
+          ELSE totp_locked_until
+        END
       WHERE id = ${user.id}
+      RETURNING totp_failed_count
     `
+    const newCount = updated[0].totp_failed_count as number
+    const isNowLocked = newCount >= TOTP_LOCK_THRESHOLD
 
-    if (shouldLock) {
-      // Alert the org's contact email
+    await writeAudit({ orgId, actorId: user.id as string, actorEmail: email, action: 'auth.sign_in_failed', metadata: { reason: 'bad_totp', locked: isNowLocked } })
+
+    if (isNowLocked) {
       void sendLockAlert(user.id as string, email, orgId).catch(() => {})
       return { error: `Too many failed attempts. Account locked for ${TOTP_LOCK_MINUTES} minutes.` }
     }
@@ -122,8 +126,8 @@ export async function verifyTotp(formData: FormData) {
   }
 
   const { ip, ua } = await getRequestMeta()
-  const sessionId = await createSession(user.id as string, orgId, { ip, ua })
-  await setSessionCookie(sessionId)
+  const { sessionId, timeoutHours } = await createSession(user.id as string, orgId, { ip, ua })
+  await setSessionCookie(sessionId, timeoutHours)
   await writeAudit({ orgId, actorId: user.id as string, actorEmail: user.email as string, action: 'auth.sign_in' })
 
   const returnTo = jar.get('foundry_return_to')?.value
@@ -186,8 +190,8 @@ export async function confirmTotpSetup(formData: FormData) {
   }
 
   const { ip, ua } = await getRequestMeta()
-  const sessionId = await createSession(userId, orgId, { ip, ua })
-  await setSessionCookie(sessionId)
+  const { sessionId, timeoutHours } = await createSession(userId, orgId, { ip, ua })
+  await setSessionCookie(sessionId, timeoutHours)
   await writeAudit({ orgId, actorId: userId, actorEmail: email, action: 'auth.totp_setup' })
   redirect('/')
 }
