@@ -29,8 +29,14 @@ export async function POST(_req: NextRequest, { params }: Params) {
   const session = await getSession()
   if (!session?.orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return NextResponse.json({ error: 'AI features not configured' }, { status: 503 })
+  // OpenAI-compatible config — works with Ollama, OpenAI, Groq, Anthropic compat, etc.
+  const aiBaseUrl = process.env.AI_BASE_URL   // e.g. http://localhost:11434/v1
+  const aiModel   = process.env.AI_MODEL      // e.g. llama3.1:8b
+  const aiApiKey  = process.env.AI_API_KEY    // optional for local Ollama
+
+  if (!aiBaseUrl || !aiModel) {
+    return NextResponse.json({ error: 'AI features not configured' }, { status: 503 })
+  }
 
   const { id, topicId } = await params
 
@@ -74,24 +80,24 @@ Rules:
 - action_items: specific tasks or next steps mentioned, or empty array if none
 - No markdown, no explanation — just the JSON object`
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (aiApiKey) headers['Authorization'] = `Bearer ${aiApiKey}`
+
+  const res = await fetch(`${aiBaseUrl}/chat/completions`, {
     method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 512,
+      model: aiModel,
       messages: [{ role: 'user', content: prompt }],
+      max_tokens: 512,
+      temperature: 0.3,
     }),
   })
 
   if (!res.ok) return NextResponse.json({ error: 'AI request failed' }, { status: 502 })
 
-  const aiData = await res.json() as { content: { type: string; text: string }[] }
-  const text = aiData.content.find(c => c.type === 'text')?.text ?? ''
+  const aiData = await res.json() as { choices: { message: { content: string } }[] }
+  const text = aiData.choices?.[0]?.message?.content ?? ''
 
   let parsed: { bullets: string[]; action_items: string[] }
   try {
