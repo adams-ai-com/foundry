@@ -8,8 +8,12 @@ import {
   listChannelMessages,
   postChannelMessage,
   deleteChannelMessage,
+  editChannelMessage,
+  listChannelReactions,
+  toggleChannelReaction,
   type Channel,
   type ChannelMessage,
+  type Reaction,
 } from '../lib/api'
 
 const SENDER_EMAIL = process.env.NEXT_PUBLIC_MAIL_FROM ?? 'user@foundry.local'
@@ -47,6 +51,10 @@ export function ChannelsView() {
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [showNewChannel, setShowNewChannel] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState('')
+  const [reactions, setReactions] = useState<Record<string, Reaction[]>>({})
+  const [pickerMsgId, setPickerMsgId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const lastMessageIdRef = useRef<string | null>(null)
   const esRef = useRef<EventSource | null>(null)
@@ -68,6 +76,7 @@ export function ChannelsView() {
 
     setLoadingMessages(true)
     setMessages([])
+    setReactions({})
     lastMessageIdRef.current = null
 
     // Close any existing SSE connection
@@ -149,6 +158,45 @@ export function ChannelsView() {
     const updated = channels.filter((c) => c.id !== ch.id)
     setChannels(updated)
     if (activeChannel?.id === ch.id) setActiveChannel(updated[0] ?? null)
+  }
+  function startEdit(msg: ChannelMessage) {
+    setEditingId(msg.id)
+    setEditDraft(msg.body)
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setEditDraft('')
+  }
+
+  async function saveEdit(msg: ChannelMessage) {
+    if (!activeChannel || !editDraft.trim() || editDraft.trim() === msg.body) { cancelEdit(); return }
+    const updated = await editChannelMessage(activeChannel.id, msg.id, editDraft.trim())
+    setMessages((prev) => prev.map((m) => m.id === msg.id ? updated : m))
+    cancelEdit()
+  }
+
+  async function handleToggleReaction(msg: ChannelMessage, emoji: string) {
+    if (!activeChannel) return
+    setPickerMsgId(null)
+    // optimistic update
+    setReactions((prev) => {
+      const msgReactions = [...(prev[msg.id] ?? [])]
+      const idx = msgReactions.findIndex((r) => r.emoji === emoji)
+      if (idx >= 0) {
+        const r = msgReactions[idx]
+        if (r.count <= 1) msgReactions.splice(idx, 1)
+        else msgReactions[idx] = { ...r, count: r.count - 1, selfReacted: false }
+      } else {
+        msgReactions.push({ emoji, count: 1, selfReacted: true })
+      }
+      return { ...prev, [msg.id]: msgReactions }
+    })
+    // confirm with server
+    await toggleChannelReaction(activeChannel.id, msg.id, emoji).catch(() => {
+      // revert on error by re-fetching
+      listChannelReactions(activeChannel.id).then(setReactions).catch(() => {})
+    })
   }
 
   function shouldShowHeader(i: number): boolean {
@@ -250,18 +298,93 @@ export function ChannelsView() {
                         </div>
                       )}
                       <div className="flex items-start pl-9 gap-2">
-                        <p className="text-sm text-fg-secondary whitespace-pre-wrap flex-1 leading-relaxed">
-                          {msg.body}
-                        </p>
-                        {isOwn && (
-                          <button
-                            onClick={() => handleDeleteMessage(msg)}
-                            className="opacity-0 group-hover:opacity-100 text-xs text-fg-tertiary hover:text-danger flex-shrink-0 mt-0.5 transition-opacity"
-                          >
-                            ×
-                          </button>
+                        {editingId === msg.id ? (
+                          <div className="flex-1 flex flex-col gap-1">
+                            <textarea
+                              autoFocus
+                              value={editDraft}
+                              onChange={(e) => setEditDraft(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(msg) }
+                                if (e.key === 'Escape') cancelEdit()
+                              }}
+                              className="w-full bg-bg-raised border border-accent rounded px-2 py-1 text-sm text-fg-primary resize-none focus:outline-none"
+                              rows={2}
+                            />
+                            <div className="flex gap-2 text-xs">
+                              <button onClick={() => saveEdit(msg)} className="text-accent hover:text-accent/80 transition-colors">Save</button>
+                              <button onClick={cancelEdit} className="text-fg-tertiary hover:text-fg-secondary transition-colors">Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="text-sm text-fg-secondary whitespace-pre-wrap flex-1 leading-relaxed">
+                              {msg.body}{msg.editedAt && <span className="text-xs text-fg-tertiary ml-1">(edited)</span>}
+                            </p>
+                            <div className="opacity-0 group-hover:opacity-100 flex gap-1 flex-shrink-0 mt-0.5 transition-opacity">
+                              <button
+                                onClick={() => setPickerMsgId(pickerMsgId === msg.id ? null : msg.id)}
+                                className="text-xs text-fg-tertiary hover:text-fg-primary transition-colors"
+                                title="React"
+                              >
+                                😊
+                              </button>
+                              {isOwn && (
+                                <>
+                                  <button
+                                    onClick={() => startEdit(msg)}
+                                    className="text-xs text-fg-tertiary hover:text-fg-primary transition-colors"
+                                    title="Edit"
+                                  >
+                                    ✎
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteMessage(msg)}
+                                    className="text-xs text-fg-tertiary hover:text-danger transition-colors"
+                                  >
+                                    ×
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </>
                         )}
                       </div>
+                      {/* Reaction strip */}
+                      {((reactions[msg.id] ?? []).length > 0 || pickerMsgId === msg.id) && (
+                        <div className="pl-9 mt-1 flex flex-wrap items-center gap-1">
+                          {(reactions[msg.id] ?? []).map((r) => (
+                            <button
+                              key={r.emoji}
+                              onClick={() => handleToggleReaction(msg, r.emoji)}
+                              className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs border transition-colors ${
+                                r.selfReacted
+                                  ? 'bg-accent/15 border-accent/40 text-accent'
+                                  : 'bg-bg-surface border-border text-fg-secondary hover:border-accent/30'
+                              }`}
+                            >
+                              <span>{r.emoji}</span>
+                              <span className="tabular-nums">{r.count}</span>
+                            </button>
+                          ))}
+                          {pickerMsgId === msg.id ? (
+                            <EmojiPicker onPick={(e) => handleToggleReaction(msg, e)} onClose={() => setPickerMsgId(null)} />
+                          ) : (
+                            <button
+                              onClick={() => setPickerMsgId(msg.id)}
+                              className="opacity-0 group-hover:opacity-100 inline-flex items-center px-1.5 py-0.5 rounded text-xs border border-border text-fg-tertiary hover:text-fg-primary hover:border-accent/30 transition-all"
+                              title="Add reaction"
+                            >
+                              +
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {pickerMsgId === msg.id && (reactions[msg.id] ?? []).length === 0 && (
+                        <div className="pl-9 mt-1 flex items-center gap-1">
+                          <EmojiPicker onPick={(e) => handleToggleReaction(msg, e)} onClose={() => setPickerMsgId(null)} />
+                        </div>
+                      )}
                     </div>
                   )
                 })
@@ -319,6 +442,37 @@ export function ChannelsView() {
     </div>
   )
 }
+
+const EMOJI_SET = ['👍','👎','❤️','😂','🎉','🚀','👀','🔥','✅','❌','😮','😢']
+
+function EmojiPicker({ onPick, onClose }: { onPick: (e: string) => void; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [onClose])
+
+  return (
+    <div
+      ref={ref}
+      className="flex gap-0.5 bg-bg-raised border border-border rounded-lg px-1.5 py-1 shadow-card z-10"
+    >
+      {EMOJI_SET.map((e) => (
+        <button
+          key={e}
+          onClick={() => onPick(e)}
+          className="w-7 h-7 flex items-center justify-center text-base hover:bg-bg-hover rounded transition-colors"
+        >
+          {e}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 
 function NewChannelModal({
   onClose,
