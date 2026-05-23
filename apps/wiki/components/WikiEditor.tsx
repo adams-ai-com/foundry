@@ -60,7 +60,6 @@ export function WikiEditor({ page }: { page: WikiPage }) {
     },
   })
 
-  // Keep title ref in sync for save callback
   const titleRef = useRef(title)
   titleRef.current = title
 
@@ -70,7 +69,6 @@ export function WikiEditor({ page }: { page: WikiPage }) {
     if (editor) scheduleSave(newTitle, editor.getJSON() as JSONContent)
   }
 
-  // Save on unmount
   useEffect(() => {
     return () => {
       if (saveTimer.current) {
@@ -81,25 +79,29 @@ export function WikiEditor({ page }: { page: WikiPage }) {
   }, [editor, save])
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-bg-base">
       {/* Toolbar */}
-      <div className="border-b border-gray-100 px-6 py-2 flex items-center gap-1 flex-wrap">
-        <ToolbarButton onClick={() => editor?.chain().focus().toggleBold().run()} active={editor?.isActive('bold')} title="Bold">B</ToolbarButton>
+      <div className="border-b border-border px-6 py-2 flex items-center gap-0.5 flex-wrap bg-bg-raised">
+        <ToolbarButton onClick={() => editor?.chain().focus().toggleBold().run()} active={editor?.isActive('bold')} title="Bold"><strong>B</strong></ToolbarButton>
         <ToolbarButton onClick={() => editor?.chain().focus().toggleItalic().run()} active={editor?.isActive('italic')} title="Italic" className="italic">I</ToolbarButton>
         <ToolbarButton onClick={() => editor?.chain().focus().toggleUnderline().run()} active={editor?.isActive('underline')} title="Underline" className="underline">U</ToolbarButton>
-        <div className="w-px h-4 bg-gray-200 mx-1" />
+        <div className="w-px h-4 bg-border mx-1" />
         <ToolbarButton onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()} active={editor?.isActive('heading', { level: 1 })} title="Heading 1">H1</ToolbarButton>
         <ToolbarButton onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} active={editor?.isActive('heading', { level: 2 })} title="Heading 2">H2</ToolbarButton>
         <ToolbarButton onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()} active={editor?.isActive('heading', { level: 3 })} title="Heading 3">H3</ToolbarButton>
-        <div className="w-px h-4 bg-gray-200 mx-1" />
+        <div className="w-px h-4 bg-border mx-1" />
         <ToolbarButton onClick={() => editor?.chain().focus().toggleBulletList().run()} active={editor?.isActive('bulletList')} title="Bullet list">•</ToolbarButton>
         <ToolbarButton onClick={() => editor?.chain().focus().toggleOrderedList().run()} active={editor?.isActive('orderedList')} title="Numbered list">1.</ToolbarButton>
-        <ToolbarButton onClick={() => editor?.chain().focus().toggleTaskList().run()} active={editor?.isActive('taskList')} title="Task list">☐</ToolbarButton>
-        <div className="w-px h-4 bg-gray-200 mx-1" />
+        <ToolbarButton onClick={() => editor?.chain().focus().toggleTaskList().run()} active={editor?.isActive('taskList')} title="Task list">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+          </svg>
+        </ToolbarButton>
+        <div className="w-px h-4 bg-border mx-1" />
         <ToolbarButton onClick={() => editor?.chain().focus().toggleBlockquote().run()} active={editor?.isActive('blockquote')} title="Quote">"</ToolbarButton>
         <ToolbarButton onClick={() => editor?.chain().focus().toggleCode().run()} active={editor?.isActive('code')} title="Code" className="font-mono">{`<>`}</ToolbarButton>
         <ToolbarButton onClick={() => editor?.chain().focus().toggleCodeBlock().run()} active={editor?.isActive('codeBlock')} title="Code block" className="font-mono text-xs">```</ToolbarButton>
-        <div className="w-px h-4 bg-gray-200 mx-1" />
+        <div className="w-px h-4 bg-border mx-1" />
         <ToolbarButton
           onClick={() => {
             const url = prompt('URL:')
@@ -108,12 +110,18 @@ export function WikiEditor({ page }: { page: WikiPage }) {
           active={editor?.isActive('link')}
           title="Link"
         >
-          🔗
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+          </svg>
         </ToolbarButton>
         <ToolbarButton onClick={() => editor?.chain().focus().setHorizontalRule().run()} title="Divider">—</ToolbarButton>
 
         <div className="flex-1" />
-        <span className={`text-xs ${saveState === 'saving' ? 'text-amber-500' : saveState === 'unsaved' ? 'text-gray-400' : 'text-gray-300'}`}>
+        <span className={`text-xs transition-colors ${
+          saveState === 'saving' ? 'text-amber-500' :
+          saveState === 'unsaved' ? 'text-fg-tertiary' :
+          'text-fg-tertiary/50'
+        }`}>
           {saveState === 'saving' ? 'Saving…' : saveState === 'unsaved' ? 'Unsaved' : 'Saved'}
         </span>
       </div>
@@ -125,7 +133,7 @@ export function WikiEditor({ page }: { page: WikiPage }) {
             value={title}
             onChange={handleTitleChange}
             placeholder="Page title"
-            className="w-full text-4xl font-bold text-gray-900 placeholder-gray-300 border-none outline-none mb-6 bg-transparent"
+            className="w-full text-4xl font-bold text-fg-primary placeholder:text-fg-tertiary border-none outline-none mb-6 bg-transparent"
           />
           <EditorContent editor={editor} className="tiptap" />
         </div>
@@ -149,8 +157,8 @@ function ToolbarButton({
       title={title}
       className={`px-2 py-1 rounded text-sm font-medium transition-colors ${className} ${
         active
-          ? 'bg-gray-200 text-gray-900'
-          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
+          ? 'bg-bg-active text-accent'
+          : 'text-fg-secondary hover:bg-bg-hover hover:text-fg-primary'
       }`}
     >
       {children}

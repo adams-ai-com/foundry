@@ -1,24 +1,33 @@
 import { test, expect, Page } from '@playwright/test'
+import postgres from 'postgres'
+import * as dotenv from 'dotenv'
+import * as path from 'path'
+
+test.beforeAll(async () => {
+  dotenv.config({ path: path.join(__dirname, '../.env') })
+  const db = postgres(process.env.DATABASE_URL!)
+  await db`DELETE FROM documents`
+  await db.end()
+})
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 async function createDoc(page: Page): Promise<string> {
-  await page.goto('/')
+  await page.goto('/docs')
   await page.getByRole('button', { name: 'New document' }).click()
-  await page.waitForURL(/\/editor\//)
+  await page.waitForURL(/\/docs\/editor\//)
   return page.url().split('/editor/')[1]
 }
 
 async function waitForSaved(page: Page) {
-  // Use data-testid + exact text so we don't match "Unsaved" or "Saving…"
   await expect(page.getByTestId('save-state')).toHaveText('Saved', { timeout: 8000 })
 }
 
 // ─── home page ────────────────────────────────────────────────────────────────
 
-test('home page shows app name and empty state', async ({ page }) => {
-  await page.goto('/')
-  await expect(page.getByText('Foundry Docs')).toBeVisible()
+test('home page has correct title and shows empty state', async ({ page }) => {
+  await page.goto('/docs')
+  await expect(page).toHaveTitle('Foundry Docs')
   await expect(page.getByTestId('empty-state')).toBeVisible()
   await expect(page.getByRole('button', { name: 'New document' })).toBeVisible()
 })
@@ -26,9 +35,9 @@ test('home page shows app name and empty state', async ({ page }) => {
 // ─── create document ─────────────────────────────────────────────────────────
 
 test('clicking New document creates a doc and navigates to the editor', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/docs')
   await page.getByRole('button', { name: 'New document' }).click()
-  await expect(page).toHaveURL(/\/editor\/[0-9a-f-]{36}/)
+  await expect(page).toHaveURL(/\/docs\/editor\/[0-9a-f-]{36}/)
   await expect(page.getByTestId('doc-title')).toBeVisible()
 })
 
@@ -39,13 +48,11 @@ test('title input auto-saves after typing', async ({ page }) => {
 
   const titleInput = page.getByTestId('doc-title')
   await titleInput.fill('My Playwright Doc')
-  // Blur triggers immediate flush save
   await titleInput.blur()
   await waitForSaved(page)
 
-  // Navigate home and confirm title appears in list
-  await page.getByText('← Docs').click()
-  await expect(page).toHaveURL('/')
+  await page.getByRole('button', { name: 'Docs' }).click()
+  await expect(page).toHaveURL('/docs')
   await expect(page.getByText('My Playwright Doc')).toBeVisible()
 })
 
@@ -56,7 +63,7 @@ test('title persists after page reload', async ({ page }) => {
   await page.getByTestId('doc-title').blur()
   await waitForSaved(page)
 
-  await page.goto(`/editor/${id}`)
+  await page.goto(`/docs/editor/${id}`)
   await expect(page.getByTestId('doc-title')).toHaveValue('Persistent Title')
 })
 
@@ -65,17 +72,14 @@ test('title persists after page reload', async ({ page }) => {
 test('content auto-saves and persists after reload', async ({ page }) => {
   const id = await createDoc(page)
 
-  // Click inside the TipTap editor and type
   const editor = page.locator('.tiptap')
   await editor.click()
   await page.keyboard.type('Hello from Playwright')
 
-  // Wait for unsaved state to confirm typing was detected, then wait for save
   await expect(page.getByTestId('save-state')).toHaveText(/Unsaved|Saving/, { timeout: 3000 })
   await expect(page.getByTestId('save-state')).toHaveText('Saved', { timeout: 8000 })
 
-  // Reload and verify content is still there
-  await page.goto(`/editor/${id}`)
+  await page.goto(`/docs/editor/${id}`)
   await expect(page.locator('.tiptap')).toContainText('Hello from Playwright')
 })
 
@@ -85,10 +89,7 @@ test('save indicator shows Unsaved while typing then Saved after debounce', asyn
   await page.locator('.tiptap').click()
   await page.keyboard.type('x')
 
-  // Should briefly show Unsaved or Saving
   await expect(page.getByTestId('save-state')).toHaveText(/Unsaved|Saving/, { timeout: 3000 })
-
-  // Then settle on Saved
   await expect(page.getByTestId('save-state')).toHaveText('Saved', { timeout: 8000 })
 })
 
@@ -97,18 +98,15 @@ test('save indicator shows Unsaved while typing then Saved after debounce', asyn
 test('changing title after editing content saves both correctly', async ({ page }) => {
   const id = await createDoc(page)
 
-  // Type content first
   await page.locator('.tiptap').click()
   await page.keyboard.type('Content written first')
 
-  // Then change title
   const titleInput = page.getByTestId('doc-title')
   await titleInput.fill('Title set second')
   await titleInput.blur()
   await waitForSaved(page)
 
-  // Reload and verify both are persisted
-  await page.goto(`/editor/${id}`)
+  await page.goto(`/docs/editor/${id}`)
   await expect(page.getByTestId('doc-title')).toHaveValue('Title set second')
   await expect(page.locator('.tiptap')).toContainText('Content written first')
 })
@@ -116,7 +114,6 @@ test('changing title after editing content saves both correctly', async ({ page 
 // ─── home page — document list ────────────────────────────────────────────────
 
 test('multiple documents appear in list ordered newest first', async ({ page }) => {
-  // Create two docs with different titles
   await createDoc(page)
   await page.getByTestId('doc-title').fill('First Doc')
   await page.getByTestId('doc-title').blur()
@@ -127,9 +124,8 @@ test('multiple documents appear in list ordered newest first', async ({ page }) 
   await page.getByTestId('doc-title').blur()
   await waitForSaved(page)
 
-  await page.goto('/')
+  await page.goto('/docs')
   const rows = page.getByTestId('doc-title-link')
-  // Newest updated first
   await expect(rows.first()).toContainText('Second Doc')
   await expect(rows.nth(1)).toContainText('First Doc')
 })
@@ -140,9 +136,9 @@ test('clicking a document in the list opens it in the editor', async ({ page }) 
   await page.getByTestId('doc-title').blur()
   await waitForSaved(page)
 
-  await page.goto('/')
+  await page.goto('/docs')
   await page.getByText('Click Me').click()
-  await expect(page).toHaveURL(`/editor/${id}`)
+  await expect(page).toHaveURL(`/docs/editor/${id}`)
   await expect(page.getByTestId('doc-title')).toHaveValue('Click Me')
 })
 
@@ -154,22 +150,19 @@ test('deleting a document removes it from the list', async ({ page }) => {
   await page.getByTestId('doc-title').blur()
   await waitForSaved(page)
 
-  await page.goto('/')
+  await page.goto('/docs')
   await expect(page.getByText('Delete Me')).toBeVisible()
 
-  // Hover to reveal delete button, then click — handle the confirm dialog
   page.on('dialog', (dialog) => dialog.accept())
   await page.getByTestId('delete-doc').first().click()
 
-  // Should redirect to home, doc gone
-  await expect(page).toHaveURL('/')
+  await expect(page).toHaveURL('/docs')
   await expect(page.getByText('Delete Me')).not.toBeVisible()
 })
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 
 test('navigating to an unknown document id shows 404', async ({ page }) => {
-  await page.goto('/editor/00000000-0000-0000-0000-000000000000')
-  // Next.js 404 page renders both an h1 "404" and an h2 with the message
+  await page.goto('/docs/editor/00000000-0000-0000-0000-000000000000')
   await expect(page.getByRole('heading', { name: '404' })).toBeVisible()
 })

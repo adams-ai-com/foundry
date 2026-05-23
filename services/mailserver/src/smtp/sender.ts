@@ -43,6 +43,24 @@ function loadDkimKey(): string | null {
   return readFileSync(config.dkim.privateKeyPath, 'utf-8')
 }
 
+async function logDelivery(
+  accountId: string,
+  fromEmail: string,
+  toCount: number,
+  messageId: string | null,
+  status: 'sent' | 'failed',
+  error?: string,
+): Promise<void> {
+  try {
+    await sql`
+      INSERT INTO mail_delivery_log (account_id, from_email, to_count, message_id, status, error)
+      VALUES (${accountId}, ${fromEmail}, ${toCount}, ${messageId}, ${status}, ${error ?? null})
+    `
+  } catch {
+    // Never block the caller on log write failure
+  }
+}
+
 export async function sendMessage(opts: SendOptions): Promise<string> {
   const transport = buildTransport()
   const dkimKey = loadDkimKey()
@@ -86,7 +104,13 @@ export async function sendMessage(opts: SendOptions): Promise<string> {
     }),
   }
 
-  await transport.sendMail(mailOptions)
+  try {
+    await transport.sendMail(mailOptions)
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err)
+    await logDelivery(opts.accountId, opts.from, opts.to.length, messageIdValue, 'failed', errMsg)
+    throw err
+  }
 
   // Store a copy in Sent
   const sentParsed = await parseMail(
@@ -124,6 +148,8 @@ export async function sendMessage(opts: SendOptions): Promise<string> {
       `
     }
   }
+
+  await logDelivery(opts.accountId, opts.from, opts.to.length, messageIdValue, 'sent')
 
   return messageId
 }

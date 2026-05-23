@@ -1,43 +1,58 @@
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import { getSession } from '@/lib/auth'
+import { AuthShell } from '@/components/AuthShell'
 import { LoginForm } from '@/components/LoginForm'
+import db from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ sent?: string }> }) {
+async function getOrgFromHost(host: string): Promise<{ name: string } | null> {
+  // Strip port if present
+  const bare = host.split(':')[0].toLowerCase()
+  // Skip localhost and the default foundry domain
+  if (bare === 'localhost' || bare.endsWith('.adams-ai.com')) return null
+
+  const rows = await db`
+    SELECT o.name FROM domains d
+    JOIN orgs o ON o.id = d.org_id
+    WHERE d.domain = ${bare} AND d.verified_at IS NOT NULL
+    LIMIT 1
+  `
+  return (rows[0] as { name: string }) ?? null
+}
+
+export default async function LoginPage() {
   const session = await getSession()
   if (session) redirect('/')
 
-  const { sent } = await searchParams
+  const hdrs = await headers()
+  const host = hdrs.get('host') ?? ''
+  const org = await getOrgFromHost(host)
+
+  const heading = org ? `Sign in to ${org.name}` : 'Sign in to Foundry'
+  const subheading = org
+    ? 'Enter your email address to continue.'
+    : "Enter your email address and we'll verify your identity."
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-600 rounded-xl mb-4">
-            <span className="text-white font-bold text-xl">F</span>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">Foundry</h1>
-          <p className="text-gray-500 text-sm mt-1">Open-source workspace</p>
+    <AuthShell>
+      <div>
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-fg-primary tracking-tight mb-2">
+            {heading}
+          </h1>
+          <p className="text-sm text-fg-secondary leading-relaxed">
+            {subheading}
+          </p>
         </div>
 
-        {sent ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
-            <div className="text-4xl mb-4">📬</div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Check your email</h2>
-            <p className="text-gray-500 text-sm">
-              We sent a sign-in link to <strong>{sent}</strong>.<br />
-              Click it to continue.
-            </p>
-          </div>
-        ) : (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-1">Sign in</h2>
-            <p className="text-gray-500 text-sm mb-6">Enter your email and we'll send a sign-in link.</p>
-            <LoginForm />
-          </div>
-        )}
+        <LoginForm />
+
+        <p className="mt-6 text-center text-[11.5px] text-fg-tertiary leading-relaxed">
+          By signing in you agree to keep your access credentials private.
+        </p>
       </div>
-    </div>
+    </AuthShell>
   )
 }

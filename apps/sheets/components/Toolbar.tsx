@@ -9,11 +9,14 @@ import type { CellFormat } from '@/lib/actions'
 
 interface ToolbarProps {
   selected: CellAddress
+  selectionEnd: CellAddress | null
   onTogglePython: () => void
+  onToggleChart: () => void
   pythonOpen: boolean
+  chartOpen: boolean
 }
 
-export function Toolbar({ selected, onTogglePython, pythonOpen }: ToolbarProps) {
+export function Toolbar({ selected, selectionEnd: _selectionEnd, onTogglePython, onToggleChart, pythonOpen, chartOpen }: ToolbarProps) {
   const { getCellFormat, setCellFormat, getSerializedData, getSheetNames, loadAll } = useHyperFormulaContext()
   const fmt = getCellFormat(selected)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -63,11 +66,7 @@ export function Toolbar({ selected, onTogglePython, pythonOpen }: ToolbarProps) 
   }
 
   return (
-    <div className="flex items-center gap-0.5 px-3 py-1.5 bg-white border-b border-gray-200 flex-wrap">
-      <span className="font-semibold text-sm text-gray-700 mr-2">Foundry Sheets</span>
-
-      <Separator />
-
+    <div className="flex items-center gap-0.5 px-3 py-1.5 bg-bg-raised border-b border-border flex-wrap shrink-0">
       <IconButton data-testid="btn-bold" label="Bold (Ctrl+B)" active={!!fmt.bold} onClick={() => toggleFormat('bold')}>
         <strong>B</strong>
       </IconButton>
@@ -82,7 +81,7 @@ export function Toolbar({ selected, onTogglePython, pythonOpen }: ToolbarProps) 
 
       <select
         data-testid="select-numformat"
-        className="text-xs border border-gray-200 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+        className="text-xs border border-border rounded px-1 py-0.5 bg-bg-surface text-fg-primary focus:outline-none focus:ring-1 focus:ring-accent"
         value={fmt.numFormat ?? 'general'}
         onChange={(e) => setCellFormat(selected, { numFormat: e.target.value as CellFormat['numFormat'] })}
       >
@@ -95,41 +94,39 @@ export function Toolbar({ selected, onTogglePython, pythonOpen }: ToolbarProps) 
 
       <Separator />
 
-      <IconButton
-        data-testid="btn-python"
-        label="Python scripting"
-        active={pythonOpen}
-        onClick={onTogglePython}
-      >
-        🐍
+      <IconButton data-testid="btn-chart" label="Charts" active={chartOpen} onClick={onToggleChart}>
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+      </IconButton>
+
+      <IconButton data-testid="btn-python" label="Python scripting" active={pythonOpen} onClick={onTogglePython}>
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 2C8.13 2 7 3.13 7 5v2h5v1H5.5C3.57 8 2 9.57 2 11.5v3C2 16.43 3.57 18 5.5 18H7v-2c0-1.93 1.07-3 3-3h4c1.93 0 3-1.07 3-3V5c0-1.87-1.13-3-5-3zm-1 2a1 1 0 110 2 1 1 0 010-2z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 22c3.87 0 5-1.13 5-3v-2h-5v-1h6.5c1.93 0 3.5-1.57 3.5-3.5v-3C22 7.57 20.43 6 18.5 6H17v2c0 1.93-1.07 3-3 3H10c-1.93 0-3 1.07-3 3v4c0 1.87 1.13 3 5 3zm1-2a1 1 0 110-2 1 1 0 010 2z" />
+        </svg>
       </IconButton>
 
       <div className="ml-auto flex items-center gap-1">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".xlsx,.xls,.csv"
-          className="hidden"
-          onChange={handleImport}
-        />
+        <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImport} />
         <button
           data-testid="btn-import"
-          className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100"
+          className="text-xs text-fg-secondary hover:text-fg-primary px-2 py-1 rounded hover:bg-bg-hover transition-colors"
           onClick={() => fileInputRef.current?.click()}
         >
           Import
         </button>
-        <span className="text-xs text-gray-300">|</span>
+        <span className="text-xs text-fg-tertiary">|</span>
         <button
           data-testid="btn-export-xlsx"
-          className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100"
+          className="text-xs text-fg-secondary hover:text-fg-primary px-2 py-1 rounded hover:bg-bg-hover transition-colors"
           onClick={handleExportXlsx}
         >
           xlsx
         </button>
         <button
           data-testid="btn-export-csv"
-          className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100"
+          className="text-xs text-fg-secondary hover:text-fg-primary px-2 py-1 rounded hover:bg-bg-hover transition-colors"
           onClick={handleExportCsv}
         >
           csv

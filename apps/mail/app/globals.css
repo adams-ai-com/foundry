@@ -2,25 +2,83 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Tiptap / ProseMirror compose editor */
+:root, [data-theme="light"] {
+  --bg-base:     255 255 255;
+  --bg-surface:  248 250 252;
+  --bg-raised:   255 255 255;
+  --bg-hover:    241 245 249;
+  --bg-active:   239 246 255;
+  --fg-primary:  2 6 23;
+  --fg-secondary:100 116 139;
+  --fg-tertiary: 148 163 184;
+  --border:      226 232 240;
+  --accent:      5 150 105;
+  --accent-h:    4 120 87;
+  --accent-fg:   255 255 255;
+  --danger:      220 38 38;
+  --shadow-card: 0 0 0 1px rgb(0 0 0/.05), 0 4px 16px rgb(0 0 0/.07);
+}
+[data-theme="dark"] {
+  --bg-base:     10 10 15;
+  --bg-surface:  18 18 26;
+  --bg-raised:   26 26 40;
+  --bg-hover:    34 34 52;
+  --bg-active:   30 40 80;
+  --fg-primary:  248 248 255;
+  --fg-secondary:148 148 172;
+  --fg-tertiary: 82 82 106;
+  --border:      39 39 58;
+  --accent:      52 211 153;
+  --accent-h:    16 185 129;
+  --accent-fg:   255 255 255;
+  --danger:      252 165 165;
+  --shadow-card: 0 0 0 1px rgb(255 255 255/.06), 0 4px 24px rgb(0 0 0/.4);
+}
+[data-theme="warm"] {
+  --bg-base:     254 252 248;
+  --bg-surface:  250 247 241;
+  --bg-raised:   255 253 250;
+  --bg-hover:    245 240 231;
+  --bg-active:   255 237 213;
+  --fg-primary:  28 25 23;
+  --fg-secondary:120 113 108;
+  --fg-tertiary: 168 162 158;
+  --border:      231 229 228;
+  --accent:      5 150 105;
+  --accent-h:    4 120 87;
+  --accent-fg:   255 255 255;
+  --danger:      185 28 28;
+  --shadow-card: 0 0 0 1px rgb(0 0 0/.04), 0 4px 20px rgb(0 0 0/.07);
+}
+
+@layer base {
+  * { box-sizing: border-box; }
+  body {
+    background-color: rgb(var(--bg-base));
+    color: rgb(var(--fg-primary));
+  }
+}
+
+/* ProseMirror compose editor */
 .prosemirror-compose .ProseMirror {
   outline: none;
   padding: 12px 16px;
   min-height: 160px;
   font-size: 0.875rem;
   line-height: 1.5;
+  color: rgb(var(--fg-primary));
 }
 .prosemirror-compose .ProseMirror p { margin: 0 0 4px; }
 .prosemirror-compose .ProseMirror ul { list-style: disc; padding-left: 1.25rem; margin: 4px 0; }
 .prosemirror-compose .ProseMirror ol { list-style: decimal; padding-left: 1.25rem; margin: 4px 0; }
 .prosemirror-compose .ProseMirror blockquote {
-  border-left: 3px solid #d1d5db;
+  border-left: 3px solid rgb(var(--border));
   padding-left: 12px;
-  color: #6b7280;
+  color: rgb(var(--fg-secondary));
   margin: 8px 0;
 }
 .prosemirror-compose .ProseMirror p.is-editor-empty:first-child::before {
-  color: #9ca3af;
+  color: rgb(var(--fg-tertiary));
   content: attr(data-placeholder);
   float: left;
   height: 0;

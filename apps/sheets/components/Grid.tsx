@@ -12,12 +12,26 @@ const COL_WIDTH = 100
 const ROW_HEIGHT = 24
 const HEADER_WIDTH = 50
 
-interface GridProps {
-  selected: CellAddress
-  onSelect: (addr: CellAddress) => void
+function inRange(
+  row: number, col: number,
+  start: CellAddress, end: CellAddress | null,
+): boolean {
+  if (!end) return false
+  const minRow = Math.min(start.row, end.row)
+  const maxRow = Math.max(start.row, end.row)
+  const minCol = Math.min(start.col, end.col)
+  const maxCol = Math.max(start.col, end.col)
+  return row >= minRow && row <= maxRow && col >= minCol && col <= maxCol
 }
 
-export function Grid({ selected, onSelect }: GridProps) {
+interface GridProps {
+  selected: CellAddress
+  selectionEnd: CellAddress | null
+  onSelect: (addr: CellAddress) => void
+  onSelectionEnd: (addr: CellAddress | null) => void
+}
+
+export function Grid({ selected, selectionEnd, onSelect, onSelectionEnd }: GridProps) {
   const { getCellValue, setCellValue, getCellFormula, getCellFormat } = useHyperFormulaContext()
 
   const commitValue = useCallback((addr: CellAddress, value: string) => {
@@ -26,22 +40,34 @@ export function Grid({ selected, onSelect }: GridProps) {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      // When the cell input is focused, let it handle Enter/Tab/Escape/Delete/Backspace;
-      // but still capture arrow keys so navigation always works.
       if (document.activeElement?.tagName === 'INPUT' && document.activeElement.classList.contains('cell-input')) {
         if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return
       }
 
       const { row, col } = selected
-      if (e.key === 'ArrowDown')  { e.preventDefault(); onSelect({ ...selected, row: Math.min(row + 1, ROWS - 1) }) }
-      if (e.key === 'ArrowUp')    { e.preventDefault(); onSelect({ ...selected, row: Math.max(row - 1, 0) }) }
-      if (e.key === 'ArrowRight') { e.preventDefault(); onSelect({ ...selected, col: Math.min(col + 1, COLS - 1) }) }
-      if (e.key === 'ArrowLeft')  { e.preventDefault(); onSelect({ ...selected, col: Math.max(col - 1, 0) }) }
-      if (e.key === 'Delete' || e.key === 'Backspace') commitValue(selected, '')
+      const extend = e.shiftKey
+
+      let newRow = row, newCol = col, moved = false
+      if (e.key === 'ArrowDown')  { newRow = Math.min(row + 1, ROWS - 1); moved = true }
+      else if (e.key === 'ArrowUp')    { newRow = Math.max(row - 1, 0); moved = true }
+      else if (e.key === 'ArrowRight') { newCol = Math.min(col + 1, COLS - 1); moved = true }
+      else if (e.key === 'ArrowLeft')  { newCol = Math.max(col - 1, 0); moved = true }
+      else if (e.key === 'Delete' || e.key === 'Backspace') { commitValue(selected, ''); return }
+
+      if (!moved) return
+      e.preventDefault()
+
+      const newAddr: CellAddress = { ...selected, row: newRow, col: newCol }
+      if (extend) {
+        onSelectionEnd(newAddr)
+      } else {
+        onSelect(newAddr)
+        onSelectionEnd(null)
+      }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [selected, onSelect, commitValue])
+  }, [selected, onSelect, onSelectionEnd, commitValue])
 
   return (
     <div className="flex-1 overflow-auto focus:outline-none" tabIndex={0}>
@@ -74,25 +100,32 @@ export function Grid({ selected, onSelect }: GridProps) {
             {Array.from({ length: COLS }, (_, col) => {
               const addr: CellAddress = { sheet: selected.sheet, row, col }
               const isSelected = selected.row === row && selected.col === col
+              const isInRange = inRange(row, col, selected, selectionEnd)
               const rawValue = getCellValue(addr)
               const fmt = getCellFormat(addr)
               const displayValue = applyNumFormat(rawValue, fmt.numFormat)
               const fontClasses = [
-                fmt.bold      ? 'font-bold'     : '',
-                fmt.italic    ? 'italic'         : '',
-                fmt.underline ? 'underline'      : '',
+                fmt.bold      ? 'font-bold'  : '',
+                fmt.italic    ? 'italic'     : '',
+                fmt.underline ? 'underline'  : '',
               ].filter(Boolean).join(' ')
 
               return (
                 <div
                   key={col}
                   data-testid={`cell-${row}-${col}`}
-                  className={`cell border-t border-l relative ${isSelected ? 'selected' : ''} ${fontClasses}`}
+                  className={`cell border-t border-l relative ${isSelected ? 'selected' : isInRange ? 'bg-blue-50' : ''} ${fontClasses}`}
                   style={{ width: COL_WIDTH, minWidth: COL_WIDTH }}
-                  onMouseDown={() => onSelect(addr)}
+                  onMouseDown={(e) => {
+                    if (e.shiftKey) {
+                      onSelectionEnd(addr)
+                    } else {
+                      onSelect(addr)
+                      onSelectionEnd(null)
+                    }
+                  }}
                   onDoubleClick={() => {
-                    const el = document.getElementById(`cell-${row}-${col}`)
-                    el?.focus()
+                    document.getElementById(`cell-${row}-${col}`)?.focus()
                   }}
                 >
                   {isSelected ? (
@@ -106,11 +139,13 @@ export function Grid({ selected, onSelect }: GridProps) {
                         if (e.key === 'Enter') {
                           commitValue(addr, e.currentTarget.value)
                           onSelect({ ...addr, row: row + 1 })
+                          onSelectionEnd(null)
                           e.preventDefault()
                         }
                         if (e.key === 'Tab') {
                           commitValue(addr, e.currentTarget.value)
                           onSelect({ ...addr, col: col + 1 })
+                          onSelectionEnd(null)
                           e.preventDefault()
                         }
                         if (e.key === 'Escape') {

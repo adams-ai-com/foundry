@@ -13,13 +13,13 @@ test.beforeAll(async () => {
 })
 
 test('01 home empty state', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/docs')
   await page.waitForLoadState('networkidle')
   await page.screenshot({ path: `${OUT}/01-home-empty.png`, fullPage: true })
 })
 
 test('02 editor empty', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/docs')
   await page.getByRole('button', { name: 'New document' }).click()
   await page.waitForURL(/\/editor\//)
   await page.waitForLoadState('networkidle')
@@ -27,7 +27,7 @@ test('02 editor empty', async ({ page }) => {
 })
 
 test('03 editor with title', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/docs')
   await page.getByRole('button', { name: 'New document' }).click()
   await page.waitForURL(/\/editor\//)
   await page.getByTestId('doc-title').fill('Q2 Business Review')
@@ -37,7 +37,7 @@ test('03 editor with title', async ({ page }) => {
 })
 
 test('04 editor with rich content', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/docs')
   await page.getByRole('button', { name: 'New document' }).click()
   await page.waitForURL(/\/editor\//)
   await page.getByTestId('doc-title').fill('Q2 Business Review')
@@ -65,7 +65,7 @@ test('04 editor with rich content', async ({ page }) => {
 })
 
 test('05 editor saving state', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/docs')
   await page.getByRole('button', { name: 'New document' }).click()
   await page.waitForURL(/\/editor\//)
   const editor = page.locator('.tiptap')
@@ -77,7 +77,7 @@ test('05 editor saving state', async ({ page }) => {
 
 test('06 home with multiple docs', async ({ page }) => {
   // Create doc 1
-  await page.goto('/')
+  await page.goto('/docs')
   await page.getByRole('button', { name: 'New document' }).click()
   await page.waitForURL(/\/editor\//)
   await page.getByTestId('doc-title').fill('Product Roadmap — H2 2026')
@@ -85,7 +85,7 @@ test('06 home with multiple docs', async ({ page }) => {
   await page.getByTestId('save-state').filter({ hasText: 'Saved' }).waitFor({ timeout: 5000 }).catch(() => {})
 
   // Create doc 2
-  await page.goto('/')
+  await page.goto('/docs')
   await page.getByRole('button', { name: 'New document' }).click()
   await page.waitForURL(/\/editor\//)
   await page.getByTestId('doc-title').fill('Team Onboarding Guide')
@@ -93,20 +93,20 @@ test('06 home with multiple docs', async ({ page }) => {
   await page.getByTestId('save-state').filter({ hasText: 'Saved' }).waitFor({ timeout: 5000 }).catch(() => {})
 
   // Create doc 3
-  await page.goto('/')
+  await page.goto('/docs')
   await page.getByRole('button', { name: 'New document' }).click()
   await page.waitForURL(/\/editor\//)
   await page.getByTestId('doc-title').fill('Q2 Business Review')
   await page.getByTestId('doc-title').blur()
   await page.getByTestId('save-state').filter({ hasText: 'Saved' }).waitFor({ timeout: 5000 }).catch(() => {})
 
-  await page.goto('/')
+  await page.goto('/docs')
   await page.waitForLoadState('networkidle')
   await page.screenshot({ path: `${OUT}/06-home-with-docs.png`, fullPage: true })
 })
 
 test('07 home hover row', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/docs')
   await page.waitForLoadState('networkidle')
   const firstRow = page.getByTestId('doc-row').first()
   await firstRow.hover()
@@ -115,14 +115,14 @@ test('07 home hover row', async ({ page }) => {
 
 test('08 mobile home', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto('/')
+  await page.goto('/docs')
   await page.waitForLoadState('networkidle')
   await page.screenshot({ path: `${OUT}/08-mobile-home.png`, fullPage: true })
 })
 
 test('09 mobile editor', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto('/')
+  await page.goto('/docs')
   await page.getByRole('button', { name: 'New document' }).click()
   await page.waitForURL(/\/editor\//)
   await page.waitForLoadState('networkidle')
@@ -131,7 +131,7 @@ test('09 mobile editor', async ({ page }) => {
 
 test('10 toolbar closeup', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 300 })
-  await page.goto('/')
+  await page.goto('/docs')
   await page.getByRole('button', { name: 'New document' }).click()
   await page.waitForURL(/\/editor\//)
   await page.waitForLoadState('networkidle')
