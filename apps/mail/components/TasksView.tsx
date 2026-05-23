@@ -11,10 +11,10 @@ const STATUS_LABELS: Record<Task['status'], string> = {
 }
 
 const PRIORITY_COLORS: Record<Task['priority'], string> = {
-  low: 'text-gray-400',
-  normal: 'text-blue-400',
+  low: 'text-fg-tertiary',
+  normal: 'text-accent',
   high: 'text-orange-400',
-  urgent: 'text-red-400',
+  urgent: 'text-danger',
 }
 
 const STATUS_ORDER: Task['status'][] = ['todo', 'in_progress', 'done', 'cancelled']
@@ -55,29 +55,29 @@ export function TasksView() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-bg-surface text-fg-primary">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-        <h2 className="text-sm font-semibold text-gray-200">Tasks</h2>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <h2 className="text-sm font-semibold text-fg-primary">Tasks</h2>
         <button
           data-testid="new-task-button"
           onClick={() => { setEditingTask(null); setShowForm(true) }}
-          className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded"
+          className="text-xs bg-accent hover:bg-accent-hover text-accent-fg px-3 py-1 rounded"
         >
           + New Task
         </button>
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-1 px-4 py-2 border-b border-gray-800">
+      <div className="flex gap-1 px-4 py-2 border-b border-border">
         {['active', 'all', 'done'].map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`text-xs px-3 py-1 rounded capitalize ${
+            className={`text-xs px-3 py-1 rounded capitalize transition-colors ${
               filter === f
-                ? 'bg-gray-700 text-white'
-                : 'text-gray-400 hover:text-gray-200'
+                ? 'bg-bg-hover text-fg-primary font-medium'
+                : 'text-fg-secondary hover:text-fg-primary'
             }`}
           >
             {f}
@@ -88,23 +88,23 @@ export function TasksView() {
       {/* Task list */}
       <div className="flex-1 overflow-y-auto">
         {loading ? (
-          <div className="p-6 text-center text-gray-500 text-sm">Loading…</div>
+          <div className="p-6 text-center text-fg-tertiary text-sm">Loading…</div>
         ) : tasks.length === 0 ? (
-          <div className="p-6 text-center text-gray-500 text-sm">No tasks</div>
+          <div className="p-6 text-center text-fg-tertiary text-sm">No tasks</div>
         ) : (
-          <ul className="divide-y divide-gray-800">
+          <ul className="divide-y divide-border">
             {tasks.map((task) => (
-              <li key={task.id} data-testid="task-item" className="flex items-start gap-3 px-4 py-3 hover:bg-gray-800/40 group">
+              <li key={task.id} data-testid="task-item" className="flex items-start gap-3 px-4 py-3 hover:bg-bg-hover/40 group transition-colors">
                 {/* Status toggle */}
                 <button
                   onClick={() => cycleStatus(task)}
                   title={`Status: ${STATUS_LABELS[task.status]}`}
-                  className={`mt-0.5 w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${
+                  className={`mt-0.5 w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
                     task.status === 'done'
                       ? 'bg-green-600 border-green-600'
                       : task.status === 'in_progress'
-                      ? 'border-blue-400'
-                      : 'border-gray-600'
+                      ? 'border-accent'
+                      : 'border-border'
                   }`}
                 >
                   {task.status === 'done' && (
@@ -113,14 +113,14 @@ export function TasksView() {
                     </svg>
                   )}
                   {task.status === 'in_progress' && (
-                    <div className="w-2 h-2 rounded-sm bg-blue-400" />
+                    <div className="w-2 h-2 rounded-sm bg-accent" />
                   )}
                 </button>
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline gap-2">
-                    <span className={`text-sm ${task.status === 'done' ? 'line-through text-gray-500' : 'text-gray-200'}`}>
+                    <span className={`text-sm ${task.status === 'done' ? 'line-through text-fg-tertiary' : 'text-fg-primary'}`}>
                       {task.title}
                     </span>
                     {task.priority !== 'normal' && (
@@ -130,22 +130,22 @@ export function TasksView() {
                     )}
                   </div>
                   {task.description && (
-                    <p className="text-xs text-gray-500 mt-0.5 truncate">{task.description}</p>
+                    <p className="text-xs text-fg-tertiary mt-0.5 truncate">{task.description}</p>
                   )}
                   <div className="flex items-center gap-3 mt-1">
                     {task.dueAt && (
-                      <span className={`text-xs ${new Date(task.dueAt) < new Date() && task.status !== 'done' ? 'text-red-400' : 'text-gray-500'}`}>
+                      <span className={`text-xs ${new Date(task.dueAt) < new Date() && task.status !== 'done' ? 'text-danger' : 'text-fg-tertiary'}`}>
                         Due {new Date(task.dueAt).toLocaleDateString()}
                       </span>
                     )}
                     {task.assignedTo && (
-                      <span className="text-xs text-gray-500">{task.assignedTo}</span>
+                      <span className="text-xs text-fg-tertiary">{task.assignedTo}</span>
                     )}
                     <span className={`text-xs px-1.5 py-0.5 rounded ${
-                      task.status === 'todo' ? 'bg-gray-700 text-gray-400'
-                      : task.status === 'in_progress' ? 'bg-blue-900/50 text-blue-300'
-                      : task.status === 'done' ? 'bg-green-900/50 text-green-400'
-                      : 'bg-gray-700 text-gray-500'
+                      task.status === 'todo' ? 'bg-bg-hover text-fg-secondary'
+                      : task.status === 'in_progress' ? 'bg-accent/10 text-accent'
+                      : task.status === 'done' ? 'bg-green-500/10 text-green-500'
+                      : 'bg-bg-hover text-fg-tertiary'
                     }`}>
                       {STATUS_LABELS[task.status]}
                     </span>
@@ -153,16 +153,16 @@ export function TasksView() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
                     onClick={() => { setEditingTask(task); setShowForm(true) }}
-                    className="text-xs text-gray-400 hover:text-gray-200 px-1"
+                    className="text-xs text-fg-tertiary hover:text-fg-primary px-1 transition-colors"
                   >
                     Edit
                   </button>
                   <button
                     onClick={() => handleDelete(task.id)}
-                    className="text-xs text-gray-400 hover:text-red-400 px-1"
+                    className="text-xs text-fg-tertiary hover:text-danger px-1 transition-colors"
                   >
                     ×
                   </button>
@@ -231,8 +231,8 @@ function TaskForm({
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-gray-900 border border-gray-700 rounded-lg w-full max-w-md mx-4 p-5">
-        <h3 className="text-sm font-semibold text-gray-200 mb-4">
+      <div className="bg-bg-raised border border-border rounded-lg w-full max-w-md mx-4 p-5">
+        <h3 className="text-sm font-semibold text-fg-primary mb-4">
           {task ? 'Edit Task' : 'New Task'}
         </h3>
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -242,20 +242,20 @@ function TaskForm({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Task title"
-            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500"
+            className="w-full bg-bg-surface border border-border rounded px-3 py-2 text-sm text-fg-primary placeholder-fg-tertiary focus:outline-none focus:border-accent"
           />
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Description (optional)"
             rows={2}
-            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none"
+            className="w-full bg-bg-surface border border-border rounded px-3 py-2 text-sm text-fg-primary placeholder-fg-tertiary focus:outline-none focus:border-accent resize-none"
           />
           <div className="flex gap-2">
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value as Task['priority'])}
-              className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+              className="flex-1 bg-bg-surface border border-border rounded px-3 py-2 text-sm text-fg-primary focus:outline-none focus:border-accent"
             >
               <option value="low">Low priority</option>
               <option value="normal">Normal priority</option>
@@ -266,24 +266,24 @@ function TaskForm({
               type="date"
               value={dueAt}
               onChange={(e) => setDueAt(e.target.value)}
-              className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+              className="flex-1 bg-bg-surface border border-border rounded px-3 py-2 text-sm text-fg-primary focus:outline-none focus:border-accent"
             />
           </div>
           <input
             value={assignedTo}
             onChange={(e) => setAssignedTo(e.target.value)}
             placeholder="Assign to (email, optional)"
-            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500"
+            className="w-full bg-bg-surface border border-border rounded px-3 py-2 text-sm text-fg-primary placeholder-fg-tertiary focus:outline-none focus:border-accent"
           />
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="text-sm text-gray-400 hover:text-gray-200 px-3 py-1.5">
+            <button type="button" onClick={onClose} className="text-sm text-fg-secondary hover:text-fg-primary px-3 py-1.5 transition-colors">
               Cancel
             </button>
             <button
               data-testid="task-save-button"
               type="submit"
               disabled={saving || !title.trim()}
-              className="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-1.5 rounded"
+              className="text-sm bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-fg px-4 py-1.5 rounded transition-colors"
             >
               {saving ? 'Saving…' : task ? 'Save' : 'Create'}
             </button>
