@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   listChannels,
   createChannel,
@@ -14,7 +14,6 @@ import {
 
 const SENDER_EMAIL = process.env.NEXT_PUBLIC_MAIL_FROM ?? 'user@foundry.local'
 const SENDER_NAME = process.env.NEXT_PUBLIC_DISPLAY_NAME ?? SENDER_EMAIL.split('@')[0]
-const POLL_INTERVAL = 3000
 
 function formatTime(iso: string): string {
   const d = new Date(iso)
@@ -50,7 +49,7 @@ export function ChannelsView() {
   const [showNewChannel, setShowNewChannel] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const lastMessageIdRef = useRef<string | null>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const esRef = useRef<EventSource | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   // Load channels
@@ -63,44 +62,56 @@ export function ChannelsView() {
       .finally(() => setLoadingChannels(false))
   }, [])
 
-  // Load messages when channel changes
+  // Load messages + connect SSE when channel changes
   useEffect(() => {
     if (!activeChannel) return
+
     setLoadingMessages(true)
     setMessages([])
     lastMessageIdRef.current = null
 
+    // Close any existing SSE connection
+    esRef.current?.close()
+    esRef.current = null
+
+    let cancelled = false
+
     listChannelMessages(activeChannel.id)
       .then((msgs) => {
+        if (cancelled) return
         setMessages(msgs)
         lastMessageIdRef.current = msgs.at(-1)?.id ?? null
+
+        // Connect SSE for live updates starting from last loaded message
+        const url = new URL(`/mail/api/sse/channel/${activeChannel.id}`, window.location.origin)
+        if (lastMessageIdRef.current) url.searchParams.set('after', lastMessageIdRef.current)
+
+        const es = new EventSource(url.toString())
+        es.onmessage = (event) => {
+          if (cancelled) return
+          try {
+            const { type, message } = JSON.parse(event.data) as { type: string; message: ChannelMessage }
+            if (type === 'message:new') {
+              setMessages((prev) => [...prev, message])
+              lastMessageIdRef.current = message.id
+            }
+          } catch { /* ignore parse errors */ }
+        }
+        esRef.current = es
       })
-      .finally(() => setLoadingMessages(false))
+      .finally(() => { if (!cancelled) setLoadingMessages(false) })
+
+    return () => {
+      cancelled = true
+      esRef.current?.close()
+      esRef.current = null
+    }
   }, [activeChannel])
 
   // Auto-scroll on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
-
-  // Poll for new messages
-  const poll = useCallback(async () => {
-    if (!activeChannel || document.hidden) return
-    const after = lastMessageIdRef.current
-    if (!after) return
-    const newMsgs = await listChannelMessages(activeChannel.id, { after }).catch(() => [])
-    if (newMsgs.length > 0) {
-      setMessages((prev) => [...prev, ...newMsgs])
-      lastMessageIdRef.current = newMsgs.at(-1)!.id
-    }
-  }, [activeChannel])
-
-  useEffect(() => {
-    if (pollRef.current) clearInterval(pollRef.current)
-    if (!activeChannel) return
-    pollRef.current = setInterval(poll, POLL_INTERVAL)
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
-  }, [activeChannel, poll])
 
   async function handleSend() {
     if (!draft.trim() || !activeChannel || sending) return
@@ -112,7 +123,7 @@ export function ChannelsView() {
       setMessages((prev) => [...prev, msg])
       lastMessageIdRef.current = msg.id
     } catch {
-      setDraft(body) // restore on error
+      setDraft(body)
     } finally {
       setSending(false)
       inputRef.current?.focus()
@@ -140,26 +151,25 @@ export function ChannelsView() {
     if (activeChannel?.id === ch.id) setActiveChannel(updated[0] ?? null)
   }
 
-  // Group consecutive messages from the same sender
   function shouldShowHeader(i: number): boolean {
     if (i === 0) return true
     const prev = messages[i - 1]
     const cur = messages[i]
     if (prev.senderEmail !== cur.senderEmail) return true
     const gap = new Date(cur.createdAt).getTime() - new Date(prev.createdAt).getTime()
-    return gap > 5 * 60 * 1000 // 5 min gap = new group
+    return gap > 5 * 60 * 1000
   }
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full bg-bg-surface">
       {/* Channel sidebar */}
-      <aside className="w-52 border-r border-gray-800 flex flex-col flex-shrink-0 bg-gray-900">
-        <div className="px-3 pt-4 pb-2 flex items-center justify-between">
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Channels</span>
+      <aside className="w-48 border-r border-border flex flex-col flex-shrink-0 bg-bg-surface">
+        <div className="px-3 pt-4 pb-2 flex items-center justify-between border-b border-border">
+          <span className="text-xs font-semibold text-fg-tertiary uppercase tracking-wide">Channels</span>
           <button
             data-testid="new-channel-button"
             onClick={() => setShowNewChannel(true)}
-            className="text-gray-400 hover:text-gray-200 text-lg leading-none"
+            className="text-fg-tertiary hover:text-fg-primary text-lg leading-none transition-colors"
             title="New channel"
           >
             +
@@ -167,25 +177,25 @@ export function ChannelsView() {
         </div>
 
         {loadingChannels ? (
-          <div className="px-3 py-2 text-xs text-gray-600">Loading…</div>
+          <div className="px-3 py-2 text-xs text-fg-tertiary">Loading…</div>
         ) : (
-          <nav className="flex-1 overflow-y-auto px-2 space-y-0.5">
+          <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
             {channels.map((ch) => (
               <button
                 key={ch.id}
                 data-testid={`channel-item-${ch.name}`}
                 onClick={() => setActiveChannel(ch)}
-                className={`w-full text-left flex items-center justify-between px-2 py-1.5 rounded text-sm group ${
+                className={`w-full text-left flex items-center justify-between px-2 py-1.5 rounded text-sm group transition-colors ${
                   activeChannel?.id === ch.id
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
+                    ? 'bg-accent/10 text-accent font-medium'
+                    : 'text-fg-secondary hover:bg-bg-hover hover:text-fg-primary'
                 }`}
               >
                 <span className="truncate"><span className="opacity-60">#</span>{ch.name}</span>
                 {ch.name !== 'general' && (
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDeleteChannel(ch) }}
-                    className="opacity-0 group-hover:opacity-100 text-xs hover:text-red-400 ml-1"
+                    className="opacity-0 group-hover:opacity-100 text-xs hover:text-danger ml-1 transition-opacity"
                   >
                     ×
                   </button>
@@ -197,19 +207,19 @@ export function ChannelsView() {
       </aside>
 
       {/* Message area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 bg-bg-base">
         {!activeChannel ? (
-          <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
+          <div className="flex-1 flex items-center justify-center text-fg-tertiary text-sm">
             Select a channel
           </div>
         ) : (
           <>
             {/* Channel header */}
-            <div className="border-b border-gray-800 px-4 py-3 flex-shrink-0">
+            <div className="border-b border-border px-4 py-3 flex-shrink-0 bg-bg-surface">
               <div className="flex items-baseline gap-2">
-                <span className="font-semibold text-gray-200">#{activeChannel.name}</span>
+                <span className="font-semibold text-fg-primary">#{activeChannel.name}</span>
                 {activeChannel.description && (
-                  <span className="text-xs text-gray-500">{activeChannel.description}</span>
+                  <span className="text-xs text-fg-tertiary">{activeChannel.description}</span>
                 )}
               </div>
             </div>
@@ -217,9 +227,9 @@ export function ChannelsView() {
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-4 py-3 space-y-0.5">
               {loadingMessages ? (
-                <div className="text-center text-gray-600 text-sm py-8">Loading…</div>
+                <div className="text-center text-fg-tertiary text-sm py-8">Loading…</div>
               ) : messages.length === 0 ? (
-                <div className="text-center text-gray-600 text-sm py-8">
+                <div className="text-center text-fg-tertiary text-sm py-8">
                   No messages yet. Say hello in #{activeChannel.name}!
                 </div>
               ) : (
@@ -233,20 +243,20 @@ export function ChannelsView() {
                           <div className={`w-7 h-7 rounded flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${avatarColor(msg.senderEmail)}`}>
                             {senderInitials(msg.senderName || msg.senderEmail)}
                           </div>
-                          <span className="text-sm font-medium text-gray-200">
+                          <span className="text-sm font-medium text-fg-primary">
                             {msg.senderName || msg.senderEmail.split('@')[0]}
                           </span>
-                          <span className="text-xs text-gray-600">{formatTime(msg.createdAt)}</span>
+                          <span className="text-xs text-fg-tertiary">{formatTime(msg.createdAt)}</span>
                         </div>
                       )}
                       <div className="flex items-start pl-9 gap-2">
-                        <p className="text-sm text-gray-300 whitespace-pre-wrap flex-1 leading-relaxed">
+                        <p className="text-sm text-fg-secondary whitespace-pre-wrap flex-1 leading-relaxed">
                           {msg.body}
                         </p>
                         {isOwn && (
                           <button
                             onClick={() => handleDeleteMessage(msg)}
-                            className="opacity-0 group-hover:opacity-100 text-xs text-gray-600 hover:text-red-400 flex-shrink-0 mt-0.5"
+                            className="opacity-0 group-hover:opacity-100 text-xs text-fg-tertiary hover:text-danger flex-shrink-0 mt-0.5 transition-opacity"
                           >
                             ×
                           </button>
@@ -260,17 +270,17 @@ export function ChannelsView() {
             </div>
 
             {/* Compose */}
-            <div className="border-t border-gray-800 p-3 flex-shrink-0">
-              <div className="flex items-end gap-2 bg-gray-800 rounded-lg px-3 py-2">
+            <div className="border-t border-border p-3 flex-shrink-0 bg-bg-surface">
+              <div className="flex items-end gap-2 bg-bg-raised border border-border rounded-lg px-3 py-2">
                 <textarea
-                  data-testid="message-input"
                   ref={inputRef}
+                  data-testid="message-input"
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={`Message #${activeChannel.name}`}
                   rows={1}
-                  className="flex-1 bg-transparent text-sm text-gray-200 placeholder-gray-600 resize-none focus:outline-none min-h-[24px] max-h-32"
+                  className="flex-1 bg-transparent text-sm text-fg-primary placeholder:text-fg-tertiary resize-none focus:outline-none min-h-[24px] max-h-32"
                   style={{ height: 'auto' }}
                   onInput={(e) => {
                     const t = e.currentTarget
@@ -282,7 +292,7 @@ export function ChannelsView() {
                   data-testid="message-send-button"
                   onClick={handleSend}
                   disabled={!draft.trim() || sending}
-                  className="text-blue-400 hover:text-blue-300 disabled:opacity-30 flex-shrink-0 pb-0.5"
+                  className="text-accent hover:text-accent/80 disabled:opacity-30 flex-shrink-0 pb-0.5 transition-colors"
                   title="Send (Enter)"
                 >
                   <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
@@ -290,7 +300,7 @@ export function ChannelsView() {
                   </svg>
                 </button>
               </div>
-              <p className="text-xs text-gray-700 mt-1 px-1">Enter to send · Shift+Enter for new line</p>
+              <p className="text-xs text-fg-tertiary mt-1 px-1">Enter to send · Shift+Enter for new line</p>
             </div>
           </>
         )}
@@ -330,8 +340,8 @@ function NewChannelModal({
     try {
       const ch = await createChannel({ name: name.trim(), description: description.trim() || undefined })
       onCreated(ch)
-    } catch (err: any) {
-      setError(err.message ?? 'Failed to create channel')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to create channel')
     } finally {
       setSaving(false)
     }
@@ -339,19 +349,20 @@ function NewChannelModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-gray-900 border border-gray-700 rounded-lg w-full max-w-sm mx-4 p-5">
-        <h3 className="text-sm font-semibold text-gray-200 mb-4">New Channel</h3>
+      <div className="bg-bg-raised border border-border rounded-lg w-full max-w-sm mx-4 p-5 shadow-card">
+        <h3 className="text-sm font-semibold text-fg-primary mb-4">New Channel</h3>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="text-xs text-gray-400 block mb-1">Channel name</label>
-            <div className="flex items-center bg-gray-800 border border-gray-700 rounded px-3 py-2 focus-within:border-blue-500">
-              <span className="text-gray-500 text-sm mr-1">#</span>
+            <label className="text-xs text-fg-secondary block mb-1">Channel name</label>
+            <div className="flex items-center bg-bg-surface border border-border rounded px-3 py-2 focus-within:border-accent transition-colors">
+              <span className="text-fg-tertiary text-sm mr-1">#</span>
               <input
                 autoFocus
+                data-testid="channel-name-input"
                 value={name}
                 onChange={(e) => setName(e.target.value.toLowerCase().replace(/\s/g, '-'))}
                 placeholder="e.g. engineering"
-                className="flex-1 bg-transparent text-sm text-gray-200 placeholder-gray-500 focus:outline-none"
+                className="flex-1 bg-transparent text-sm text-fg-primary placeholder:text-fg-tertiary focus:outline-none"
               />
             </div>
           </div>
@@ -359,17 +370,18 @@ function NewChannelModal({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Description (optional)"
-            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500"
+            className="w-full bg-bg-surface border border-border rounded px-3 py-2 text-sm text-fg-primary placeholder:text-fg-tertiary focus:outline-none focus:border-accent transition-colors"
           />
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-danger">{error}</p>}
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="text-sm text-gray-400 hover:text-gray-200 px-3 py-1.5">
+            <button type="button" onClick={onClose} className="text-sm text-fg-secondary hover:text-fg-primary px-3 py-1.5 transition-colors">
               Cancel
             </button>
             <button
               type="submit"
+              data-testid="channel-create-button"
               disabled={saving || !name.trim()}
-              className="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-1.5 rounded"
+              className="text-sm bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-fg px-4 py-1.5 rounded transition-colors"
             >
               {saving ? 'Creating…' : 'Create'}
             </button>
