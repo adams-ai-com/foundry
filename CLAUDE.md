@@ -13,12 +13,14 @@ pnpm monorepo (Turborepo). AGPL-licensed open-source workspace replacing MS 365 
 - `apps/sheets` — Foundry Sheets (spreadsheets, port 3003)
 - `apps/mail` — Foundry Mail client (Next.js, port 3004, proxies to mailserver)
 - `apps/wiki` — Foundry Wiki (knowledge base, port 3005)
+- `apps/sites` — Foundry Sites (CMS, port 3007)
+- `apps/channels` — Foundry Channels (real-time chat + video + AI memory, port 3008) ← C15a live
 - `services/mailserver` — Foundry Mail server (Node.js, port 3100, REST API + SMTP)
 - `packages/` — shared libs
 
 ## Public URL
 `https://foundry.adams-ai.com` → nginx → workspace shell at port 3000.
-nginx routes: `/docs`→3001, `/sheets`→3003, `/mail`→3004, `/wiki`→3005, `/`→3000.
+nginx routes: `/docs`→3001, `/sheets`→3003, `/mail`→3004, `/wiki`→3005, `/sites`→3007, `/channels`→3008, `/import`→3008, `/api/import`→3008, `/api/sse`→3008 (no buffering), `/org`→3008, `/`→3000.
 Cloudflare proxied (free TLS). Self-signed origin cert at `/etc/ssl/certs/foundry-origin.crt`.
 
 ## Services on foundry-srv
@@ -30,6 +32,8 @@ Cloudflare proxied (free TLS). Self-signed origin cert at `/etc/ssl/certs/foundr
 | Sheets | `foundry-sheets.service` | 3003 | `/var/www/foundry/apps/sheets/.env` |
 | Mail client | `foundry-mail-client.service` | 3004 | `/var/www/foundry/apps/mail/.env` |
 | Wiki | `foundry-wiki.service` | 3005 | `/var/www/foundry/apps/wiki/.env` |
+| Sites | `foundry-sites.service` | 3007 | `/var/www/foundry/apps/sites/.env` |
+| Channels | `foundry-channels.service` | 3008 | `/var/www/foundry/apps/channels/.env` |
 | Mail server | `foundry-mail.service` | 3100 (localhost) | `/etc/foundry-mail/secrets.env` (640 root:foundry) |
 
 ## Workspace auth model
@@ -89,7 +93,16 @@ sudo -u foundry psql "$WURL" -f /var/www/foundry/apps/wiki/lib/schema.sql
 - 2 GB swap active on foundry-srv (`/swapfile`, persisted in `/etc/fstab`)
 - `foundry-docs-blue.service` (old blue-green unit) was stopped/disabled 2026-05-18 — replaced by `foundry-docs.service`
 
+## Channels app notes
+- DB: `foundry_channels` on foundry-srv; migrate with `psql "$CHANNELS_DB_URL" -f apps/channels/scripts/migrate.sql` (+ migrate-c2.sql through c8.sql sequentially)
+- VAPID keys in `/var/www/foundry/apps/channels/.env` (3 VAPID-related vars)
+- Push endpoint: `GET /api/push/vapid-public-key`, `POST /api/push/subscribe`
+- Service worker: `/sw.js` (must be in `apps/channels/public/sw.js` on server — restore with `sudo -u foundry git -C /var/www/foundry restore apps/channels/` if deleted)
+- C15b (Expo native app) is next — requires Apple Developer Program enrollment first
+
 ## What's next (pick up here)
-1. **Test auth flow end-to-end**: go to `https://foundry.adams-ai.com`, enter email, grab magic link from `journalctl -u foundry-workspace | grep "MAGIC LINK"`, create org, verify launcher works
-2. **Wire SMTP** so magic links go to email: set `SMTP_HOST/PORT/USER/PASS/FROM` in `/var/www/foundry/apps/workspace/.env` and restart service
-3. **Auth middleware for individual apps**: add `packages/auth` middleware so `/docs`, `/sheets`, `/mail`, `/wiki` also require a session — currently open to anyone who knows the port
+C15b — Expo native app (App Store path). Prerequisites: Apple Developer Program enrollment ($99/yr). Next phases after that: C16 (mobile video).
+
+For auth/workspace:
+1. **Test auth flow**: go to `https://foundry.adams-ai.com`, enter email, grab magic link from `journalctl -u foundry-workspace | grep "MAGIC LINK"`, create org, verify launcher
+2. **Wire SMTP**: set `SMTP_HOST/PORT/USER/PASS/FROM` in `/var/www/foundry/apps/workspace/.env`
