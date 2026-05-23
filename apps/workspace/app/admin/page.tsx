@@ -3,30 +3,34 @@ import db from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
-async function getStats() {
-  const [users, activeSessions, orgs, members] = await Promise.all([
-    db`SELECT COUNT(*)::int as n FROM users`,
-    db`SELECT COUNT(*)::int as n FROM sessions WHERE expires_at > NOW()`,
-    db`SELECT COUNT(*)::int as n FROM orgs`,
-    db`SELECT COUNT(*)::int as n FROM org_members`,
+async function getStats(orgId: string) {
+  const [users, activeSessions, groups, pendingInvites] = await Promise.all([
+    db`SELECT COUNT(DISTINCT u.id)::int as n FROM users u
+       JOIN org_members m ON m.user_id = u.id WHERE m.org_id = ${orgId} AND u.deactivated_at IS NULL`,
+    db`SELECT COUNT(*)::int as n FROM sessions s
+       JOIN org_members m ON m.user_id = s.user_id AND m.org_id = ${orgId}
+       WHERE s.expires_at > NOW() AND s.org_id = ${orgId}`,
+    db`SELECT COUNT(*)::int as n FROM org_groups WHERE org_id = ${orgId}`,
+    db`SELECT COUNT(*)::int as n FROM invites
+       WHERE org_id = ${orgId} AND accepted_at IS NULL AND expires_at > NOW()`,
   ])
   return {
     users: users[0].n as number,
     activeSessions: activeSessions[0].n as number,
-    orgs: orgs[0].n as number,
-    members: members[0].n as number,
+    groups: groups[0].n as number,
+    pendingInvites: pendingInvites[0].n as number,
   }
 }
 
 export default async function AdminOverviewPage() {
-  await requireAdmin()
-  const stats = await getStats()
+  const session = await requireAdmin()
+  const stats = await getStats(session.orgId!)
 
   const cards = [
-    { label: 'Total Users',      value: stats.users,          sub: 'registered accounts' },
-    { label: 'Active Sessions',  value: stats.activeSessions, sub: 'sessions not yet expired' },
-    { label: 'Organizations',    value: stats.orgs,           sub: 'workspaces' },
-    { label: 'Org Members',      value: stats.members,        sub: 'user-org relationships' },
+    { label: 'Active Members',    value: stats.users,          sub: 'in this organization' },
+    { label: 'Active Sessions',   value: stats.activeSessions, sub: 'sessions not yet expired' },
+    { label: 'Groups',            value: stats.groups,         sub: 'user groups' },
+    { label: 'Pending Invites',   value: stats.pendingInvites, sub: 'awaiting acceptance' },
   ]
 
   return (
@@ -50,11 +54,11 @@ export default async function AdminOverviewPage() {
         <h2 className="text-sm font-semibold text-fg-primary mb-4">Quick links</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {[
-            { label: 'Manage Users',   href: '/admin/users' },
-            { label: 'Manage Groups',  href: '/admin/groups' },
-            { label: 'Domain Setup',   href: '/admin/domains' },
-            { label: 'App Access',     href: '/admin/apps' },
-            { label: 'Audit Log',      href: '/admin/audit' },
+            { label: 'Manage Users',    href: '/admin/users' },
+            { label: 'Manage Groups',   href: '/admin/groups' },
+            { label: 'Pending Invites', href: '/admin/invites' },
+            { label: 'Domain Setup',    href: '/admin/domains' },
+            { label: 'Audit Log',       href: '/admin/audit' },
             { label: 'Security Policy', href: '/admin/security' },
           ].map(link => (
             <a

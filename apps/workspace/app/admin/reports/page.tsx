@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { requireAdmin } from '@/lib/auth'
+import { getOrgTimezone } from '@/lib/timezone'
 import db from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
@@ -23,6 +24,7 @@ const REASON_LABELS: Record<string, string> = {
 
 export default async function ReportsPage() {
   const session = await requireAdmin()
+  const tz = await getOrgTimezone(session.orgId!)
 
   // Org member emails for cross-referencing unknown-org failures
   const memberEmails = await db`

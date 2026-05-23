@@ -8,6 +8,7 @@ const APPS = [
   { id: 'channels', label: 'Channels', href: '/org' },
   { id: 'wiki',   label: 'Wiki',   href: '/wiki' },
   { id: 'sites',  label: 'Sites',  href: '/sites' },
+  { id: 'pdf',    label: 'PDF',    href: '/pdf' },
 ] as const
 
 type AppId = typeof APPS[number]['id']
