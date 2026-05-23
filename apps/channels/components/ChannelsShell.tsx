@@ -41,7 +41,8 @@ export function ChannelsShell({
   const [unread, setUnread] = useState<Record<string, number>>({})
   const [notifCount, setNotifCount] = useState(0)
   const [activeCallId, setActiveCallId] = useState<string | null>(initialActiveCall?.id ?? null)
-  const [showMemory, setShowMemory] = useState(false)
+  const [showMemory,     setShowMemory]     = useState(false)
+  const [followupCount,  setFollowupCount]  = useState(0)
   const sseRef = useRef<EventSource | null>(null)
 
   useEffect(() => { setMessages(initialMessages) }, [activeTopicId, initialMessages])
@@ -49,7 +50,7 @@ export function ChannelsShell({
   useEffect(() => { setLiveActiveTopic(activeTopic) }, [activeTopic])
   useEffect(() => { setActiveCallId(initialActiveCall?.id ?? null) }, [activeTopicId, initialActiveCall])
 
-  // Load unread counts + notification count
+  // Load unread counts + notification count + follow-up count
   useEffect(() => {
     fetch('/api/channels/unread')
       .then(r => r.json())
@@ -58,6 +59,10 @@ export function ChannelsShell({
     fetch('/api/notifications')
       .then(r => r.json())
       .then((data: { count: number }) => setNotifCount(data.count))
+      .catch(() => {})
+    fetch('/api/channels/followups')
+      .then(r => r.ok ? r.json() as Promise<{ total: number }> : null)
+      .then(d => { if (d) setFollowupCount(d.total) })
       .catch(() => {})
   }, [activeTopicId])
 
@@ -201,8 +206,8 @@ export function ChannelsShell({
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowMemory(m => !m)}
-            title="Workspace Memory — Ask AI or view Timeline"
-            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+            title="Workspace Memory — Ask AI, Timeline, Attention"
+            className={`relative w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
               showMemory
                 ? 'bg-accent/15 text-accent'
                 : 'text-fg-muted hover:text-fg-primary hover:bg-bg-hover'
@@ -211,6 +216,11 @@ export function ChannelsShell({
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
             </svg>
+            {followupCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 flex items-center justify-center text-[9px] font-bold rounded-full bg-red-500 text-white leading-none">
+                {followupCount > 9 ? '9+' : followupCount}
+              </span>
+            )}
           </button>
           <NotificationBell orgSlug={orgSlug} count={notifCount} onCountChange={setNotifCount} />
           <div className="w-7 h-7 bg-accent/15 rounded-full flex items-center justify-center">
