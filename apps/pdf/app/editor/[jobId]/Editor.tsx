@@ -157,6 +157,7 @@ const ICONS: Record<string, string> = {
   print:         'M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z',
   history:       'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5M12 7v5l4 2',
   link:          'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
+  ocr:           'M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h2m2 0h2m2 0h2M7 8h10',
 }
 
 // ── Toolbar button ───────────────────────────────────────────────────────────
@@ -322,6 +323,11 @@ export function Editor({ jobId }: { jobId: string }) {
   // Link annotation
   const [linkModalRect, setLinkModalRect] = useState<[number,number,number,number] | null>(null)
   const [linkUri, setLinkUri]             = useState('https://')
+
+  // OCR
+  const [ocrOpen, setOcrOpen]       = useState(false)
+  const [ocrRunning, setOcrRunning] = useState(false)
+  const [ocrLang, setOcrLang]       = useState('eng')
 
   // Find & Replace
   const [replaceOpen, setReplaceOpen]     = useState(false)
@@ -880,6 +886,21 @@ export function Editor({ jobId }: { jobId: string }) {
     else { setReplaceResult(`Replaced ${d.replaced} occurrence${d.replaced !== 1 ? 's' : ''}`); bump() }
   }
 
+  async function doOcr() {
+    setOcrRunning(true); toast('Running OCR — this may take a moment…')
+    try {
+      const res = await fetch(`/pdf/api/pdf/${jobId}/ocr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lang: ocrLang }),
+      })
+      const d = await res.json()
+      if (!res.ok) { toast(d.error ?? 'OCR failed'); return }
+      bump(); toast('OCR complete — document is now searchable')
+    } catch { toast('OCR failed') }
+    finally { setOcrRunning(false) }
+  }
+
   async function addLink() {
     if (!linkModalRect || !linkUri.startsWith('http')) return
     await apiPost(`/pdf/api/pdf/${jobId}/links`, { page: currentPage, rect: linkModalRect, uri: linkUri })
@@ -1216,6 +1237,7 @@ export function Editor({ jobId }: { jobId: string }) {
                 <DropItem icon="copy"     label="Insert blank page"  onClick={() => { setPagesMenuOpen(false); doInsertBlank() }} />
                 <DropItem icon="hf"       label="Header &amp; Footer…" onClick={() => { setPagesMenuOpen(false); setHfOpen(true) }} />
                 <DropItem icon="crop"     label="Crop page"          onClick={() => { setPagesMenuOpen(false); setTool('crop'); setCropRect(null) }} />
+                <DropItem icon="ocr"      label="Make searchable…"   onClick={() => { setPagesMenuOpen(false); setOcrOpen(true) }} />
               </div>
             </>
           )}
@@ -1952,6 +1974,47 @@ export function Editor({ jobId }: { jobId: string }) {
         <div className="flex-1" />
         <span className="tabular-nums">{zoom}%</span>
       </div>
+
+      {/* ── OCR modal ─────────────────────────────────────────────────────────── */}
+      {ocrOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-bg-raised rounded-xl border border-border shadow-card p-6 w-96">
+            <h2 className="text-sm font-semibold text-fg-primary mb-1">Make Document Searchable</h2>
+            <p className="text-xs text-fg-tertiary mb-4">
+              Runs Tesseract OCR to add an invisible text layer to scanned pages.
+              Pages that already have selectable text are skipped.
+              Large documents may take up to a minute.
+            </p>
+            <label className="block mb-5">
+              <span className="text-xs text-fg-tertiary">Language</span>
+              <select value={ocrLang} onChange={e => setOcrLang(e.target.value)}
+                className="mt-0.5 w-full border border-border rounded-md px-3 py-2 text-sm bg-bg-base text-fg-primary focus:outline-none focus:ring-1 focus:ring-accent">
+                <option value="eng">English</option>
+                <option value="fra">French</option>
+                <option value="deu">German</option>
+                <option value="spa">Spanish</option>
+                <option value="ita">Italian</option>
+                <option value="por">Portuguese</option>
+                <option value="nld">Dutch</option>
+                <option value="chi_sim">Chinese (Simplified)</option>
+                <option value="jpn">Japanese</option>
+                <option value="ara">Arabic</option>
+                <option value="eng+fra">English + French</option>
+                <option value="eng+deu">English + German</option>
+                <option value="eng+spa">English + Spanish</option>
+              </select>
+            </label>
+            <div className="flex gap-2">
+              <button onClick={() => setOcrOpen(false)}
+                className="flex-1 text-sm text-fg-secondary border border-border rounded-lg py-2 hover:bg-bg-hover">Cancel</button>
+              <button onClick={async () => { setOcrOpen(false); await doOcr() }} disabled={ocrRunning}
+                className="flex-1 bg-accent text-accent-fg text-sm rounded-lg py-2 hover:bg-accent-h disabled:opacity-40">
+                {ocrRunning ? 'Running OCR…' : 'Run OCR'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Link URI modal ────────────────────────────────────────────────────── */}
       {linkModalRect && (
