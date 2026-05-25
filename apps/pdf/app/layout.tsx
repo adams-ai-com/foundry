@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { cookies } from 'next/headers'
 import './globals.css'
-import { requireSession } from '@foundry/auth'
+import { getSession } from '@foundry/auth'
 import { TopNav } from '@foundry/ui'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
@@ -13,7 +13,9 @@ export const metadata: Metadata = {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const session = await requireSession()
+  // getSession returns null for unauthenticated requests (e.g., public signing page)
+  // Middleware handles auth redirect for all paths except /sign/*
+  const session = await getSession()
   const jar = await cookies()
   const theme = (jar.get('foundry_theme')?.value ?? 'light') as 'light' | 'dark' | 'warm'
 
@@ -25,8 +27,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <link href="https://fonts.googleapis.com/css2?family=Dancing+Script&family=Pacifico&family=Great+Vibes&family=Satisfy&family=Caveat&display=swap" rel="stylesheet" />
       </head>
       <body className="bg-bg-base text-fg-primary antialiased flex flex-col min-h-screen">
-        <TopNav session={session} activeApp="pdf" orgSlug={session.orgSlug ?? undefined} theme={theme} />
-        <main className="flex-1">{children}</main>
+        {session && (
+          <TopNav session={session} activeApp="pdf" orgSlug={session.orgSlug ?? undefined} theme={theme} />
+        )}
+        <main className={`flex-1 ${session ? '' : 'pt-0'}`}>{children}</main>
       </body>
     </html>
   )

@@ -372,6 +372,120 @@ export function Editor({ jobId }: { jobId: string }) {
   const [deletePageConfirm, setDeletePageConfirm] = useState(false)
   const [toastVisible, setToastVisible]           = useState(false)
 
+  // ── Envelope / request-signatures wizard ─────────────────────────────────
+  type EnvRecip = { id: string; name: string; email: string; order: number; color: string }
+  type EnvField = { id: string; recipId: string; page: number; x0: number; y0: number; x1: number; y1: number; type: 'signature' | 'initials' | 'date' | 'name' }
+  const ENV_COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899']
+  const [envOpen, setEnvOpen]           = useState(false)
+  const [envStep, setEnvStep]           = useState(0)   // 0=recipients 1=fields 2=review
+  const [envTitle, setEnvTitle]         = useState('')
+  const [envRecips, setEnvRecips]       = useState<EnvRecip[]>([])
+  const [envFields, setEnvFields]       = useState<EnvField[]>([])
+  const [envExpiry, setEnvExpiry]       = useState(14)
+  const [envNewName, setEnvNewName]     = useState('')
+  const [envNewEmail, setEnvNewEmail]   = useState('')
+  const [envActiveRecip, setEnvActiveRecip] = useState<string | null>(null)
+  const [envFieldType, setEnvFieldType] = useState<'signature' | 'initials' | 'date' | 'name'>('signature')
+  const [envPage, setEnvPage]           = useState(0)
+  const [envDragStart, setEnvDragStart] = useState<{ x: number; y: number } | null>(null)
+  const [envDragRect, setEnvDragRect]   = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+  const [envSending, setEnvSending]     = useState(false)
+  const [envResult, setEnvResult]       = useState<{ id: string; links: { name: string; email: string; url: string }[] } | null>(null)
+  const [envCopied, setEnvCopied]       = useState<string | null>(null)
+  const envPageRef                      = useRef<HTMLDivElement>(null)
+
+  function envReset() {
+    setEnvOpen(false); setEnvStep(0); setEnvTitle(filename.replace(/\.pdf$/i, ''))
+    setEnvRecips([]); setEnvFields([]); setEnvExpiry(14)
+    setEnvNewName(''); setEnvNewEmail(''); setEnvActiveRecip(null)
+    setEnvFieldType('signature'); setEnvPage(0); setEnvResult(null)
+  }
+
+  function envAddRecip() {
+    if (!envNewName.trim() || !envNewEmail.trim()) return
+    const id = crypto.randomUUID()
+    setEnvRecips(prev => [...prev, {
+      id, name: envNewName.trim(), email: envNewEmail.trim(),
+      order: prev.length, color: ENV_COLORS[prev.length % ENV_COLORS.length],
+    }])
+    setEnvNewName(''); setEnvNewEmail('')
+    setEnvActiveRecip(id)
+  }
+
+  function envRemoveRecip(id: string) {
+    setEnvRecips(prev => prev.filter(r => r.id !== id))
+    setEnvFields(prev => prev.filter(f => f.recipId !== id))
+    setEnvActiveRecip(prev => prev === id ? null : prev)
+  }
+
+  function envRemoveField(id: string) {
+    setEnvFields(prev => prev.filter(f => f.id !== id))
+  }
+
+  function envMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    if (!envActiveRecip) return
+    const box = e.currentTarget.getBoundingClientRect()
+    setEnvDragStart({ x: e.clientX - box.left, y: e.clientY - box.top })
+    setEnvDragRect(null)
+    e.preventDefault()
+  }
+
+  function envMouseMove(e: React.MouseEvent<HTMLDivElement>) {
+    if (!envDragStart) return
+    const box = e.currentTarget.getBoundingClientRect()
+    const cx = e.clientX - box.left
+    const cy = e.clientY - box.top
+    setEnvDragRect({
+      x: Math.min(envDragStart.x, cx), y: Math.min(envDragStart.y, cy),
+      w: Math.abs(cx - envDragStart.x), h: Math.abs(cy - envDragStart.y),
+    })
+  }
+
+  function envMouseUp(e: React.MouseEvent<HTMLDivElement>) {
+    if (!envDragStart || !envDragRect || !envActiveRecip) { setEnvDragStart(null); setEnvDragRect(null); return }
+    if (envDragRect.w < 20 || envDragRect.h < 10) { setEnvDragStart(null); setEnvDragRect(null); return }
+    const box = e.currentTarget.getBoundingClientRect()
+    const info = pageInfos[envPage]
+    if (!info) { setEnvDragStart(null); setEnvDragRect(null); return }
+    const scaleX = info.width / box.width
+    const scaleY = info.height / box.height
+    const x0 = envDragRect.x * scaleX
+    const y0 = envDragRect.y * scaleY
+    const x1 = (envDragRect.x + envDragRect.w) * scaleX
+    const y1 = (envDragRect.y + envDragRect.h) * scaleY
+    setEnvFields(prev => [...prev, {
+      id: crypto.randomUUID(), recipId: envActiveRecip,
+      page: envPage, x0, y0, x1, y1, type: envFieldType,
+    }])
+    setEnvDragStart(null); setEnvDragRect(null)
+  }
+
+  async function envSend() {
+    if (!envRecips.length || !envFields.length) return
+    setEnvSending(true)
+    try {
+      const body = {
+        job_id: jobId,
+        title: envTitle.trim() || filename.replace(/\.pdf$/i, ''),
+        expiry_days: envExpiry,
+        recipients: envRecips.map((r, i) => ({ name: r.name, email: r.email, order_index: r.order })),
+        fields: envFields.map(f => {
+          const ri = envRecips.findIndex(r => r.id === f.recipId)
+          return { recipient_index: ri, page: f.page, x0: f.x0, y0: f.y0, x1: f.x1, y1: f.y1, field_type: f.type }
+        }),
+      }
+      const res = await fetch('/pdf/api/envelopes', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (!res.ok) { toast(data.error ?? 'Failed to send'); return }
+      setEnvResult(data)
+    } finally {
+      setEnvSending(false)
+    }
+  }
+
   // Digital signing
   const [signOpen, setSignOpen]         = useState(false)
   const [signName, setSignName]         = useState('')
@@ -1307,6 +1421,15 @@ export function Editor({ jobId }: { jobId: string }) {
         </button>
         <input ref={compareInputRef} type="file" accept=".pdf" className="hidden"
           onChange={e => { if (e.target.files?.[0]) { doCompare(e.target.files[0]); e.target.value = '' } }} />
+        {/* Request signatures */}
+        <button
+          onClick={() => { setEnvTitle(filename.replace(/\.pdf$/i, '')); setEnvOpen(true) }}
+          title="Request signatures"
+          className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover shrink-0">
+          <Icon d={ICONS.fieldSig} />
+          <span className="hidden xl:block">Signatures</span>
+        </button>
+        <Sep />
         <a href={`/pdf/api/pdf/${jobId}/download`} title="Download PDF"
           className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover shrink-0">
           <Icon d={ICONS.download} />
@@ -2629,6 +2752,315 @@ export function Editor({ jobId }: { jobId: string }) {
                 className="flex-1 bg-accent text-accent-fg text-sm rounded-lg py-2 hover:bg-accent-h disabled:opacity-40">
                 {signing ? 'Signing…' : 'Sign PDF'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Request-signatures wizard ─────────────────────────────────────────── */}
+      {envOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-bg-raised rounded-2xl border border-border shadow-card w-full max-w-2xl flex flex-col max-h-[90vh] overflow-hidden">
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+              <div>
+                <h2 className="text-sm font-semibold text-fg-primary">Request Signatures</h2>
+                <div className="flex gap-3 mt-1.5">
+                  {['Signers', 'Place fields', 'Send'].map((label, i) => (
+                    <span key={i} className={`text-xs ${i === envStep ? 'text-accent font-medium' : i < envStep ? 'text-fg-tertiary line-through' : 'text-fg-tertiary'}`}>
+                      {i + 1}. {label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <button onClick={envReset} className="text-fg-tertiary hover:text-fg-primary text-lg leading-none">×</button>
+            </div>
+
+            {/* ── Step 0: Recipients ─────────────────────────────────────────── */}
+            {envStep === 0 && (
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <label className="block">
+                  <span className="text-xs text-fg-tertiary">Document title</span>
+                  <input value={envTitle} onChange={e => setEnvTitle(e.target.value)}
+                    className="mt-0.5 w-full border border-border rounded-lg px-3 py-2 text-sm bg-bg-base text-fg-primary" />
+                </label>
+
+                <div>
+                  <p className="text-xs font-medium text-fg-secondary mb-2">Add signers</p>
+                  <div className="flex gap-2 mb-3">
+                    <input value={envNewName} onChange={e => setEnvNewName(e.target.value)}
+                      placeholder="Full name"
+                      onKeyDown={e => e.key === 'Enter' && envAddRecip()}
+                      className="flex-1 border border-border rounded-lg px-3 py-2 text-sm bg-bg-base text-fg-primary" />
+                    <input value={envNewEmail} onChange={e => setEnvNewEmail(e.target.value)}
+                      placeholder="Email address" type="email"
+                      onKeyDown={e => e.key === 'Enter' && envAddRecip()}
+                      className="flex-1 border border-border rounded-lg px-3 py-2 text-sm bg-bg-base text-fg-primary" />
+                    <button onClick={envAddRecip} disabled={!envNewName.trim() || !envNewEmail.trim()}
+                      className="px-3 py-2 bg-accent text-accent-fg text-sm rounded-lg disabled:opacity-40">
+                      Add
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {envRecips.map((r, i) => (
+                      <div key={r.id} className="flex items-center gap-2 p-2 rounded-lg border border-border bg-bg-surface">
+                        <div className="w-2 h-2 rounded-full shrink-0" style={{ background: r.color }} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-fg-primary truncate">{r.name}</p>
+                          <p className="text-xs text-fg-tertiary truncate">{r.email}</p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-xs text-fg-tertiary">Signs #{i + 1}</span>
+                          <button onClick={() => envRemoveRecip(r.id)} className="text-fg-tertiary hover:text-danger ml-1">×</button>
+                        </div>
+                      </div>
+                    ))}
+                    {envRecips.length === 0 && (
+                      <p className="text-xs text-fg-tertiary text-center py-4">Add at least one signer to continue</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Step 1: Field placement ─────────────────────────────────────── */}
+            {envStep === 1 && (
+              <div className="flex-1 flex overflow-hidden">
+                {/* Controls sidebar */}
+                <div className="w-52 border-r border-border flex flex-col overflow-y-auto shrink-0 p-3 space-y-3">
+                  <div>
+                    <p className="text-xs font-medium text-fg-secondary mb-1.5">Active signer</p>
+                    <div className="space-y-1">
+                      {envRecips.map(r => (
+                        <button key={r.id} onClick={() => setEnvActiveRecip(r.id)}
+                          className={`w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors
+                            ${envActiveRecip === r.id ? 'bg-bg-active font-medium text-fg-primary' : 'text-fg-secondary hover:bg-bg-hover'}`}>
+                          <div className="w-2 h-2 rounded-full shrink-0" style={{ background: r.color }} />
+                          <span className="truncate">{r.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-fg-secondary mb-1.5">Field type</p>
+                    {(['signature', 'initials', 'date', 'name'] as const).map(t => (
+                      <button key={t} onClick={() => setEnvFieldType(t)}
+                        className={`w-full text-left px-2 py-1.5 rounded-lg text-xs capitalize mb-0.5 transition-colors
+                          ${envFieldType === t ? 'bg-accent text-accent-fg' : 'text-fg-secondary hover:bg-bg-hover'}`}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-fg-secondary mb-1.5">
+                      Page {envPage + 1} / {pageCount}
+                    </p>
+                    <div className="flex gap-1">
+                      <button onClick={() => setEnvPage(p => Math.max(0, p - 1))} disabled={envPage === 0}
+                        className="flex-1 text-xs border border-border rounded px-2 py-1 disabled:opacity-40">←</button>
+                      <button onClick={() => setEnvPage(p => Math.min(pageCount - 1, p + 1))} disabled={envPage >= pageCount - 1}
+                        className="flex-1 text-xs border border-border rounded px-2 py-1 disabled:opacity-40">→</button>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-fg-secondary mb-1">Placed fields</p>
+                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                      {envFields.length === 0 && <p className="text-xs text-fg-tertiary">None yet</p>}
+                      {envFields.map(f => {
+                        const recip = envRecips.find(r => r.id === f.recipId)
+                        return (
+                          <div key={f.id} className="flex items-center gap-1 text-xs text-fg-tertiary">
+                            <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: recip?.color }} />
+                            <span className="capitalize truncate">{f.type} p{f.page + 1}</span>
+                            <button onClick={() => envRemoveField(f.id)} className="ml-auto text-fg-tertiary hover:text-danger">×</button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  {!envActiveRecip && (
+                    <p className="text-xs text-amber-600 bg-amber-50 rounded p-2">Select a signer above, then drag on the PDF to place a field</p>
+                  )}
+                  {envActiveRecip && (
+                    <p className="text-xs text-fg-tertiary bg-bg-surface rounded p-2">Drag on the PDF to place a <strong>{envFieldType}</strong> field</p>
+                  )}
+                </div>
+
+                {/* PDF canvas area */}
+                <div className="flex-1 overflow-auto bg-gray-100 p-4">
+                  <div
+                    ref={envPageRef}
+                    className="relative bg-white shadow-sm mx-auto select-none"
+                    style={{ maxWidth: 540, cursor: envActiveRecip ? 'crosshair' : 'default' }}
+                    onMouseDown={envMouseDown}
+                    onMouseMove={envMouseMove}
+                    onMouseUp={envMouseUp}
+                    onMouseLeave={() => { setEnvDragStart(null); setEnvDragRect(null) }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`/pdf/api/pdf/${jobId}/page/${envPage}`}
+                      alt={`Page ${envPage + 1}`}
+                      className="w-full block pointer-events-none"
+                      draggable={false}
+                    />
+
+                    {/* Existing field overlays */}
+                    {envFields.filter(f => f.page === envPage).map(f => {
+                      const recip = envRecips.find(r => r.id === f.recipId)
+                      const info = pageInfos[envPage]
+                      if (!info) return null
+                      const pct = {
+                        left: `${(f.x0 / info.width) * 100}%`,
+                        top: `${(f.y0 / info.height) * 100}%`,
+                        width: `${((f.x1 - f.x0) / info.width) * 100}%`,
+                        height: `${((f.y1 - f.y0) / info.height) * 100}%`,
+                      }
+                      return (
+                        <div key={f.id}
+                          className="absolute rounded flex items-center justify-center text-white text-[9px] font-medium"
+                          style={{ ...pct, background: (recip?.color ?? '#3b82f6') + 'cc', border: `1.5px solid ${recip?.color ?? '#3b82f6'}` }}>
+                          <span className="capitalize truncate px-1">{f.type}</span>
+                          <button onClick={e => { e.stopPropagation(); envRemoveField(f.id) }}
+                            className="absolute top-0 right-0 text-white/80 hover:text-white px-0.5">×</button>
+                        </div>
+                      )
+                    })}
+
+                    {/* Drag preview */}
+                    {envDragRect && envActiveRecip && (
+                      <div className="absolute pointer-events-none rounded border-2 border-dashed border-blue-500 bg-blue-100/40"
+                        style={{
+                          left: envDragRect.x, top: envDragRect.y,
+                          width: envDragRect.w, height: envDragRect.h,
+                        }} />
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Step 2: Review & send ────────────────────────────────────────── */}
+            {envStep === 2 && (
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                {!envResult ? (
+                  <>
+                    <div className="bg-bg-surface rounded-xl border border-border p-4 space-y-2">
+                      <p className="text-xs font-medium text-fg-secondary">Document</p>
+                      <p className="text-sm text-fg-primary">{envTitle || filename}</p>
+                      <p className="text-xs text-fg-tertiary">{envRecips.length} signer{envRecips.length !== 1 ? 's' : ''} · {envFields.length} field{envFields.length !== 1 ? 's' : ''}</p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-medium text-fg-secondary mb-2">Signers & fields</p>
+                      <div className="space-y-1.5">
+                        {envRecips.map(r => {
+                          const rFields = envFields.filter(f => f.recipId === r.id)
+                          return (
+                            <div key={r.id} className="flex items-center justify-between text-xs p-2 rounded-lg border border-border bg-bg-surface">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full" style={{ background: r.color }} />
+                                <span className="font-medium text-fg-primary">{r.name}</span>
+                                <span className="text-fg-tertiary">{r.email}</span>
+                              </div>
+                              <span className="text-fg-tertiary">
+                                {rFields.length > 0
+                                  ? rFields.map(f => f.type).join(', ')
+                                  : <span className="text-amber-600">No fields</span>}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    <label className="block">
+                      <span className="text-xs text-fg-tertiary">Expires after (days)</span>
+                      <input type="number" min={1} max={365} value={envExpiry}
+                        onChange={e => setEnvExpiry(Number(e.target.value))}
+                        className="mt-0.5 w-24 border border-border rounded-lg px-3 py-1.5 text-sm bg-bg-base text-fg-primary" />
+                    </label>
+
+                    {envRecips.some(r => !envFields.find(f => f.recipId === r.id)) && (
+                      <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-3">
+                        Some signers have no fields assigned. They will be able to sign without placing a signature.
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  /* Success state */
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-fg-primary">Envelope created</p>
+                        <p className="text-xs text-fg-tertiary">Share the signing links below with each signer</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      {envResult.links.map(link => (
+                        <div key={link.email} className="border border-border rounded-xl p-3">
+                          <p className="text-xs font-medium text-fg-primary">{link.name}</p>
+                          <p className="text-xs text-fg-tertiary mb-2">{link.email}</p>
+                          <div className="flex gap-2">
+                            <input readOnly value={link.url}
+                              className="flex-1 text-xs border border-border rounded px-2 py-1.5 bg-bg-surface text-fg-tertiary truncate" />
+                            <button
+                              onClick={async () => {
+                                await navigator.clipboard.writeText(link.url)
+                                setEnvCopied(link.email)
+                                setTimeout(() => setEnvCopied(null), 2000)
+                              }}
+                              className="px-3 py-1.5 text-xs border border-border rounded hover:bg-bg-hover">
+                              {envCopied === link.email ? '✓' : 'Copy'}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <a href={`/pdf/envelopes/${envResult.id}`}
+                      className="block text-center text-xs text-accent hover:underline">
+                      View envelope status →
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Footer navigation */}
+            <div className="flex items-center justify-between px-6 py-4 border-t border-border shrink-0">
+              <button onClick={() => envStep > 0 ? setEnvStep(s => s - 1) : envReset()}
+                className="text-sm text-fg-secondary border border-border rounded-lg px-4 py-2 hover:bg-bg-hover">
+                {envStep === 0 ? 'Cancel' : '← Back'}
+              </button>
+              {!envResult && envStep < 2 && (
+                <button
+                  onClick={() => setEnvStep(s => s + 1)}
+                  disabled={envStep === 0 && envRecips.length === 0}
+                  className="text-sm bg-accent text-accent-fg rounded-lg px-4 py-2 hover:bg-accent-h disabled:opacity-40">
+                  Continue →
+                </button>
+              )}
+              {!envResult && envStep === 2 && (
+                <button onClick={envSend} disabled={envSending}
+                  className="text-sm bg-accent text-accent-fg rounded-lg px-4 py-2 hover:bg-accent-h disabled:opacity-40">
+                  {envSending ? 'Sending…' : 'Send for signature →'}
+                </button>
+              )}
+              {envResult && (
+                <button onClick={envReset}
+                  className="text-sm bg-accent text-accent-fg rounded-lg px-4 py-2 hover:bg-accent-h">
+                  Done
+                </button>
+              )}
             </div>
           </div>
         </div>
