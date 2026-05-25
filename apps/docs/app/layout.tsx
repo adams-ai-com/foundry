@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { cookies } from 'next/headers'
 import './globals.css'
-import { FeedbackButton } from '@/components/FeedbackButton'
 import { requireSession } from '@foundry/auth'
 import { TopNav } from '@foundry/ui'
 
@@ -23,7 +22,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="antialiased flex flex-col min-h-screen">
         <TopNav session={session} activeApp="docs" orgSlug={session.orgSlug ?? undefined} theme={theme} />
         <main className="flex-1">{children}</main>
-        <FeedbackButton />
       </body>
     </html>
   )
