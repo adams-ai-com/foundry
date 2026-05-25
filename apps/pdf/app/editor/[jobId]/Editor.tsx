@@ -369,6 +369,8 @@ export function Editor({ jobId }: { jobId: string }) {
   const [securityMenuOpen, setSecurityMenuOpen] = useState(false)
   const [exportOpen, setExportOpen]             = useState(false)
   const [exporting, setExporting]               = useState(false)
+  const [deletePageConfirm, setDeletePageConfirm] = useState(false)
+  const [toastVisible, setToastVisible]           = useState(false)
 
   // Drag-to-reorder
   const [dragFrom, setDragFrom] = useState<number | null>(null)
@@ -493,7 +495,12 @@ export function Editor({ jobId }: { jobId: string }) {
 
   function displayW() { return pageInfo ? Math.round(pageInfo.widthPx * zoom / 100) : 0 }
   function displayH() { return pageInfo ? Math.round(pageInfo.heightPx * zoom / 100) : 0 }
-  function toast(msg: string) { setStatus(msg); setTimeout(() => setStatus(''), 2500) }
+  function toast(msg: string) {
+    setStatus(msg)
+    setToastVisible(true)
+    setTimeout(() => setToastVisible(false), 2500)
+    setTimeout(() => setStatus(''), 2800)
+  }
 
   // ── Fix #3: scroll-wheel zoom (Ctrl+scroll) ────────────────────────────────
 
@@ -685,8 +692,11 @@ export function Editor({ jobId }: { jobId: string }) {
 
   async function deletePage() {
     if (pageCount <= 1) return
-    if (!confirm(`Delete page ${currentPage + 1}?`)) return
-    setSaving(true)
+    setDeletePageConfirm(true)
+  }
+
+  async function confirmDeletePage() {
+    setDeletePageConfirm(false); setSaving(true)
     const next = currentPage > 0 ? currentPage - 1 : 0
     await apiPost(`/pdf/api/pdf/${jobId}/pages/delete`, { page: currentPage })
     setCurrentPage(next); bump(); setSaving(false); toast('Page deleted')
@@ -748,12 +758,6 @@ export function Editor({ jobId }: { jobId: string }) {
 
   async function handleRedact() {
     if (redactRegions.length === 0) return
-    const count = redactRegions.length
-    const pages = [...new Set(redactRegions.map(r => r.page + 1))].sort((a, b) => a - b).join(', ')
-    if (!confirm(
-      `Apply ${count} redaction${count !== 1 ? 's' : ''} across page${pages.includes(',') ? 's' : ''} ${pages}?\n\n` +
-      `Content is permanently removed. A new file is created; the original is preserved.`
-    )) return
     setRedacting(true)
     try {
       const res = await fetch(`/pdf/api/pdf/${jobId}/redact`, {
@@ -1190,159 +1194,41 @@ export function Editor({ jobId }: { jobId: string }) {
   return (
     <div className="flex flex-col" style={{ height: 'calc(100vh - 3rem)' }}>
 
-      {/* ── Toolbar (fix #1: grouped, dropdowns for Pages + Security) ────────── */}
-      <div className="h-11 bg-bg-raised border-b border-border flex items-center px-2 gap-0.5 shrink-0 overflow-x-auto">
-
-        {/* Navigation */}
+      {/* ── App bar (row 1): navigation + output actions ──────────────────── */}
+      <div className="h-10 bg-bg-raised border-b border-border flex items-center px-2 gap-0.5 shrink-0">
         <button onClick={() => router.push('/pdf')}
           className="flex items-center gap-1 text-xs text-fg-tertiary hover:text-fg-primary mr-1 px-1.5 py-1.5 rounded hover:bg-bg-hover shrink-0">
           <Icon d={ICONS.back} size={14} />
           <span className="hidden sm:block">Files</span>
         </button>
-        <span className="text-xs text-fg-secondary truncate max-w-[120px] shrink-0">{filename}</span>
-        {saving    && <span className="text-xs text-fg-tertiary ml-1 shrink-0">Saving…</span>}
-        {!exporting && status && <span className="text-xs text-accent ml-1 shrink-0">{status}</span>}
+        <span className="text-xs text-fg-secondary truncate max-w-[160px] shrink-0">{filename}</span>
+        {saving    && <span className="text-xs text-fg-tertiary ml-1 shrink-0 animate-pulse">Saving…</span>}
         {exporting && <span className="text-xs text-fg-tertiary ml-1 shrink-0 animate-pulse">Converting…</span>}
 
-        <div className="flex-1 min-w-2" />
-
-        {/* History + Find */}
-        <TBtn icon="undo"   onClick={() => handleUndoRef.current()} title="Undo (Ctrl+Z)" />
-        <TBtn icon="history" active={undoPanel} title="Undo history"
-          onClick={() => { setUndoPanel(p => { if (!p) loadUndoSteps(); return !p }) }} />
-        <TBtn icon="search" active={searchOpen}
-          onClick={() => { setSearchOpen(o => !o); setTimeout(() => searchInputRef.current?.focus(), 50) }}
-          title="Find in document (Ctrl+F)" />
-
-        <Sep />
-
-        {/* Annotation tools */}
-        {(['select', 'text', 'sticky', 'arrow', 'freehand'] as Tool[]).map(t => (
-          <TBtn key={t} icon={t} active={tool === t}
-            title={t.charAt(0).toUpperCase() + t.slice(1)}
-            onClick={() => { setTool(t); setDraw({ kind: 'idle' }); setSelRange(null) }} />
-        ))}
-
-        {/* Text markup tools */}
-        {(['highlight', 'underline', 'strikethrough'] as Tool[]).map(t => (
-          <TBtn key={t} icon={t} active={tool === t}
-            title={t.charAt(0).toUpperCase() + t.slice(1)}
-            onClick={() => { setTool(t); setDraw({ kind: 'idle' }); setSelRange(null) }} />
-        ))}
-
-        {/* Shape tools */}
-        <Sep />
-        {(['rect', 'circle', 'line'] as Tool[]).map(t => (
-          <TBtn key={t} icon={t} active={tool === t} title={t.charAt(0).toUpperCase() + t.slice(1)}
-            onClick={() => { setTool(t); setDraw({ kind: 'idle' }) }} />
-        ))}
-        <TBtn icon="link"  active={tool === 'link'}  title="Insert hyperlink — drag to set area"
-          onClick={() => { setTool('link'); setDraw({ kind: 'idle' }) }} />
-        <TBtn icon="field" active={tool === 'field'} title="Add form field — drag to place"
-          onClick={() => { setTool('field'); setDraw({ kind: 'idle' }) }} />
-
-        {/* Stamps */}
-        <div className="relative shrink-0">
-          <button onClick={() => { setStampMenuOpen(o => !o); setPagesMenuOpen(false); setSecurityMenuOpen(false); setExportOpen(false) }}
-            className={`flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors
-              ${tool === 'stamp' ? 'bg-accent text-accent-fg' : 'text-fg-secondary hover:text-fg-primary hover:bg-bg-hover'}`}>
-            <Icon d={ICONS.rubber} />
-            <Icon d={ICONS.chevDown} size={12} />
-          </button>
-          {stampMenuOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setStampMenuOpen(false)} />
-              <div className="absolute left-0 top-full mt-1 z-50 w-52 rounded-xl border border-border bg-bg-raised shadow-lg overflow-hidden py-1">
-                {['Approved','Draft','Confidential','For Comment','For Public Release','Not Approved','Top Secret','Expired','Final'].map(s => (
-                  <button key={s} onClick={() => { setPendingStamp(s); setTool('stamp'); setStampMenuOpen(false) }}
-                    className={`w-full text-left px-4 py-2 text-xs hover:bg-bg-hover ${pendingStamp === s && tool === 'stamp' ? 'text-accent font-semibold' : 'text-fg-secondary'}`}>
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Image insert */}
-        <TBtn icon="image" active={tool === 'image'} title="Insert image — drag to place"
-          onClick={() => { imageInputRef.current?.click() }} />
-        <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
-          onChange={e => { if (e.target.files?.[0]) { setImageFile(e.target.files[0]); setTool('image'); e.target.value = '' } }} />
-
-        {/* eSignature */}
-        <TBtn icon="signature" title="Add signature" onClick={() => { setSigOpen(true); setSigTab('draw') }} />
-
-        {/* Color swatches */}
-        <div className="flex gap-0.5 mx-1">
-          {COLORS.map(c => (
-            <button key={c} onClick={() => setColor(c)} title={c}
-              className={`w-4 h-4 rounded-full border-2 transition-transform
-                ${color === c ? 'border-fg-primary scale-110' : 'border-transparent'}`}
-              style={{ background: c }} />
-          ))}
-        </div>
-
-        <Sep />
-
-        {/* Page operations */}
-        <TBtn icon="rotateCcw" onClick={() => rotate(-90)} title="Rotate left" />
-        <TBtn icon="rotateCw"  onClick={() => rotate(90)}  title="Rotate right" />
-        <TBtn icon="copy"      onClick={duplicatePage}      title="Duplicate page" />
-        <TBtn icon="trash"     onClick={deletePage} disabled={pageCount <= 1} title="Delete page" />
-
-        {/* Pages dropdown (fix #1: merge + split collapsed) */}
-        <div className="relative shrink-0">
-          <button onClick={() => { setPagesMenuOpen(o => !o); setSecurityMenuOpen(false); setExportOpen(false) }}
-            className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover">
-            Pages
-            <Icon d={ICONS.chevDown} size={12} />
-          </button>
-          {pagesMenuOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setPagesMenuOpen(false)} />
-              <div className="absolute left-0 top-full mt-1 z-50 w-40 rounded-xl border border-border bg-bg-raised shadow-lg overflow-hidden">
-                <DropItem icon="merge"    label="Merge PDF…"        onClick={() => { setPagesMenuOpen(false); mergeInputRef.current?.click() }} />
-                <DropItem icon="scissors" label="Split PDF…"         onClick={() => { setPagesMenuOpen(false); setSplitStart('1'); setSplitEnd(String(pageCount)); setSplitDialog(true) }} />
-                <DropItem icon="copy"     label="Insert blank page"  onClick={() => { setPagesMenuOpen(false); doInsertBlank() }} />
-                <DropItem icon="hf"       label="Header &amp; Footer…" onClick={() => { setPagesMenuOpen(false); setHfOpen(true) }} />
-                <DropItem icon="crop"     label="Crop page"          onClick={() => { setPagesMenuOpen(false); setTool('crop'); setCropRect(null) }} />
-                <DropItem icon="ocr"      label="Make searchable…"   onClick={() => { setPagesMenuOpen(false); setOcrOpen(true) }} />
-              </div>
-            </>
-          )}
-        </div>
-        <input ref={mergeInputRef} type="file" accept=".pdf" className="hidden"
-          onChange={e => { if (e.target.files?.[0]) { handleMerge(e.target.files[0]); e.target.value = '' } }} />
-
-        <Sep />
+        <div className="flex-1" />
 
         {/* Zoom */}
-        <button onClick={() => setZoom(z => Math.max(ZOOM_MIN, z - ZOOM_STEP))} title="Zoom out (Ctrl+scroll)"
+        <button onClick={() => setZoom(z => Math.max(ZOOM_MIN, z - ZOOM_STEP))} title="Zoom out"
           className="w-6 h-6 flex items-center justify-center rounded text-fg-tertiary hover:text-fg-primary hover:bg-bg-hover text-sm shrink-0">−</button>
         <button onClick={() => setZoom(100)} title="Reset to 100%"
           className="text-xs text-fg-tertiary hover:text-fg-primary tabular-nums w-9 text-center shrink-0">{zoom}%</button>
-        <button onClick={() => setZoom(z => Math.min(ZOOM_MAX, z + ZOOM_STEP))} title="Zoom in (Ctrl+scroll)"
+        <button onClick={() => setZoom(z => Math.min(ZOOM_MAX, z + ZOOM_STEP))} title="Zoom in"
           className="w-6 h-6 flex items-center justify-center rounded text-fg-tertiary hover:text-fg-primary hover:bg-bg-hover text-sm shrink-0">+</button>
+        <button onClick={fitWidth} title="Fit width"
+          className="px-1.5 py-1 rounded text-[10px] text-fg-tertiary hover:text-fg-primary hover:bg-bg-hover shrink-0">W</button>
+        <button onClick={fitPage} title="Fit page"
+          className="px-1.5 py-1 rounded text-[10px] text-fg-tertiary hover:text-fg-primary hover:bg-bg-hover shrink-0">P</button>
 
         <Sep />
 
-        {/* View mode toggle */}
+        {/* View + panels */}
         <TBtn icon={viewMode === 'single' ? 'contView' : 'singleView'}
           title={viewMode === 'single' ? 'Continuous scroll' : 'Single page'}
           onClick={() => setViewMode(v => v === 'single' ? 'continuous' : 'single')} />
-
-        {/* Bookmarks */}
-        <TBtn icon="bkmk" active={bookmarkPanel} title="Bookmarks"
+        <TBtn icon="bkmk"    active={bookmarkPanel}  title="Bookmarks"
           onClick={() => setBookmarkPanel(p => !p)} />
-
-        {/* Annotation list */}
-        <TBtn icon="annList" active={annotListPanel} title="Annotations"
+        <TBtn icon="annList" active={annotListPanel}  title="Annotations"
           onClick={() => { setAnnotListPanel(p => { if (!p) loadAllAnnots(); return !p }) }} />
-
-        <Sep />
-
-        {/* Comments (fix #4: panel toggle only — does NOT change active tool) */}
         <div className="relative shrink-0">
           <button onClick={() => setCommentPanel(p => !p)} title="Comments"
             className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium transition-colors
@@ -1356,44 +1242,10 @@ export function Editor({ jobId }: { jobId: string }) {
           )}
         </div>
 
-        {/* Security dropdown (fix #1: watermark + protect + cert collapsed) */}
-        <div className="relative shrink-0">
-          <button onClick={() => { setSecurityMenuOpen(o => !o); setPagesMenuOpen(false); setExportOpen(false) }}
-            className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover">
-            Security
-            <Icon d={ICONS.chevDown} size={12} />
-          </button>
-          {securityMenuOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setSecurityMenuOpen(false)} />
-              <div className="absolute right-0 top-full mt-1 z-50 w-52 rounded-xl border border-border bg-bg-raised shadow-lg overflow-hidden">
-                <DropItem icon="stamp"  label="Add watermark…"        onClick={() => { setSecurityMenuOpen(false); setWatermarkOpen(true) }} />
-                <DropItem icon="lock"   label="Password protect…"      onClick={() => { setSecurityMenuOpen(false); setProtectOpen(true) }} />
-                <DropItem icon="props"  label="Document properties…"   onClick={() => { setSecurityMenuOpen(false); openProps() }} />
-                {hasCertificate && (
-                  <a href={`/pdf/api/pdf/${jobId}/redact/certificate`} download
-                    onClick={() => setSecurityMenuOpen(false)}
-                    className="w-full text-left flex items-center gap-2.5 px-4 py-2.5 hover:bg-bg-hover text-xs text-fg-secondary hover:text-fg-primary">
-                    <Icon d={ICONS.cert} size={14} />
-                    Download certificate
-                  </a>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-
-        <Sep />
-
-        {/* Redact */}
-        <TBtn icon="redact" label="Redact" danger active={tool === 'redact'}
-          onClick={() => { setTool(tool === 'redact' ? 'select' : 'redact'); setDraw({ kind: 'idle' }) }}
-          title="Redact — permanently remove content" />
-
         <Sep />
 
         {/* Output */}
-        <a href={`/pdf/forms/${jobId}`}
+        <a href={`/pdf/forms/${jobId}`} title="Forms"
           className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover shrink-0">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}
                strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
@@ -1401,36 +1253,30 @@ export function Editor({ jobId }: { jobId: string }) {
           </svg>
           <span className="hidden lg:block">Forms</span>
         </a>
-
-        <a href={`/pdf/api/pdf/${jobId}/download`}
-          className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover shrink-0"
-          title="Download PDF">
-          <Icon d={ICONS.download} />
-          <span className="hidden lg:block">Download</span>
-        </a>
-
-        <button onClick={printPdf} title="Print PDF"
-          className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover shrink-0">
-          <Icon d={ICONS.print} />
-          <span className="hidden lg:block">Print</span>
-        </button>
-
         <button onClick={() => compareInputRef.current?.click()} disabled={comparing} title="Compare with another PDF"
           className={`flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors shrink-0
             ${diffChanges.length > 0 ? 'text-accent hover:bg-accent/10' : 'text-fg-secondary hover:text-fg-primary hover:bg-bg-hover'}
             disabled:opacity-40 disabled:pointer-events-none`}>
           <Icon d={ICONS.compare} />
-          <span className="hidden lg:block">{comparing ? 'Comparing…' : 'Compare'}</span>
+          <span className="hidden xl:block">{comparing ? 'Comparing…' : 'Compare'}</span>
         </button>
         <input ref={compareInputRef} type="file" accept=".pdf" className="hidden"
           onChange={e => { if (e.target.files?.[0]) { doCompare(e.target.files[0]); e.target.value = '' } }} />
-
+        <a href={`/pdf/api/pdf/${jobId}/download`} title="Download PDF"
+          className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover shrink-0">
+          <Icon d={ICONS.download} />
+          <span className="hidden xl:block">Download</span>
+        </a>
+        <button onClick={printPdf} title="Print PDF"
+          className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover shrink-0">
+          <Icon d={ICONS.print} />
+        </button>
         <div className="relative shrink-0">
           <button onClick={() => { setExportOpen(o => !o); setPagesMenuOpen(false); setSecurityMenuOpen(false) }}
             disabled={exporting}
-            className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover disabled:opacity-40 disabled:pointer-events-none">
-            <span className="hidden lg:block">Export As</span>
-            <span className="lg:hidden"><Icon d={ICONS.download} /></span>
+            className="flex items-center gap-0.5 px-2 py-1.5 rounded-md text-xs font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover disabled:opacity-40 disabled:pointer-events-none">
+            <span className="hidden lg:block">Export</span>
+            <span className="lg:hidden"><Icon d={ICONS.download} size={14} /></span>
             <Icon d={ICONS.chevDown} size={12} />
           </button>
           {exportOpen && (
@@ -1450,6 +1296,163 @@ export function Editor({ jobId }: { jobId: string }) {
             </>
           )}
         </div>
+      </div>
+
+      {/* ── Tool bar (row 2): editing tools ──────────────────────────────── */}
+      <div className="h-9 bg-bg-surface border-b border-border flex items-center px-2 gap-0.5 shrink-0 overflow-x-auto">
+
+        {/* History + Find */}
+        <TBtn icon="undo"    onClick={() => handleUndoRef.current()} title="Undo (Ctrl+Z)" />
+        <TBtn icon="history" active={undoPanel} title="Undo history"
+          onClick={() => { setUndoPanel(p => { if (!p) loadUndoSteps(); return !p }) }} />
+        <TBtn icon="search"  active={searchOpen}
+          onClick={() => { setSearchOpen(o => !o); setTimeout(() => searchInputRef.current?.focus(), 50) }}
+          title="Find in document (Ctrl+F)" />
+
+        <Sep />
+
+        {/* Annotation tools */}
+        {(['select', 'text', 'sticky', 'arrow', 'freehand'] as Tool[]).map(t => (
+          <TBtn key={t} icon={t} active={tool === t}
+            title={t.charAt(0).toUpperCase() + t.slice(1)}
+            onClick={() => { setTool(t); setDraw({ kind: 'idle' }); setSelRange(null) }} />
+        ))}
+
+        <Sep />
+
+        {/* Text markup */}
+        {(['highlight', 'underline', 'strikethrough'] as Tool[]).map(t => (
+          <TBtn key={t} icon={t} active={tool === t}
+            title={t.charAt(0).toUpperCase() + t.slice(1)}
+            onClick={() => { setTool(t); setDraw({ kind: 'idle' }); setSelRange(null) }} />
+        ))}
+
+        <Sep />
+
+        {/* Shape + insert tools */}
+        {(['rect', 'circle', 'line'] as Tool[]).map(t => (
+          <TBtn key={t} icon={t} active={tool === t} title={t.charAt(0).toUpperCase() + t.slice(1)}
+            onClick={() => { setTool(t); setDraw({ kind: 'idle' }) }} />
+        ))}
+        <TBtn icon="link"  active={tool === 'link'}  title="Insert hyperlink — drag to set area"
+          onClick={() => { setTool('link'); setDraw({ kind: 'idle' }) }} />
+        <TBtn icon="field" active={tool === 'field'} title="Add form field — drag to place"
+          onClick={() => { setTool('field'); setDraw({ kind: 'idle' }) }} />
+
+        {/* Stamps */}
+        <div className="relative shrink-0">
+          <button onClick={() => { setStampMenuOpen(o => !o); setPagesMenuOpen(false); setSecurityMenuOpen(false); setExportOpen(false) }}
+            className={`flex items-center gap-0.5 px-2 py-1.5 rounded-md text-xs font-medium transition-colors
+              ${tool === 'stamp' ? 'bg-accent text-accent-fg' : 'text-fg-secondary hover:text-fg-primary hover:bg-bg-hover'}`}>
+            <Icon d={ICONS.rubber} />
+            <Icon d={ICONS.chevDown} size={10} />
+          </button>
+          {stampMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setStampMenuOpen(false)} />
+              <div className="absolute left-0 top-full mt-1 z-50 w-52 rounded-xl border border-border bg-bg-raised shadow-lg overflow-hidden py-1">
+                {['Approved','Draft','Confidential','For Comment','For Public Release','Not Approved','Top Secret','Expired','Final'].map(s => (
+                  <button key={s} onClick={() => { setPendingStamp(s); setTool('stamp'); setStampMenuOpen(false) }}
+                    className={`w-full text-left px-4 py-2 text-xs hover:bg-bg-hover ${pendingStamp === s && tool === 'stamp' ? 'text-accent font-semibold' : 'text-fg-secondary'}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <TBtn icon="image" active={tool === 'image'} title="Insert image — drag to place"
+          onClick={() => { imageInputRef.current?.click() }} />
+        <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
+          onChange={e => { if (e.target.files?.[0]) { setImageFile(e.target.files[0]); setTool('image'); e.target.value = '' } }} />
+        <TBtn icon="signature" title="Add signature" onClick={() => { setSigOpen(true); setSigTab('draw') }} />
+
+        <Sep />
+
+        {/* Color + line width */}
+        <div className="flex gap-0.5 mx-0.5">
+          {COLORS.map(c => (
+            <button key={c} onClick={() => setColor(c)} title={c}
+              className={`w-4 h-4 rounded-full border-2 transition-transform
+                ${color === c ? 'border-fg-primary scale-110' : 'border-transparent'}`}
+              style={{ background: c }} />
+          ))}
+        </div>
+        <div className="flex gap-0.5 ml-1 shrink-0">
+          {([1, 2, 4] as const).map(w => (
+            <button key={w} onClick={() => setLineWidth(w)} title={`Line width ${w}px`}
+              className={`px-1.5 py-0.5 rounded text-[10px] font-medium tabular-nums transition-colors
+                ${lineWidth === w ? 'bg-accent text-accent-fg' : 'text-fg-tertiary hover:text-fg-primary hover:bg-bg-hover'}`}>
+              {w}px
+            </button>
+          ))}
+        </div>
+
+        <Sep />
+
+        {/* Page ops */}
+        <TBtn icon="rotateCcw" onClick={() => rotate(-90)} title="Rotate left" />
+        <TBtn icon="rotateCw"  onClick={() => rotate(90)}  title="Rotate right" />
+        <TBtn icon="copy"      onClick={duplicatePage}      title="Duplicate page" />
+        <TBtn icon="trash"     onClick={deletePage} disabled={pageCount <= 1} title="Delete page" danger />
+
+        <div className="relative shrink-0">
+          <button onClick={() => { setPagesMenuOpen(o => !o); setSecurityMenuOpen(false); setExportOpen(false) }}
+            className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover">
+            Pages <Icon d={ICONS.chevDown} size={11} />
+          </button>
+          {pagesMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setPagesMenuOpen(false)} />
+              <div className="absolute left-0 top-full mt-1 z-50 w-44 rounded-xl border border-border bg-bg-raised shadow-lg overflow-hidden">
+                <DropItem icon="merge"    label="Merge PDF…"       onClick={() => { setPagesMenuOpen(false); mergeInputRef.current?.click() }} />
+                <DropItem icon="scissors" label="Split PDF…"        onClick={() => { setPagesMenuOpen(false); setSplitStart('1'); setSplitEnd(String(pageCount)); setSplitDialog(true) }} />
+                <DropItem icon="copy"     label="Insert blank page" onClick={() => { setPagesMenuOpen(false); doInsertBlank() }} />
+                <DropItem icon="hf"       label="Header &amp; Footer…" onClick={() => { setPagesMenuOpen(false); setHfOpen(true) }} />
+                <DropItem icon="crop"     label="Crop page"         onClick={() => { setPagesMenuOpen(false); setTool('crop'); setCropRect(null) }} />
+                <DropItem icon="ocr"      label="Make searchable…"  onClick={() => { setPagesMenuOpen(false); setOcrOpen(true) }} />
+              </div>
+            </>
+          )}
+        </div>
+        <input ref={mergeInputRef} type="file" accept=".pdf" className="hidden"
+          onChange={e => { if (e.target.files?.[0]) { handleMerge(e.target.files[0]); e.target.value = '' } }} />
+
+        <Sep />
+
+        {/* Security */}
+        <div className="relative shrink-0">
+          <button onClick={() => { setSecurityMenuOpen(o => !o); setPagesMenuOpen(false); setExportOpen(false) }}
+            className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover">
+            Security <Icon d={ICONS.chevDown} size={11} />
+          </button>
+          {securityMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setSecurityMenuOpen(false)} />
+              <div className="absolute left-0 top-full mt-1 z-50 w-52 rounded-xl border border-border bg-bg-raised shadow-lg overflow-hidden">
+                <DropItem icon="stamp" label="Add watermark…"        onClick={() => { setSecurityMenuOpen(false); setWatermarkOpen(true) }} />
+                <DropItem icon="lock"  label="Password protect…"      onClick={() => { setSecurityMenuOpen(false); setProtectOpen(true) }} />
+                <DropItem icon="props" label="Document properties…"   onClick={() => { setSecurityMenuOpen(false); openProps() }} />
+                {hasCertificate && (
+                  <a href={`/pdf/api/pdf/${jobId}/redact/certificate`} download
+                    onClick={() => setSecurityMenuOpen(false)}
+                    className="w-full text-left flex items-center gap-2.5 px-4 py-2.5 hover:bg-bg-hover text-xs text-fg-secondary hover:text-fg-primary">
+                    <Icon d={ICONS.cert} size={14} />
+                    Download certificate
+                  </a>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        <Sep />
+
+        {/* Redact */}
+        <TBtn icon="redact" label="Redact" danger active={tool === 'redact'}
+          onClick={() => { setTool(tool === 'redact' ? 'select' : 'redact'); setDraw({ kind: 'idle' }) }}
+          title="Redact — permanently remove content" />
       </div>
 
       {/* ── Search bar ──────────────────────────────────────────────────────── */}
@@ -2237,6 +2240,14 @@ export function Editor({ jobId }: { jobId: string }) {
         </div>
       )}
 
+      {/* ── Toast notification ───────────────────────────────────────────────── */}
+      <div className={`fixed bottom-8 right-6 z-[200] pointer-events-none transition-all duration-300
+        ${toastVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
+        <div className="bg-fg-primary text-bg-base text-xs font-medium px-4 py-2.5 rounded-xl shadow-card whitespace-nowrap">
+          {status}
+        </div>
+      </div>
+
       {/* ── Right-click context menu ─────────────────────────────────────────── */}
       {contextMenu && (
         <div
@@ -2490,6 +2501,22 @@ export function Editor({ jobId }: { jobId: string }) {
                 className="flex-1 bg-accent text-accent-fg text-sm rounded-lg py-2 hover:bg-accent-h disabled:opacity-40">
                 {hfApplying ? 'Applying…' : 'Apply to all pages'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete page confirm modal ────────────────────────────────────────── */}
+      {deletePageConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-bg-raised rounded-xl border border-border shadow-card p-6 w-80">
+            <h2 className="text-sm font-semibold text-fg-primary mb-1">Delete page {currentPage + 1}?</h2>
+            <p className="text-xs text-fg-tertiary mb-5">Use Ctrl+Z to undo if needed.</p>
+            <div className="flex gap-2">
+              <button onClick={() => setDeletePageConfirm(false)}
+                className="flex-1 text-sm text-fg-secondary border border-border rounded-lg py-2 hover:bg-bg-hover">Cancel</button>
+              <button onClick={confirmDeletePage}
+                className="flex-1 bg-danger text-white text-sm rounded-lg py-2 hover:opacity-90">Delete</button>
             </div>
           </div>
         </div>

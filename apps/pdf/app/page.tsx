@@ -30,6 +30,15 @@ function formatBytes(b: number): string {
   return `${(b / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function timeAgo(ts: number): string {
+  const s = Math.floor(Date.now() / 1000 - ts)
+  if (s < 60) return 'just now'
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`
+  if (s < 86400 * 7) return `${Math.floor(s / 86400)}d ago`
+  return new Date(ts * 1000).toLocaleDateString([], { month: 'short', day: 'numeric' })
+}
+
 export default function PdfHome() {
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -136,6 +145,14 @@ export default function PdfHome() {
       {/* File list */}
       <div className="mt-10">
         <div className="flex items-center gap-3 mb-3">
+          <input type="checkbox"
+            checked={filtered.length > 0 && filtered.every(f => selected.has(f.jobId))}
+            ref={el => { if (el) el.indeterminate = selected.size > 0 && !filtered.every(f => selected.has(f.jobId)) }}
+            onChange={e => {
+              if (e.target.checked) setSelected(new Set(filtered.map(f => f.jobId)))
+              else setSelected(new Set())
+            }}
+            className="accent-accent shrink-0 cursor-pointer" />
           <FileIcon />
           <h2 className="text-sm font-semibold text-fg-primary">Recent files</h2>
           {selected.size > 0 && (
@@ -178,6 +195,7 @@ export default function PdfHome() {
                     </div>
                     <span className="flex-1 text-sm text-fg-primary truncate">{f.filename}</span>
                   </a>
+                  <span className="text-xs text-fg-tertiary shrink-0 tabular-nums">{timeAgo(f.createdAt)}</span>
                   <span className="text-xs text-fg-tertiary shrink-0">{formatBytes(f.size)}</span>
                   <a href={`/pdf/api/pdf/${f.jobId}/download`} title="Download"
                     className="text-fg-tertiary hover:text-fg-primary shrink-0" onClick={e => e.stopPropagation()}>
