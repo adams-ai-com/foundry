@@ -15,9 +15,16 @@ import { taskRoutes } from './routes/tasks.js'
 import { decisionRoutes } from './routes/decisions.js'
 import { fileRoutes } from './routes/files.js'
 import { channelRoutes } from './routes/channels.js'
+import { caldavPlugin } from '../caldav/index.js'
 
 export async function buildApi() {
   const app = Fastify({ logger: { level: 'warn' } })
+
+  // CalDAV uses WebDAV HTTP methods not in the standard set
+  app.addHttpMethod('PROPFIND', { hasBody: true })
+  app.addHttpMethod('REPORT', { hasBody: true })
+  app.addHttpMethod('MKCALENDAR', { hasBody: true })
+  app.addHttpMethod('PROPPATCH', { hasBody: true })
 
   await app.register(cors, { origin: false })
   await app.register(rateLimit, {
@@ -32,9 +39,13 @@ export async function buildApi() {
   // @ts-ignore — @fastify/multipart types resolved on the server where the package is installed
   await app.register((await import('@fastify/multipart')).default, { limits: { fileSize: 100 * 1024 * 1024 } })
 
+  // CalDAV routes — registered before the API auth hook; they use HTTP Basic auth internally
+  await app.register(caldavPlugin)
+
   // Auth — API key + account resolution
   app.addHook('preHandler', async (req, reply) => {
     if (req.url === '/health') return
+    if (req.url.startsWith('/caldav') || req.url.startsWith('/.well-known/caldav')) return
 
     const apiKey = req.headers['x-api-key']
     if (apiKey !== config.apiKey) {

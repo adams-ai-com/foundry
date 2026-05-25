@@ -414,3 +414,43 @@ export async function toggleChannelReaction(
     body: JSON.stringify({ emoji }),
   })
 }
+
+export async function createCalendarEvent(body: {
+  title: string
+  description?: string
+  location?: string
+  startAt: string
+  endAt: string
+  allDay?: boolean
+  calendarId?: string
+}): Promise<CalendarEvent> {
+  const r = await req<RawEvent>('calendar/events', { method: 'POST', body: JSON.stringify(body) })
+  return toEvent(r)
+}
+
+export async function updateCalendarEvent(
+  id: string,
+  patch: Partial<{ title: string; description: string | null; location: string | null; startAt: string; endAt: string; allDay: boolean }>,
+): Promise<CalendarEvent> {
+  const r = await req<RawEvent>(`calendar/events/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })
+  return toEvent(r)
+}
+
+export async function deleteCalendarEvent(id: string): Promise<void> {
+  await req(`calendar/events/${id}`, { method: 'DELETE' })
+}
+
+export interface AppPassword { id: string; accountId: string; label: string; lastUsedAt: string | null; createdAt: string }
+export interface AppPasswordWithToken extends AppPassword { token: string }
+
+export async function listAppPasswords(): Promise<AppPassword[]> {
+  return req<AppPassword[]>('calendar/app-passwords')
+}
+
+export async function createAppPassword(label: string): Promise<AppPasswordWithToken> {
+  return req<AppPasswordWithToken>('calendar/app-passwords', { method: 'POST', body: JSON.stringify({ label }) })
+}
+
+export async function deleteAppPassword(id: string): Promise<void> {
+  await req(`calendar/app-passwords/${id}`, { method: 'DELETE' })
+}
