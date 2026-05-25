@@ -372,6 +372,17 @@ export function Editor({ jobId }: { jobId: string }) {
   const [deletePageConfirm, setDeletePageConfirm] = useState(false)
   const [toastVisible, setToastVisible]           = useState(false)
 
+  // Digital signing
+  const [signOpen, setSignOpen]         = useState(false)
+  const [signName, setSignName]         = useState('')
+  const [signEmail, setSignEmail]       = useState('')
+  const [signOrg, setSignOrg]           = useState('')
+  const [signReason, setSignReason]     = useState('')
+  const [signLocation, setSignLocation] = useState('')
+  const [signVisible, setSignVisible]   = useState(true)
+  const [signing, setSigning]           = useState(false)
+  const [savedCert, setSavedCert]       = useState<{ cert_b64: string; passphrase: string; subject: string; expires: string } | null>(null)
+
   // Drag-to-reorder
   const [dragFrom, setDragFrom] = useState<number | null>(null)
   const [dragOver, setDragOver] = useState<number | null>(null)
@@ -680,6 +691,40 @@ export function Editor({ jobId }: { jobId: string }) {
     a.click(); URL.revokeObjectURL(url)
     setProtectOpen(false); setProtectPw(''); setProtectPwConfirm('')
     toast('Protected PDF downloaded'); setProtecting(false)
+  }
+
+  // ── Digital signing ────────────────────────────────────────────────────────
+
+  async function doSign() {
+    if (!signName.trim()) { toast('Enter your name'); return }
+    setSigning(true)
+    try {
+      let cert = savedCert
+      if (!cert) {
+        const genRes = await apiPost('/pdf/api/pdf/sign/generate-cert', {
+          name: signName.trim(),
+          email: signEmail.trim() || undefined,
+          org: signOrg.trim() || undefined,
+        })
+        if (!genRes.cert_b64) { toast('Certificate generation failed'); setSigning(false); return }
+        cert = genRes as { cert_b64: string; passphrase: string; subject: string; expires: string }
+        setSavedCert(cert)
+      }
+      const res = await apiPost(`/pdf/api/pdf/${jobId}/sign`, {
+        cert_b64: cert.cert_b64,
+        passphrase: cert.passphrase,
+        signer_name: signName.trim(),
+        reason: signReason.trim() || undefined,
+        location: signLocation.trim() || undefined,
+        page: currentPage,
+        visible: signVisible,
+      })
+      if (!res.ok) { toast('Signing failed'); setSigning(false); return }
+      setSignOpen(false); bump(); toast('PDF signed')
+    } catch {
+      toast('Signing failed')
+    }
+    setSigning(false)
   }
 
   // ── Page operations ────────────────────────────────────────────────────────
@@ -1431,7 +1476,8 @@ export function Editor({ jobId }: { jobId: string }) {
             <>
               <div className="fixed inset-0 z-40" onClick={() => setSecurityMenuOpen(false)} />
               <div className="absolute left-0 top-full mt-1 z-50 w-52 rounded-xl border border-border bg-bg-raised shadow-lg overflow-hidden">
-                <DropItem icon="stamp" label="Add watermark…"        onClick={() => { setSecurityMenuOpen(false); setWatermarkOpen(true) }} />
+                <DropItem icon="fieldSig" label="Sign PDF…"              onClick={() => { setSecurityMenuOpen(false); setSignOpen(true) }} />
+                <DropItem icon="stamp" label="Add watermark…"         onClick={() => { setSecurityMenuOpen(false); setWatermarkOpen(true) }} />
                 <DropItem icon="lock"  label="Password protect…"      onClick={() => { setSecurityMenuOpen(false); setProtectOpen(true) }} />
                 <DropItem icon="props" label="Document properties…"   onClick={() => { setSecurityMenuOpen(false); openProps() }} />
                 {hasCertificate && (
@@ -2517,6 +2563,72 @@ export function Editor({ jobId }: { jobId: string }) {
                 className="flex-1 text-sm text-fg-secondary border border-border rounded-lg py-2 hover:bg-bg-hover">Cancel</button>
               <button onClick={confirmDeletePage}
                 className="flex-1 bg-danger text-white text-sm rounded-lg py-2 hover:opacity-90">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Digital sign modal ───────────────────────────────────────────────── */}
+      {signOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-bg-raised rounded-xl border border-border shadow-card p-6 w-96">
+            <h2 className="text-sm font-semibold text-fg-primary mb-1">Sign PDF</h2>
+            <p className="text-xs text-fg-tertiary mb-4">
+              Creates a self-signed PKCS#12 certificate and embeds a cryptographic signature.
+              {savedCert && <span className="text-accent"> Using saved cert for {savedCert.subject}.</span>}
+            </p>
+            <div className="space-y-3">
+              <label className="block">
+                <span className="text-xs text-fg-tertiary">Your name <span className="text-danger">*</span></span>
+                <input value={signName} onChange={e => setSignName(e.target.value)}
+                  placeholder="Jane Smith"
+                  className="mt-0.5 w-full border border-border rounded-md px-3 py-2 text-sm bg-bg-base text-fg-primary" />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs text-fg-tertiary">Email (optional)</span>
+                  <input value={signEmail} onChange={e => setSignEmail(e.target.value)}
+                    placeholder="jane@example.com" type="email"
+                    className="mt-0.5 w-full border border-border rounded-md px-3 py-2 text-sm bg-bg-base text-fg-primary" />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-fg-tertiary">Organization (optional)</span>
+                  <input value={signOrg} onChange={e => setSignOrg(e.target.value)}
+                    placeholder="Acme Corp"
+                    className="mt-0.5 w-full border border-border rounded-md px-3 py-2 text-sm bg-bg-base text-fg-primary" />
+                </label>
+              </div>
+              <label className="block">
+                <span className="text-xs text-fg-tertiary">Reason (optional)</span>
+                <input value={signReason} onChange={e => setSignReason(e.target.value)}
+                  placeholder="I approve this document"
+                  className="mt-0.5 w-full border border-border rounded-md px-3 py-2 text-sm bg-bg-base text-fg-primary" />
+              </label>
+              <label className="block">
+                <span className="text-xs text-fg-tertiary">Location (optional)</span>
+                <input value={signLocation} onChange={e => setSignLocation(e.target.value)}
+                  placeholder="San Francisco, CA"
+                  className="mt-0.5 w-full border border-border rounded-md px-3 py-2 text-sm bg-bg-base text-fg-primary" />
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" checked={signVisible} onChange={e => setSignVisible(e.target.checked)}
+                  className="accent-accent" />
+                <span className="text-xs text-fg-secondary">Show visible signature on page {currentPage + 1}</span>
+              </label>
+              {savedCert && (
+                <button onClick={() => setSavedCert(null)}
+                  className="text-xs text-fg-tertiary underline hover:text-fg-secondary">
+                  Clear saved certificate (generate new one)
+                </button>
+              )}
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setSignOpen(false)}
+                className="flex-1 text-sm text-fg-secondary border border-border rounded-lg py-2 hover:bg-bg-hover">Cancel</button>
+              <button onClick={doSign} disabled={signing || !signName.trim()}
+                className="flex-1 bg-accent text-accent-fg text-sm rounded-lg py-2 hover:bg-accent-h disabled:opacity-40">
+                {signing ? 'Signing…' : 'Sign PDF'}
+              </button>
             </div>
           </div>
         </div>
