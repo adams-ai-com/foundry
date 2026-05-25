@@ -11,15 +11,19 @@ function getDb() {
   return _sql
 }
 
-export const db = new Proxy({} as ReturnType<typeof postgres>, {
-  get: (_, prop) => {
-    const sql = getDb()
-    return typeof sql[prop as keyof typeof sql] === 'function'
-      ? (sql[prop as keyof typeof sql] as Function).bind(sql)
-      : sql[prop as keyof typeof sql]
-  },
-  apply: (_target, _this, args) => (getDb() as unknown as Function)(...args),
-}) as ReturnType<typeof postgres>
+// Proxy target must be callable so tagged template literals (db`...`) work
+export const db = new Proxy(
+  (() => {}) as unknown as ReturnType<typeof postgres>,
+  {
+    get: (_, prop) => {
+      const sql = getDb()
+      const val = sql[prop as keyof typeof sql]
+      return typeof val === 'function' ? (val as Function).bind(sql) : val
+    },
+    apply: (_target, _this, args) =>
+      (getDb() as unknown as (...a: unknown[]) => unknown)(...args),
+  }
+) as ReturnType<typeof postgres>
 
 // ── Typed row shapes ──────────────────────────────────────────────────────────
 
