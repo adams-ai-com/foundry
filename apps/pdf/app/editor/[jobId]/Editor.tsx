@@ -11,7 +11,9 @@ type Tool =
   | 'select' | 'text' | 'sticky' | 'arrow' | 'freehand'
   | 'highlight' | 'underline' | 'strikethrough'
   | 'comment' | 'redact'
-  | 'rect' | 'circle' | 'line' | 'stamp' | 'image' | 'crop' | 'link'
+  | 'rect' | 'circle' | 'line' | 'stamp' | 'image' | 'crop' | 'link' | 'field'
+
+type FieldType = 'text' | 'checkbox' | 'dropdown' | 'signature'
 
 type DrawPhase =
   | { kind: 'idle' }
@@ -24,6 +26,7 @@ type DrawPhase =
   | { kind: 'image-rect'; x0: number; y0: number; x1: number; y1: number }
   | { kind: 'annot-drag'; pageIndex: number; handle: string; origRect: [number,number,number,number]; startX: number; startY: number; curRect: [number,number,number,number] }
   | { kind: 'link-rect'; x0: number; y0: number; x1: number; y1: number }
+  | { kind: 'field-rect'; x0: number; y0: number; x1: number; y1: number }
 
 interface Bookmark { level: number; title: string; page: number }
 interface AnnotItem { page: number; pageIndex: number; type: string; rect: [number, number, number, number]; content: string }
@@ -158,6 +161,11 @@ const ICONS: Record<string, string> = {
   history:       'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5M12 7v5l4 2',
   link:          'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
   ocr:           'M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h2m2 0h2m2 0h2M7 8h10',
+  field:         'M9 12h6M9 8h6M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm0 9h14',
+  fieldCheck:    'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
+  fieldDrop:     'M4 6h16M4 12h16M4 18h7M15 15l4 4m0-4l-4 4',
+  fieldSig:      'M3 17c3-3 4-5 6-5s3 2 5 2 4-4 6-4M3 21h18M17 3l4 4-9.5 9.5L8 18l1.5-3.5z',
+  compare:       'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM9 13h6M9 17h6M9 9h1',
 }
 
 // ── Toolbar button ───────────────────────────────────────────────────────────
@@ -328,6 +336,22 @@ export function Editor({ jobId }: { jobId: string }) {
   const [ocrOpen, setOcrOpen]       = useState(false)
   const [ocrRunning, setOcrRunning] = useState(false)
   const [ocrLang, setOcrLang]       = useState('eng')
+
+  // PDF comparison
+  type DiffChange = { page: number; rect: [number,number,number,number]; kind: 'added'|'removed'; text: string }
+  const [diffChanges, setDiffChanges]   = useState<DiffChange[]>([])
+  const [diffSummary, setDiffSummary]   = useState<{ total: number; added: number; removed: number } | null>(null)
+  const [diffPanel, setDiffPanel]       = useState(false)
+  const [comparing, setComparing]       = useState(false)
+  const compareInputRef                 = useRef<HTMLInputElement>(null)
+
+  // Form field creation
+  const [fieldType, setFieldType]           = useState<FieldType>('text')
+  const [fieldDialog, setFieldDialog]       = useState<{ rect: [number,number,number,number] } | null>(null)
+  const [fieldName, setFieldName]           = useState('')
+  const [fieldChoices, setFieldChoices]     = useState('')
+  const [fieldMultiline, setFieldMultiline] = useState(false)
+  const [fieldRequired, setFieldRequired]   = useState(false)
 
   // Find & Replace
   const [replaceOpen, setReplaceOpen]     = useState(false)
@@ -531,7 +555,8 @@ export function Editor({ jobId }: { jobId: string }) {
         setPagesMenuOpen(false); setSecurityMenuOpen(false); setExportOpen(false)
         setStampMenuOpen(false); setPropsOpen(false); setHfOpen(false)
         setCropRect(null); if (tool === 'crop') setTool('select')
-        setSelectedAnnot(null); setContextMenu(null); setLinkModalRect(null)
+        setSelectedAnnot(null); setContextMenu(null); setLinkModalRect(null); setFieldDialog(null)
+        if (tool === 'field') setTool('select')
       }
     }
     window.addEventListener('keydown', onKey)
@@ -886,6 +911,33 @@ export function Editor({ jobId }: { jobId: string }) {
     else { setReplaceResult(`Replaced ${d.replaced} occurrence${d.replaced !== 1 ? 's' : ''}`); bump() }
   }
 
+  async function doCompare(file: File) {
+    setComparing(true); setDiffChanges([]); setDiffSummary(null)
+    toast('Comparing documents…')
+    try {
+      const fd = new FormData(); fd.append('file', file)
+      const res = await fetch(`/pdf/api/pdf/${jobId}/compare`, { method: 'POST', body: fd })
+      if (!res.ok) { toast('Comparison failed'); return }
+      const d = await res.json()
+      setDiffChanges(d.changes ?? [])
+      setDiffSummary(d.summary ?? null)
+      setDiffPanel(true)
+      toast(`Done — ${d.summary?.total ?? 0} difference${d.summary?.total !== 1 ? 's' : ''} found`)
+    } catch { toast('Comparison failed') }
+    finally { setComparing(false) }
+  }
+
+  async function createField() {
+    if (!fieldDialog) return
+    const choices = fieldChoices.split('\n').map(s => s.trim()).filter(Boolean)
+    await apiPost(`/pdf/api/pdf/${jobId}/fields`, {
+      page: currentPage, rect: fieldDialog.rect, type: fieldType,
+      name: fieldName.trim() || `field_${Date.now() % 10000}`,
+      choices, multiline: fieldMultiline, required: fieldRequired,
+    })
+    setFieldDialog(null); setTool('select'); bump(); toast('Form field added')
+  }
+
   async function doOcr() {
     setOcrRunning(true); toast('Running OCR — this may take a moment…')
     try {
@@ -931,7 +983,7 @@ export function Editor({ jobId }: { jobId: string }) {
     arrow: 'crosshair', freehand: 'crosshair', redact: 'crosshair',
     highlight: 'text', underline: 'text', strikethrough: 'text', comment: 'crosshair',
     rect: 'crosshair', circle: 'crosshair', line: 'crosshair',
-    stamp: 'copy', image: 'crosshair', crop: 'crosshair', link: 'crosshair',
+    stamp: 'copy', image: 'crosshair', crop: 'crosshair', link: 'crosshair', field: 'crosshair',
   }
 
   function onSvgDown(e: React.MouseEvent<SVGSVGElement>) {
@@ -979,7 +1031,8 @@ export function Editor({ jobId }: { jobId: string }) {
     }
     if (tool === 'crop')  { setCropRect(null); setDraw({ kind: 'crop-rect', x0: x, y0: y, x1: x, y1: y }); return }
     if (tool === 'image') { setDraw({ kind: 'image-rect', x0: x, y0: y, x1: x, y1: y }); return }
-    if (tool === 'link')  { setDraw({ kind: 'link-rect', x0: x, y0: y, x1: x, y1: y }); return }
+    if (tool === 'link')  { setDraw({ kind: 'link-rect',  x0: x, y0: y, x1: x, y1: y }); return }
+    if (tool === 'field') { setDraw({ kind: 'field-rect', x0: x, y0: y, x1: x, y1: y }); return }
     if (tool === 'stamp') {
       const ptX = x / renderScale; const ptY = y / renderScale
       const w = 150; const h = 60
@@ -1004,6 +1057,7 @@ export function Editor({ jobId }: { jobId: string }) {
     else if (draw.kind === 'crop-rect')   setDraw({ ...draw, x1: x, y1: y })
     else if (draw.kind === 'image-rect')  setDraw({ ...draw, x1: x, y1: y })
     else if (draw.kind === 'link-rect')   setDraw({ ...draw, x1: x, y1: y })
+    else if (draw.kind === 'field-rect')  setDraw({ ...draw, x1: x, y1: y })
     else if (draw.kind === 'annot-drag') {
       const dx = (x - draw.startX) / renderScale
       const dy = (y - draw.startY) / renderScale
@@ -1070,6 +1124,20 @@ export function Editor({ jobId }: { jobId: string }) {
       if (w > 10 && h > 10) {
         await doInsertImage(Math.min(draw.x0,draw.x1), Math.min(draw.y0,draw.y1),
                             Math.max(draw.x0,draw.x1), Math.max(draw.y0,draw.y1))
+      }
+      setDraw({ kind: 'idle' }); return
+    }
+    if (draw.kind === 'field-rect') {
+      const w = Math.abs(draw.x1 - draw.x0); const h = Math.abs(draw.y1 - draw.y0)
+      if (w > 8 && h > 8) {
+        const r: [number,number,number,number] = [
+          Math.min(draw.x0,draw.x1)/renderScale, Math.min(draw.y0,draw.y1)/renderScale,
+          Math.max(draw.x0,draw.x1)/renderScale, Math.max(draw.y0,draw.y1)/renderScale,
+        ]
+        setFieldDialog({ rect: r })
+        setFieldName(`field_${Date.now() % 10000}`)
+        setFieldChoices('Option 1\nOption 2\nOption 3')
+        setFieldMultiline(false); setFieldRequired(false)
       }
       setDraw({ kind: 'idle' }); return
     }
@@ -1168,8 +1236,10 @@ export function Editor({ jobId }: { jobId: string }) {
           <TBtn key={t} icon={t} active={tool === t} title={t.charAt(0).toUpperCase() + t.slice(1)}
             onClick={() => { setTool(t); setDraw({ kind: 'idle' }) }} />
         ))}
-        <TBtn icon="link" active={tool === 'link'} title="Insert hyperlink — drag to set area"
+        <TBtn icon="link"  active={tool === 'link'}  title="Insert hyperlink — drag to set area"
           onClick={() => { setTool('link'); setDraw({ kind: 'idle' }) }} />
+        <TBtn icon="field" active={tool === 'field'} title="Add form field — drag to place"
+          onClick={() => { setTool('field'); setDraw({ kind: 'idle' }) }} />
 
         {/* Stamps */}
         <div className="relative shrink-0">
@@ -1345,6 +1415,16 @@ export function Editor({ jobId }: { jobId: string }) {
           <span className="hidden lg:block">Print</span>
         </button>
 
+        <button onClick={() => compareInputRef.current?.click()} disabled={comparing} title="Compare with another PDF"
+          className={`flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors shrink-0
+            ${diffChanges.length > 0 ? 'text-accent hover:bg-accent/10' : 'text-fg-secondary hover:text-fg-primary hover:bg-bg-hover'}
+            disabled:opacity-40 disabled:pointer-events-none`}>
+          <Icon d={ICONS.compare} />
+          <span className="hidden lg:block">{comparing ? 'Comparing…' : 'Compare'}</span>
+        </button>
+        <input ref={compareInputRef} type="file" accept=".pdf" className="hidden"
+          onChange={e => { if (e.target.files?.[0]) { doCompare(e.target.files[0]); e.target.value = '' } }} />
+
         <div className="relative shrink-0">
           <button onClick={() => { setExportOpen(o => !o); setPagesMenuOpen(false); setSecurityMenuOpen(false) }}
             disabled={exporting}
@@ -1435,6 +1515,24 @@ export function Editor({ jobId }: { jobId: string }) {
         </div>
       )}
 
+      {/* ── Form field type bar ─────────────────────────────────────────────── */}
+      {tool === 'field' && (
+        <div className="h-9 border-b border-border flex items-center px-3 gap-3 shrink-0 text-xs"
+             style={{ background: 'rgba(139,92,246,0.07)' }}>
+          <Icon d={ICONS.field} size={13} />
+          <span className="text-fg-tertiary">Field type:</span>
+          {([['text','Text'],['checkbox','Checkbox'],['dropdown','Dropdown'],['signature','Signature']] as [FieldType,string][]).map(([ft, label]) => (
+            <button key={ft} onClick={() => setFieldType(ft)}
+              className={`px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors
+                ${fieldType === ft ? 'bg-accent text-accent-fg border-accent' : 'border-border text-fg-secondary hover:text-fg-primary hover:bg-bg-hover'}`}>
+              {label}
+            </button>
+          ))}
+          <span className="text-fg-tertiary ml-2">Drag to place on page</span>
+          <button onClick={() => setTool('select')} className="ml-auto text-fg-tertiary hover:text-fg-primary">Cancel</button>
+        </div>
+      )}
+
       {/* ── Fix #7: text markup hint bar ────────────────────────────────────── */}
       {isTextTool && (
         <div className="h-7 border-b border-border flex items-center px-3 gap-2 shrink-0 text-xs text-fg-secondary"
@@ -1508,6 +1606,41 @@ export function Editor({ jobId }: { jobId: string }) {
                         className="opacity-0 group-hover:opacity-100 pr-2 text-fg-tertiary hover:text-danger text-sm leading-none">×</button>
                     </div>
                   ))}
+            </div>
+          </div>
+        )}
+
+        {/* Diff panel */}
+        {diffPanel && diffChanges.length >= 0 && (
+          <div className="w-[220px] bg-bg-surface border-r border-border flex flex-col shrink-0">
+            <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+              <span className="text-xs font-semibold text-fg-primary flex-1">Comparison</span>
+              <button onClick={() => { setDiffChanges([]); setDiffSummary(null); setDiffPanel(false) }}
+                className="text-[10px] text-fg-tertiary hover:text-danger">Clear</button>
+              <button onClick={() => setDiffPanel(false)} className="text-fg-tertiary hover:text-fg-primary text-base leading-none">×</button>
+            </div>
+            {diffSummary && (
+              <div className="px-3 py-2 border-b border-border flex gap-3 text-xs">
+                <span className="text-green-600 font-medium">+{diffSummary.added} added</span>
+                <span className="text-danger font-medium">−{diffSummary.removed} removed</span>
+              </div>
+            )}
+            <div className="flex-1 overflow-y-auto divide-y divide-border">
+              {diffChanges.length === 0
+                ? <p className="text-xs text-fg-tertiary px-3 py-6 text-center">No differences found.</p>
+                : diffChanges.map((c, i) => (
+                  <button key={i} onClick={() => goToPage(c.page)}
+                    className={`w-full text-left px-3 py-2 hover:bg-bg-hover ${c.page === currentPage ? 'bg-bg-hover/50' : ''}`}>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className={`text-[10px] font-bold ${c.kind === 'added' ? 'text-green-600' : 'text-danger'}`}>
+                        {c.kind === 'added' ? '+' : '−'}
+                      </span>
+                      <span className="text-[10px] text-fg-tertiary">p{c.page + 1}</span>
+                    </div>
+                    <p className="text-xs text-fg-secondary truncate">{c.text}</p>
+                  </button>
+                ))
+              }
             </div>
           </div>
         )}
@@ -1639,6 +1772,17 @@ export function Editor({ jobId }: { jobId: string }) {
                   )
                 })}
 
+                {/* Diff change overlays */}
+                {diffChanges.filter(c => c.page === currentPage).map((c, i) => {
+                  const [dx0,dy0,dx1,dy1] = c.rect.map(v => v * renderScale)
+                  return (
+                    <rect key={`d${i}`} x={dx0} y={dy0} width={dx1-dx0} height={dy1-dy0}
+                      fill={c.kind === 'added' ? 'rgba(22,163,74,0.35)' : 'rgba(239,68,68,0.35)'}
+                      stroke={c.kind === 'added' ? '#16a34a' : '#ef4444'} strokeWidth={1}
+                      style={{ pointerEvents: 'none' }} />
+                  )
+                })}
+
                 {/* Word rects for text markup tools */}
                 {isTextTool && textWords.map((w, i) => {
                   const [wx0, wy0, wx1, wy1] = w.rect.map(v => v * renderScale)
@@ -1715,6 +1859,11 @@ export function Editor({ jobId }: { jobId: string }) {
                   <rect x={Math.min(draw.x0,draw.x1)} y={Math.min(draw.y0,draw.y1)}
                     width={Math.abs(draw.x1-draw.x0)} height={Math.abs(draw.y1-draw.y0)}
                     fill="rgba(59,130,246,0.1)" stroke="#3b82f6" strokeWidth={2} strokeDasharray="4 2" />
+                )}
+                {draw.kind === 'field-rect' && (
+                  <rect x={Math.min(draw.x0,draw.x1)} y={Math.min(draw.y0,draw.y1)}
+                    width={Math.abs(draw.x1-draw.x0)} height={Math.abs(draw.y1-draw.y0)}
+                    fill="rgba(139,92,246,0.1)" stroke="#8b5cf6" strokeWidth={2} strokeDasharray="4 2" />
                 )}
 
                 {/* Comment markers */}
@@ -1974,6 +2123,52 @@ export function Editor({ jobId }: { jobId: string }) {
         <div className="flex-1" />
         <span className="tabular-nums">{zoom}%</span>
       </div>
+
+      {/* ── Form field dialog ─────────────────────────────────────────────────── */}
+      {fieldDialog && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-bg-raised rounded-xl border border-border shadow-card p-6 w-96">
+            <h2 className="text-sm font-semibold text-fg-primary mb-4">
+              Add {fieldType === 'text' ? 'Text' : fieldType === 'checkbox' ? 'Checkbox' : fieldType === 'dropdown' ? 'Dropdown' : 'Signature'} Field
+            </h2>
+            <div className="space-y-3">
+              <label className="block">
+                <span className="text-xs text-fg-tertiary">Field name (used in form data)</span>
+                <input autoFocus value={fieldName} onChange={e => setFieldName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && fieldType !== 'dropdown') createField() }}
+                  className="mt-0.5 w-full border border-border rounded-md px-3 py-2 text-sm bg-bg-base text-fg-primary focus:outline-none focus:ring-1 focus:ring-accent" />
+              </label>
+              {fieldType === 'dropdown' && (
+                <label className="block">
+                  <span className="text-xs text-fg-tertiary">Options (one per line)</span>
+                  <textarea value={fieldChoices} onChange={e => setFieldChoices(e.target.value)} rows={4}
+                    className="mt-0.5 w-full border border-border rounded-md px-3 py-2 text-sm bg-bg-base text-fg-primary focus:outline-none focus:ring-1 focus:ring-accent resize-none" />
+                </label>
+              )}
+              {fieldType === 'text' && (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={fieldMultiline} onChange={e => setFieldMultiline(e.target.checked)}
+                    className="accent-accent" />
+                  <span className="text-xs text-fg-secondary">Multi-line text area</span>
+                </label>
+              )}
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={fieldRequired} onChange={e => setFieldRequired(e.target.checked)}
+                  className="accent-accent" />
+                <span className="text-xs text-fg-secondary">Required field</span>
+              </label>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setFieldDialog(null)}
+                className="flex-1 text-sm text-fg-secondary border border-border rounded-lg py-2 hover:bg-bg-hover">Cancel</button>
+              <button onClick={createField}
+                className="flex-1 bg-accent text-accent-fg text-sm rounded-lg py-2 hover:bg-accent-h">
+                Add field
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── OCR modal ─────────────────────────────────────────────────────────── */}
       {ocrOpen && (
