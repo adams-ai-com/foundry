@@ -1,0 +1,18 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getSession } from '@foundry/auth'
+import { fetchProc } from '@/lib/proc'
+
+export async function GET(req: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {
+  if (!await getSession()) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { jobId } = await params
+  const res = await fetchProc(`/redact/${jobId}/certificate`)
+  if (!res.ok) return NextResponse.json({ error: 'Certificate not found' }, { status: res.status })
+  const data = await res.arrayBuffer()
+  return new NextResponse(data, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="redaction-certificate-${jobId.slice(0, 8)}.pdf"`,
+    },
+  })
+}

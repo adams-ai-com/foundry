@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
 function UploadIcon() {
@@ -27,13 +27,16 @@ function FileIcon() {
 export default function PdfHome() {
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const importRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
   async function upload(file: File) {
-    if (!file.type.includes('pdf')) {
-      setError('Only PDF files are supported.')
+    if (!file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
+      setError('Only PDF files are supported for the main upload zone.')
       return
     }
     setError(null)
@@ -51,6 +54,25 @@ export default function PdfHome() {
     }
   }
 
+  async function importOffice(file: File) {
+    setError(null)
+    setImporting(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await fetch('/pdf/api/pdf/convert/import', { method: 'POST', body: form })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Import failed' }))
+        throw new Error(err.error ?? 'Import failed')
+      }
+      const { jobId } = await res.json()
+      router.push(`/pdf/editor/${jobId}`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Import failed')
+      setImporting(false)
+    }
+  }
+
   function onDrop(e: React.DragEvent) {
     e.preventDefault()
     setDragging(false)
@@ -62,6 +84,13 @@ export default function PdfHome() {
     const file = e.target.files?.[0]
     if (file) upload(file)
   }
+
+  function onImportChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) importOffice(file)
+  }
+
+  const busy = uploading || importing
 
   return (
     <div className="max-w-2xl w-full mx-auto px-6 py-10">
@@ -79,12 +108,12 @@ export default function PdfHome() {
             ? 'border-accent bg-bg-active'
             : 'border-border bg-bg-surface hover:border-accent/40 hover:bg-bg-hover'
           }
-          ${uploading ? 'pointer-events-none opacity-60' : ''}
+          ${busy ? 'pointer-events-none opacity-60' : ''}
         `}
         onDragOver={e => { e.preventDefault(); setDragging(true) }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
-        onClick={() => !uploading && inputRef.current?.click()}
+        onClick={() => !busy && inputRef.current?.click()}
       >
         <div className="w-16 h-16 rounded-xl bg-bg-raised border border-border flex items-center justify-center">
           {uploading ? (
@@ -108,42 +137,90 @@ export default function PdfHome() {
         />
       </div>
 
+      <div className="mt-4 flex items-center gap-3">
+        <div className="flex-1 h-px bg-border" />
+        <span className="text-xs text-fg-tertiary">or</span>
+        <div className="flex-1 h-px bg-border" />
+      </div>
+
+      <button
+        disabled={busy}
+        onClick={() => !busy && importRef.current?.click()}
+        className="mt-4 w-full rounded-xl border border-border bg-bg-surface hover:bg-bg-hover
+          transition-colors px-4 py-3 flex items-center justify-center gap-2
+          text-sm font-medium text-fg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {importing ? (
+          <div className="w-4 h-4 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
+        ) : (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}
+               strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-fg-tertiary">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <path d="M12 18v-6M9 15l3 3 3-3"/>
+          </svg>
+        )}
+        {importing ? 'Converting…' : 'Import DOCX / XLSX / PPTX → PDF'}
+        <input
+          ref={importRef}
+          type="file"
+          accept=".docx,.xlsx,.pptx,.odt,.ods,.odp,.doc,.xls,.ppt"
+          className="hidden"
+          onChange={onImportChange}
+        />
+      </button>
+
       {error && (
         <p className="mt-4 text-sm text-danger bg-danger/10 rounded-lg px-4 py-2">{error}</p>
       )}
 
       <div className="mt-10">
-        <div className="flex items-center gap-3 mb-4">
+        <div className="flex items-center gap-3 mb-3">
           <FileIcon />
           <h2 className="text-sm font-semibold text-fg-primary">Recent files</h2>
+          <div className="flex-1" />
+          <input
+            type="search"
+            placeholder="Search…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-40 border border-border rounded-lg px-3 py-1 text-xs bg-bg-surface text-fg-primary placeholder:text-fg-tertiary focus:outline-none focus:ring-1 focus:ring-accent"
+          />
         </div>
-        <RecentFiles />
+        <RecentFiles search={search} />
       </div>
     </div>
   )
 }
 
-function RecentFiles() {
-  const [files, setFiles] = useState<{ jobId: string; filename: string; size: number; createdAt: string }[]>([])
+function RecentFiles({ search }: { search: string }) {
+  const [files, setFiles] = useState<{ jobId: string; filename: string; size: number; createdAt: number }[]>([])
   const [loaded, setLoaded] = useState(false)
 
-  if (!loaded) {
+  useEffect(() => {
     fetch('/pdf/api/pdf/list')
       .then(r => r.json())
       .then(d => { setFiles(d.files ?? []); setLoaded(true) })
       .catch(() => setLoaded(true))
-    return (
-      <div className="text-xs text-fg-tertiary">Loading…</div>
-    )
-  }
+  }, [])
 
-  if (files.length === 0) {
-    return <p className="text-xs text-fg-tertiary">No recent files. Upload a PDF to get started.</p>
+  if (!loaded) return <div className="text-xs text-fg-tertiary">Loading…</div>
+
+  const filtered = search
+    ? files.filter(f => f.filename.toLowerCase().includes(search.toLowerCase()))
+    : files
+
+  if (filtered.length === 0) {
+    return (
+      <p className="text-xs text-fg-tertiary">
+        {search ? `No files matching "${search}".` : 'No recent files. Upload a PDF to get started.'}
+      </p>
+    )
   }
 
   return (
     <ul className="divide-y divide-border rounded-xl border border-border bg-bg-raised overflow-hidden">
-      {files.map(f => (
+      {filtered.map(f => (
         <li key={f.jobId}>
           <a
             href={`/pdf/editor/${f.jobId}`}

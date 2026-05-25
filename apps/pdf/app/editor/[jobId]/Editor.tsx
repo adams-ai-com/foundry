@@ -1,37 +1,104 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface PageMeta { width: number; height: number; widthPx: number; heightPx: number }
-type Tool = 'select' | 'text' | 'sticky' | 'arrow' | 'freehand'
+
+type Tool =
+  | 'select' | 'text' | 'sticky' | 'arrow' | 'freehand'
+  | 'highlight' | 'underline' | 'strikethrough'
+  | 'comment' | 'redact'
+  | 'rect' | 'circle' | 'line' | 'stamp' | 'image' | 'crop' | 'link'
 
 type DrawPhase =
   | { kind: 'idle' }
   | { kind: 'arrow'; x0: number; y0: number; x1: number; y1: number }
   | { kind: 'freehand'; pts: [number, number][] }
   | { kind: 'text-placing'; x: number; y: number; sticky: boolean }
+  | { kind: 'redact-rect'; x0: number; y0: number; x1: number; y1: number }
+  | { kind: 'shape-rect'; x0: number; y0: number; x1: number; y1: number; shape: 'rect' | 'circle' | 'line' }
+  | { kind: 'crop-rect'; x0: number; y0: number; x1: number; y1: number }
+  | { kind: 'image-rect'; x0: number; y0: number; x1: number; y1: number }
+  | { kind: 'annot-drag'; pageIndex: number; handle: string; origRect: [number,number,number,number]; startX: number; startY: number; curRect: [number,number,number,number] }
+  | { kind: 'link-rect'; x0: number; y0: number; x1: number; y1: number }
+
+interface Bookmark { level: number; title: string; page: number }
+interface AnnotItem { page: number; pageIndex: number; type: string; rect: [number, number, number, number]; content: string }
+
+interface SelAnnot { pageIndex: number; rect: [number, number, number, number] }
+
+interface RedactRegion {
+  id: string; page: number
+  ptX0: number; ptY0: number; ptX1: number; ptY1: number
+}
+
+interface TextWord { word: string; rect: [number, number, number, number] }
+
+interface CommentReply { id: string; text: string; author: string; timestamp: number }
+interface Comment {
+  id: string; page: number
+  rect?: [number, number, number, number] | null
+  text: string; author: string; timestamp: number
+  resolved: boolean; replies: CommentReply[]
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const RENDER_SCALE = 1.5
 const THUMB_SCALE  = 0.2
 const COLORS = ['#000000', '#ef4444', '#3b82f6', '#16a34a', '#f59e0b', '#8b5cf6']
+const ZOOM_MIN = 50; const ZOOM_MAX = 300; const ZOOM_STEP = 25
+const CANVAS_PAD = 48 // p-6 on each side of scroll container
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function svgPoint(e: React.MouseEvent<SVGSVGElement>): [number, number] {
-  const rect = e.currentTarget.getBoundingClientRect()
-  return [e.clientX - rect.left, e.clientY - rect.top]
+  const r = e.currentTarget.getBoundingClientRect()
+  return [e.clientX - r.left, e.clientY - r.top]
 }
 
 async function apiPost(url: string, body: object) {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  return res.json()
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  return r.json()
+}
+
+function clamp(v: number, lo: number, hi: number) { return Math.min(hi, Math.max(lo, v)) }
+
+function hitAnnot(sx: number, sy: number, rect: [number,number,number,number], rs: number): boolean {
+  const [rx0,ry0,rx1,ry1] = rect.map(v => v * rs)
+  return sx >= rx0 - 4 && sx <= rx1 + 4 && sy >= ry0 - 4 && sy <= ry1 + 4
+}
+
+const HANDLE_NAMES = ['tl','t','tr','l','r','bl','b','br'] as const
+type HandleName = typeof HANDLE_NAMES[number]
+
+function hitHandle(sx: number, sy: number, rect: [number,number,number,number], rs: number): HandleName | null {
+  const [rx0,ry0,rx1,ry1] = rect.map(v => v * rs)
+  const cx = (rx0+rx1)/2; const cy = (ry0+ry1)/2
+  const pts: Record<HandleName,[number,number]> = { tl:[rx0,ry0],t:[cx,ry0],tr:[rx1,ry0],l:[rx0,cy],r:[rx1,cy],bl:[rx0,ry1],b:[cx,ry1],br:[rx1,ry1] }
+  for (const name of HANDLE_NAMES) {
+    const [hx,hy] = pts[name]
+    if (Math.abs(sx-hx) <= 7 && Math.abs(sy-hy) <= 7) return name
+  }
+  return null
+}
+
+function applyDrag(origRect: [number,number,number,number], handle: string, dx: number, dy: number): [number,number,number,number] {
+  let [x0,y0,x1,y1] = origRect
+  if (handle === 'body') return [x0+dx, y0+dy, x1+dx, y1+dy]
+  if (handle.includes('l')) x0 += dx
+  if (handle.includes('r')) x1 += dx
+  if (handle.includes('t')) y0 += dy
+  if (handle.includes('b')) y1 += dy
+  return [x0, y0, x1, y1]
+}
+
+function handleCursor(h: HandleName): string {
+  const map: Record<HandleName,string> = { tl:'nwse-resize',t:'ns-resize',tr:'nesw-resize',l:'ew-resize',r:'ew-resize',bl:'nesw-resize',b:'ns-resize',br:'nwse-resize' }
+  return map[h]
 }
 
 // ── Icons ────────────────────────────────────────────────────────────────────
@@ -45,51 +112,100 @@ function Icon({ d, size = 16 }: { d: string; size?: number }) {
   )
 }
 
-const ICONS = {
-  select:    'M5 3l14 9-7 2-3 7z',
-  text:      'M4 7V4h16v3M9 20h6M12 4v16',
-  sticky:    'M8 2H6a2 2 0 0 0-2 2v14l4-4h10a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-2M8 2v4M16 2v4',
-  arrow:     'M5 12h14M15 6l6 6-6 6',
-  freehand:  'M3 17c3-3 5-6 9-6s6 3 9 6',
-  rotateCw:  'M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8',
-  rotateCcw: 'M3 2v6h6M21 12a9 9 0 0 1-15 6.7L3 16',
-  trash:     'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6',
-  copy:      'M8 8H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-2M10 4h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
-  merge:     'M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3M12 8v8M9 11l3-3 3 3',
-  scissors:  'M6 2v11M6 13a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM18 13a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM6 6l12 9M18 6L6 15',
-  download:  'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
-  back:      'M19 12H5M12 5l-7 7 7 7',
+const ICONS: Record<string, string> = {
+  select:        'M5 3l14 9-7 2-3 7z',
+  text:          'M4 7V4h16v3M9 20h6M12 4v16',
+  sticky:        'M8 2H6a2 2 0 0 0-2 2v14l4-4h10a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-2M8 2v4M16 2v4',
+  arrow:         'M5 12h14M15 6l6 6-6 6',
+  freehand:      'M3 17c3-3 5-6 9-6s6 3 9 6',
+  highlight:     'M9 7H5m14 0h-5M9 3.5V7m6-3.5V7M4 21h16M6 7v7a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7',
+  underline:     'M6 3v7a6 6 0 0 0 12 0V3M4 21h16',
+  strikethrough: 'M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6M12 3v2m0 14v2',
+  comment:       'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
+  undo:          'M3 7v6h6M3 13C5 7.5 9 5 14 5a9 9 0 0 1 7 11c-1.5 4-5 6-8 6',
+  rotateCw:      'M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8',
+  rotateCcw:     'M3 2v6h6M21 12a9 9 0 0 1-15 6.7L3 16',
+  trash:         'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6',
+  copy:          'M8 8H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-2M10 4h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
+  merge:         'M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3M12 8v8M9 11l3-3 3 3',
+  scissors:      'M6 2v11M6 13a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM18 13a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM6 6l12 9M18 6L6 15',
+  download:      'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
+  back:          'M19 12H5M12 5l-7 7 7 7',
+  cert:          'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+  search:        'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35',
+  lock:          'M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2zM7 11V7a5 5 0 0 1 10 0v4',
+  stamp:         'M12 3v6m0 0L9 6m3 3l3-3M3 21h18M6 21V10l6-4 6 4v11',
+  redact:        'M3 5h18v4H3zM3 12h14M3 16h10',
+  chevDown:      'M6 9l6 6 6-6',
+  chevLeft:      'M15 18l-6-6 6-6',
+  chevRight:     'M9 18l6-6-6-6',
+  warn:          'M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z',
+  rect:          'M3 3h18v18H3z',
+  circle:        'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z',
+  line:          'M4 20L20 4',
+  image:         'M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zm-10-9a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-4 7l3-3.5 2 2.5 3-3.5 4 4.5H7z',
+  crop:          'M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14',
+  bkmk:          'M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z',
+  annList:       'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+  props:         'M12 22c5.52 0 10-4.48 10-10S17.52 2 12 2 2 6.48 2 12s4.48 10 10 10zm0-6v-4m0-4h.01',
+  hf:            'M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm0 4h16M4 17h16',
+  replaceIcon:   'M4 6h16M4 12h16M4 18h10M17 14l2 2 2-2M19 10v6',
+  rubber:        'M4 17h16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2zm2-3V8a6 6 0 0 1 12 0v6H6z',
+  contView:      'M4 5h16M4 10h16M4 15h16M4 20h16',
+  singleView:    'M4 3h16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z',
+  signature:     'M3 17c3-3 4-5 6-5s3 2 5 2 4-4 6-4M3 21h18',
+  print:         'M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z',
+  history:       'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5M12 7v5l4 2',
+  link:          'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
 }
 
 // ── Toolbar button ───────────────────────────────────────────────────────────
 
-function TBtn({
-  icon, label, active = false, onClick, disabled = false, title,
-}: {
-  icon: string; label?: string; active?: boolean; onClick: () => void; disabled?: boolean; title?: string
+function TBtn({ icon, label, active = false, onClick, disabled = false, title, danger = false }: {
+  icon: string; label?: string; active?: boolean; onClick: () => void
+  disabled?: boolean; title?: string; danger?: boolean
 }) {
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      title={title ?? label}
-      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium
-        transition-colors select-none
+    <button onClick={onClick} disabled={disabled} title={title ?? label}
+      className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium transition-colors select-none
         ${active
-          ? 'bg-accent text-accent-fg'
-          : 'text-fg-secondary hover:text-fg-primary hover:bg-bg-hover'
-        }
-        ${disabled ? 'opacity-40 pointer-events-none' : ''}
-      `}
-    >
-      <Icon d={ICONS[icon as keyof typeof ICONS]} />
-      {label && <span className="hidden sm:block">{label}</span>}
+          ? danger ? 'bg-danger text-white' : 'bg-accent text-accent-fg'
+          : danger ? 'text-danger hover:bg-danger/10' : 'text-fg-secondary hover:text-fg-primary hover:bg-bg-hover'}
+        ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
+      <Icon d={ICONS[icon]} />
+      {label && <span className="hidden lg:block">{label}</span>}
     </button>
   )
 }
 
-function Sep() {
-  return <div className="w-px h-5 bg-border mx-1 shrink-0" />
+function Sep() { return <div className="w-px h-5 bg-border mx-0.5 shrink-0" /> }
+
+// ── Dropdown ─────────────────────────────────────────────────────────────────
+
+function DropItem({ icon, label, onClick, danger }: { icon?: string; label: string; onClick: () => void; danger?: boolean }) {
+  return (
+    <button onClick={onClick}
+      className={`w-full text-left flex items-center gap-2.5 px-4 py-2.5 hover:bg-bg-hover text-xs
+        ${danger ? 'text-danger' : 'text-fg-secondary hover:text-fg-primary'}`}>
+      {icon && <Icon d={ICONS[icon]} size={14} />}
+      {label}
+    </button>
+  )
+}
+
+// ── Lazy thumbnail ────────────────────────────────────────────────────────────
+
+function LazyThumb({ src, alt, pw, ph }: { src: string; alt: string; pw: number; ph: number }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    if (!ref.current) return
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setVisible(true); obs.disconnect() } }, { rootMargin: '300px' })
+    obs.observe(ref.current)
+    return () => obs.disconnect()
+  }, [])
+  if (visible) return <img src={src} alt={alt} className="w-full" draggable={false} />
+  return <div ref={ref} className="w-full bg-bg-hover/40 animate-pulse" style={{ aspectRatio: `${pw}/${ph}` }} />
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
@@ -101,33 +217,158 @@ export function Editor({ jobId }: { jobId: string }) {
   const [pageCount, setPageCount] = useState(0)
   const [pageInfos, setPageInfos] = useState<PageMeta[]>([])
   const [currentPage, setCurrentPage] = useState(0)
-  const [version, setVersion] = useState(0)  // bump to reload PNGs
+  const [version, setVersion] = useState(0)
   const [filename, setFilename] = useState('document.pdf')
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState('')
 
-  // Tool state
+  // Tool + draw
   const [tool, setTool] = useState<Tool>('select')
   const [color, setColor] = useState('#000000')
   const [draw, setDraw] = useState<DrawPhase>({ kind: 'idle' })
   const [textVal, setTextVal] = useState('')
 
-  // Drag-to-reorder state
+  // Zoom
+  const [zoom, setZoom] = useState(100)
+
+  // Redaction
+  const [redactRegions, setRedactRegions] = useState<RedactRegion[]>([])
+  const [redacting, setRedacting] = useState(false)
+  const [hasCertificate, setHasCertificate] = useState(false)
+
+  // Text selection (highlight / underline / strikethrough)
+  const [textWords, setTextWords] = useState<TextWord[]>([])
+  const selAnchorRef = useRef<number | null>(null)
+  const selFocusRef  = useRef<number | null>(null)
+  const [selRange, setSelRange] = useState<[number, number] | null>(null)
+
+  // Comments
+  const [comments, setComments] = useState<Comment[]>([])
+  const [commentPanel, setCommentPanel] = useState(false)
+  const [commentPlacing, setCommentPlacing] = useState<{ svgX: number; svgY: number; ptX: number; ptY: number } | null>(null)
+  const [commentText, setCommentText] = useState('')
+  const [replyTexts, setReplyTexts] = useState<Record<string, string>>({})
+
+  // Watermark modal
+  const [watermarkOpen, setWatermarkOpen] = useState(false)
+  const [wmText, setWmText]       = useState('CONFIDENTIAL')
+  const [wmOpacity, setWmOpacity] = useState(30)
+  const [wmColor, setWmColor]     = useState('#aaaaaa')
+  const [wmAngle, setWmAngle]     = useState(45)
+  const [watermarking, setWatermarking] = useState(false)
+
+  // Password protect modal
+  const [protectOpen, setProtectOpen]           = useState(false)
+  const [protectPw, setProtectPw]               = useState('')
+  const [protectPwConfirm, setProtectPwConfirm] = useState('')
+  const [protecting, setProtecting]             = useState(false)
+
+  // Annotation selection (select tool)
+  const [pageAnnots, setPageAnnots]     = useState<AnnotItem[]>([])
+  const [selectedAnnot, setSelectedAnnot] = useState<SelAnnot | null>(null)
+  const [contextMenu, setContextMenu]   = useState<{ x: number; y: number; annotIdx: number } | null>(null)
+
+  // View mode + continuous scroll
+  const [viewMode, setViewMode] = useState<'single' | 'continuous'>('single')
+  const pageRefs = useRef<(HTMLDivElement | null)[]>([])
+
+  // Bookmarks
+  const [bookmarks, setBookmarks]         = useState<Bookmark[]>([])
+  const [bookmarkPanel, setBookmarkPanel] = useState(false)
+  const [bmAdding, setBmAdding]           = useState(false)
+  const [bmNewTitle, setBmNewTitle]       = useState('')
+
+  // Annotation list
+  const [allAnnots, setAllAnnots]         = useState<AnnotItem[]>([])
+  const [annotListPanel, setAnnotListPanel] = useState(false)
+  const [annotListLoading, setAnnotListLoading] = useState(false)
+
+  // Document properties
+  const [propsOpen, setPropsOpen]   = useState(false)
+  const [propsData, setPropsData]   = useState({ title: '', author: '', subject: '', keywords: '' })
+  const [propsSaving, setPropsSaving] = useState(false)
+
+  // Header / Footer
+  const [hfOpen, setHfOpen]         = useState(false)
+  const [hfHeader, setHfHeader]     = useState('')
+  const [hfFooter, setHfFooter]     = useState('')
+  const [hfFontSize, setHfFontSize] = useState(10)
+  const [hfColor, setHfColor]       = useState('#666666')
+  const [hfApplying, setHfApplying] = useState(false)
+
+  // Crop
+  const [cropRect, setCropRect] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
+
+  // Shape line width
+  const [lineWidth, setLineWidth] = useState(1.5)
+
+  // Stamps
+  const [pendingStamp, setPendingStamp] = useState('Draft')
+  const [stampMenuOpen, setStampMenuOpen] = useState(false)
+
+  // eSignature
+  const [sigOpen, setSigOpen]   = useState(false)
+  const [sigTab, setSigTab]     = useState<'draw'|'type'|'upload'>('draw')
+  const [sigText, setSigText]   = useState('')
+  const [sigFont, setSigFont]   = useState('Dancing Script')
+  const [sigColor, setSigColor] = useState('#1a1a2e')
+  const sigCanvasRef  = useRef<HTMLCanvasElement>(null)
+  const sigDrawingRef = useRef(false)
+
+  // Image insertion
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+
+  // Link annotation
+  const [linkModalRect, setLinkModalRect] = useState<[number,number,number,number] | null>(null)
+  const [linkUri, setLinkUri]             = useState('https://')
+
+  // Find & Replace
+  const [replaceOpen, setReplaceOpen]     = useState(false)
+  const [replaceFrom, setReplaceFrom]     = useState('')
+  const [replaceTo, setReplaceTo]         = useState('')
+  const [replacing, setReplacing]         = useState(false)
+  const [replaceResult, setReplaceResult] = useState<string | null>(null)
+
+  // Undo history panel
+  const [undoPanel, setUndoPanel]   = useState(false)
+  const [undoSteps, setUndoSteps]   = useState<{ index: number; ts: number }[]>([])
+
+  // Toolbar dropdowns (fix #1: grouped menus)
+  const [pagesMenuOpen, setPagesMenuOpen]       = useState(false)
+  const [securityMenuOpen, setSecurityMenuOpen] = useState(false)
+  const [exportOpen, setExportOpen]             = useState(false)
+  const [exporting, setExporting]               = useState(false)
+
+  // Drag-to-reorder
   const [dragFrom, setDragFrom] = useState<number | null>(null)
   const [dragOver, setDragOver] = useState<number | null>(null)
 
-  // Dialogs
+  // Split dialog
   const [splitDialog, setSplitDialog] = useState(false)
-  const [splitStart, setSplitStart] = useState('1')
-  const [splitEnd, setSplitEnd]     = useState('1')
+  const [splitStart, setSplitStart]   = useState('1')
+  const [splitEnd, setSplitEnd]       = useState('1')
 
-  const mergeInputRef = useRef<HTMLInputElement>(null)
-  const textInputRef  = useRef<HTMLInputElement>(null)
-  const svgRef        = useRef<SVGSVGElement>(null)
+  // Search
+  const [searchOpen, setSearchOpen]       = useState(false)
+  const [searchQuery, setSearchQuery]     = useState('')
+  const [searchResults, setSearchResults] = useState<{ page: number; rect: [number, number, number, number] }[]>([])
+  const [searchIndex, setSearchIndex]     = useState(0)
 
-  const pageInfo = pageInfos[currentPage]
+  // Refs
+  const searchInputRef  = useRef<HTMLInputElement>(null)
+  const mergeInputRef   = useRef<HTMLInputElement>(null)
+  const textInputRef    = useRef<HTMLInputElement>(null)
+  const commentInputRef = useRef<HTMLTextAreaElement>(null)
+  const svgRef          = useRef<SVGSVGElement>(null)
+  // fix #3: scroll container ref for fit-page / fit-width / wheel zoom
+  const containerRef    = useRef<HTMLDivElement>(null)
 
-  // ── Load info ──────────────────────────────────────────────────────────────
+  const renderScale = zoom * RENDER_SCALE / 100
+  const pageInfo    = pageInfos[currentPage]
+  const isTextTool  = tool === 'highlight' || tool === 'underline' || tool === 'strikethrough'
+
+  // ── Load ───────────────────────────────────────────────────────────────────
 
   const loadInfo = useCallback(async () => {
     const [infoRes, metaRes] = await Promise.all([
@@ -136,9 +377,7 @@ export function Editor({ jobId }: { jobId: string }) {
     ])
     if (infoRes.ok) {
       const d = await infoRes.json()
-      setPageCount(d.pageCount)
-      setPageInfos(d.pages)
-      setSplitEnd(String(d.pageCount))
+      setPageCount(d.pageCount); setPageInfos(d.pages); setSplitEnd(String(d.pageCount))
     }
     if (metaRes.ok) {
       const m = await metaRes.json()
@@ -146,20 +385,263 @@ export function Editor({ jobId }: { jobId: string }) {
     }
   }, [jobId])
 
+  const loadComments = useCallback(async () => {
+    const res = await fetch(`/pdf/api/pdf/${jobId}/comments`)
+    if (res.ok) { const d = await res.json(); setComments(d.comments ?? []) }
+  }, [jobId])
+
   useEffect(() => { loadInfo() }, [loadInfo])
+  useEffect(() => { loadComments() }, [loadComments])
 
-  function bump() {
-    setVersion(v => v + 1)
-    loadInfo()
-  }
+  useEffect(() => {
+    fetch(`/pdf/api/pdf/${jobId}/redact`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.available) setHasCertificate(true) })
+      .catch(() => {})
+  }, [jobId])
 
-  function pageUrl(n: number, scale = RENDER_SCALE) {
+  // Load page annotations when select tool active (for hit detection)
+  useEffect(() => {
+    if (tool !== 'select') { setPageAnnots([]); setSelectedAnnot(null); return }
+    fetch(`/pdf/api/pdf/${jobId}/annots`)
+      .then(r => r.ok ? r.json() : { annots: [] })
+      .then(d => setPageAnnots((d.annots ?? []).filter((a: AnnotItem) => a.page === currentPage)))
+      .catch(() => {})
+  }, [tool, currentPage, jobId, version])
+
+  // Load word positions when text markup tool is active
+  useEffect(() => {
+    if (!isTextTool) { setTextWords([]); return }
+    fetch(`/pdf/api/pdf/${jobId}/text/${currentPage}`)
+      .then(r => r.json())
+      .then(d => setTextWords(d.words ?? []))
+      .catch(() => {})
+  }, [isTextTool, currentPage, jobId, version])
+
+  // Bookmarks — load on mount and after changes
+  const loadBookmarks = useCallback(async () => {
+    const res = await fetch(`/pdf/api/pdf/${jobId}/bookmarks`)
+    if (res.ok) { const d = await res.json(); setBookmarks(d.bookmarks ?? []) }
+  }, [jobId])
+
+  useEffect(() => { loadBookmarks() }, [loadBookmarks])
+
+  // Continuous scroll — track active page by scroll position
+  useEffect(() => {
+    if (viewMode !== 'continuous' || !containerRef.current) return
+    const el = containerRef.current
+    const handler = () => {
+      const cRect = el.getBoundingClientRect()
+      let bestIdx = 0; let bestVis = -1
+      pageRefs.current.forEach((div, i) => {
+        if (!div) return
+        const r = div.getBoundingClientRect()
+        const vis = Math.min(r.bottom, cRect.bottom) - Math.max(r.top, cRect.top)
+        if (vis > bestVis) { bestVis = vis; bestIdx = i }
+      })
+      setCurrentPage(bestIdx)
+    }
+    el.addEventListener('scroll', handler, { passive: true })
+    return () => el.removeEventListener('scroll', handler)
+  }, [viewMode, pageCount])
+
+  // Keep pageRefs array sized correctly
+  useEffect(() => { pageRefs.current = Array(pageCount).fill(null) }, [pageCount])
+
+  const loadUndoSteps = useCallback(async () => {
+    const res = await fetch(`/pdf/api/pdf/${jobId}/undo`)
+    if (res.ok) { const d = await res.json(); setUndoSteps(d.steps ?? []) }
+  }, [jobId])
+
+  const bump = useCallback(() => {
+    setVersion(v => v + 1); loadInfo(); loadComments()
+  }, [loadInfo, loadComments])
+
+  function pageUrl(n: number, scale = renderScale) {
     return `/pdf/api/pdf/${jobId}/page/${n}?scale=${scale}&v=${version}`
   }
 
-  function toast(msg: string) {
-    setStatus(msg)
-    setTimeout(() => setStatus(''), 2500)
+  function displayW() { return pageInfo ? Math.round(pageInfo.widthPx * zoom / 100) : 0 }
+  function displayH() { return pageInfo ? Math.round(pageInfo.heightPx * zoom / 100) : 0 }
+  function toast(msg: string) { setStatus(msg); setTimeout(() => setStatus(''), 2500) }
+
+  // ── Fix #3: scroll-wheel zoom (Ctrl+scroll) ────────────────────────────────
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const handler = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      const dir = e.deltaY > 0 ? -1 : 1
+      setZoom(z => clamp(z + dir * ZOOM_STEP, ZOOM_MIN, ZOOM_MAX))
+    }
+    el.addEventListener('wheel', handler, { passive: false })
+    return () => el.removeEventListener('wheel', handler)
+  }, [])
+
+  // ── Fix #3: fit-page / fit-width ───────────────────────────────────────────
+
+  function fitPage() {
+    if (!pageInfo || !containerRef.current) return
+    const cw = containerRef.current.clientWidth  - CANVAS_PAD
+    const ch = containerRef.current.clientHeight - CANVAS_PAD
+    const zw = (cw / pageInfo.widthPx)  * 100
+    const zh = (ch / pageInfo.heightPx) * 100
+    setZoom(clamp(Math.min(zw, zh), ZOOM_MIN, ZOOM_MAX))
+  }
+
+  function fitWidth() {
+    if (!pageInfo || !containerRef.current) return
+    const cw = containerRef.current.clientWidth - CANVAS_PAD
+    setZoom(clamp((cw / pageInfo.widthPx) * 100, ZOOM_MIN, ZOOM_MAX))
+  }
+
+  // ── Undo + keyboard ────────────────────────────────────────────────────────
+
+  const handleUndoRef = useRef<() => Promise<void>>(async () => {})
+  useEffect(() => {
+    handleUndoRef.current = async () => {
+      const res = await fetch(`/pdf/api/pdf/${jobId}/undo`, { method: 'POST' })
+      if (res.ok) { bump(); toast('Undone') } else toast('Nothing to undo')
+    }
+  })
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') {
+        e.preventDefault(); handleUndoRef.current()
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault()
+        setSearchOpen(prev => { if (!prev) setTimeout(() => searchInputRef.current?.focus(), 50); return !prev })
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedAnnot && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        e.preventDefault(); deleteAnnot(selectedAnnot.pageIndex)
+      }
+      if (e.key === 'Escape') {
+        setSearchOpen(false); setSearchResults([]); setSearchQuery('')
+        setCommentPlacing(null); setProtectOpen(false); setWatermarkOpen(false)
+        setPagesMenuOpen(false); setSecurityMenuOpen(false); setExportOpen(false)
+        setStampMenuOpen(false); setPropsOpen(false); setHfOpen(false)
+        setCropRect(null); if (tool === 'crop') setTool('select')
+        setSelectedAnnot(null); setContextMenu(null); setLinkModalRect(null)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // Dismiss context menu on any click outside it
+  useEffect(() => {
+    if (!contextMenu) return
+    function dismiss() { setContextMenu(null) }
+    document.addEventListener('click', dismiss, { capture: true })
+    document.addEventListener('contextmenu', dismiss, { capture: true })
+    return () => {
+      document.removeEventListener('click', dismiss, { capture: true })
+      document.removeEventListener('contextmenu', dismiss, { capture: true })
+    }
+  }, [contextMenu])
+
+  // ── Search ─────────────────────────────────────────────────────────────────
+
+  async function doSearch(q: string) {
+    if (!q.trim()) { setSearchResults([]); setSearchIndex(0); return }
+    const res = await fetch(`/pdf/api/pdf/${jobId}/search?q=${encodeURIComponent(q)}`)
+    if (!res.ok) return
+    const data = await res.json()
+    const results: { page: number; rect: [number, number, number, number] }[] = data.results ?? []
+    setSearchResults(results); setSearchIndex(0)
+    if (results.length > 0) setCurrentPage(results[0].page)
+  }
+
+  function searchNav(dir: 1 | -1) {
+    if (!searchResults.length) return
+    const next = (searchIndex + dir + searchResults.length) % searchResults.length
+    setSearchIndex(next); setCurrentPage(searchResults[next].page)
+  }
+
+  // ── Text selection ─────────────────────────────────────────────────────────
+
+  async function commitTextSelection() {
+    const anchor = selAnchorRef.current; const focus = selFocusRef.current
+    selAnchorRef.current = null; selFocusRef.current = null; setSelRange(null)
+    if (anchor === null || focus === null) return
+    const min = Math.min(anchor, focus); const max = Math.max(anchor, focus)
+    const words = textWords.slice(min, max + 1).filter(w => w.word.trim())
+    if (!words.length) return
+    const annotType = tool === 'underline' ? 'underline' : tool === 'strikethrough' ? 'strikethrough' : 'highlight'
+    await apiPost(`/pdf/api/pdf/${jobId}/annotate`, {
+      type: annotType, page: currentPage, scale: 1, quads: words.map(w => w.rect), color,
+    })
+    bump()
+  }
+
+  // ── Comments (fix #4: decoupled panel/tool) ────────────────────────────────
+
+  async function submitComment() {
+    if (!commentPlacing || !commentText.trim()) return
+    const w = 120 / renderScale; const h = 20 / renderScale
+    await apiPost(`/pdf/api/pdf/${jobId}/comments`, {
+      page: currentPage,
+      rect: [commentPlacing.ptX, commentPlacing.ptY, commentPlacing.ptX + w, commentPlacing.ptY + h],
+      text: commentText.trim(), author: 'Operator',
+    })
+    setCommentPlacing(null); setCommentText('')
+    setTool('select') // fix #4: auto-return to select after placing
+    loadComments(); setCommentPanel(true)
+  }
+
+  async function resolveComment(id: string, resolved: boolean) {
+    await fetch(`/pdf/api/pdf/${jobId}/comments/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resolved }),
+    })
+    loadComments()
+  }
+
+  async function deleteComment(id: string) {
+    await fetch(`/pdf/api/pdf/${jobId}/comments/${id}`, { method: 'DELETE' })
+    loadComments()
+  }
+
+  async function addReply(commentId: string) {
+    const text = replyTexts[commentId]?.trim()
+    if (!text) return
+    await apiPost(`/pdf/api/pdf/${jobId}/comments/${commentId}/reply`, { text, author: 'Operator' })
+    setReplyTexts(prev => ({ ...prev, [commentId]: '' }))
+    loadComments()
+  }
+
+  // ── Watermark ──────────────────────────────────────────────────────────────
+
+  async function doWatermark() {
+    if (!wmText.trim()) return
+    setWatermarking(true)
+    await apiPost(`/pdf/api/pdf/${jobId}/watermark`, {
+      text: wmText.trim(), opacity: wmOpacity / 100, angle: wmAngle, color: wmColor, pages: 'all',
+    })
+    setWatermarkOpen(false); bump(); toast('Watermark applied'); setWatermarking(false)
+  }
+
+  // ── Password protect ───────────────────────────────────────────────────────
+
+  async function doProtect() {
+    if (!protectPw || protectPw !== protectPwConfirm) { toast('Passwords do not match'); return }
+    setProtecting(true)
+    const res = await fetch(`/pdf/api/pdf/${jobId}/protect`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_pw: protectPw }),
+    })
+    if (!res.ok) { toast('Protection failed'); setProtecting(false); return }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `${filename.replace(/\.pdf$/i, '')}-protected.pdf`
+    a.click(); URL.revokeObjectURL(url)
+    setProtectOpen(false); setProtectPw(''); setProtectPwConfirm('')
+    toast('Protected PDF downloaded'); setProtecting(false)
   }
 
   // ── Page operations ────────────────────────────────────────────────────────
@@ -167,9 +649,7 @@ export function Editor({ jobId }: { jobId: string }) {
   async function rotate(angle: 90 | -90) {
     setSaving(true)
     await apiPost(`/pdf/api/pdf/${jobId}/pages/rotate`, { page: currentPage, angle })
-    bump()
-    setSaving(false)
-    toast('Rotated')
+    bump(); setSaving(false); toast('Rotated')
   }
 
   async function deletePage() {
@@ -178,96 +658,317 @@ export function Editor({ jobId }: { jobId: string }) {
     setSaving(true)
     const next = currentPage > 0 ? currentPage - 1 : 0
     await apiPost(`/pdf/api/pdf/${jobId}/pages/delete`, { page: currentPage })
-    setCurrentPage(next)
-    bump()
-    setSaving(false)
-    toast('Page deleted')
+    setCurrentPage(next); bump(); setSaving(false); toast('Page deleted')
   }
 
   async function duplicatePage() {
     setSaving(true)
     await apiPost(`/pdf/api/pdf/${jobId}/pages/duplicate`, { page: currentPage })
-    bump()
-    setSaving(false)
-    toast('Page duplicated')
+    bump(); setSaving(false); toast('Page duplicated')
   }
 
   async function handleReorder(from: number, to: number) {
     if (from === to) return
     const order = Array.from({ length: pageCount }, (_, i) => i)
-    order.splice(from, 1)
-    order.splice(to, 0, from)
+    order.splice(from, 1); order.splice(to, 0, from)
     setSaving(true)
     await apiPost(`/pdf/api/pdf/${jobId}/pages/reorder`, { order })
-    setCurrentPage(to)
-    bump()
-    setSaving(false)
-    toast('Pages reordered')
+    setCurrentPage(to); bump(); setSaving(false); toast('Pages reordered')
   }
 
   async function handleMerge(file: File) {
     setSaving(true)
-    const form = new FormData()
-    form.append('file', file)
+    const form = new FormData(); form.append('file', file)
     const res = await fetch(`/pdf/api/pdf/${jobId}/merge`, { method: 'POST', body: form })
     const d = await res.json()
-    bump()
-    setSaving(false)
-    toast(`Merged — ${d.pageCount} pages total`)
+    bump(); setSaving(false); toast(`Merged — ${d.pageCount} pages total`)
   }
 
   async function handleSplit() {
-    const start = parseInt(splitStart) - 1
-    const end   = parseInt(splitEnd) - 1
+    const start = parseInt(splitStart) - 1; const end = parseInt(splitEnd) - 1
     if (isNaN(start) || isNaN(end) || start > end || start < 0 || end >= pageCount) {
-      toast('Invalid page range')
-      return
+      toast('Invalid page range'); return
     }
     setSaving(true)
     const d = await apiPost(`/pdf/api/pdf/${jobId}/split`, { start, end })
-    setSplitDialog(false)
-    setSaving(false)
-    if (d.jobId) {
-      toast(`Split created — opening…`)
-      setTimeout(() => router.push(`/pdf/editor/${d.jobId}`), 1000)
-    }
+    setSplitDialog(false); setSaving(false)
+    if (d.jobId) { toast('Split created — opening…'); setTimeout(() => router.push(`/pdf/editor/${d.jobId}`), 1000) }
   }
 
-  // ── Annotation ─────────────────────────────────────────────────────────────
+  async function exportAs(format: string, label: string) {
+    setExportOpen(false); setExporting(true); toast(`Exporting as ${label}…`)
+    try {
+      const res = await fetch(`/pdf/api/pdf/${jobId}/convert/export?format=${format}`)
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Export failed' }))
+        toast(err.error ?? 'Export failed'); return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const ext = format === 'pdfa' ? 'pdf' : format === 'png' ? 'zip' : format
+      a.download = `${filename.replace(/\.pdf$/i, '')}.${ext}`
+      a.click(); URL.revokeObjectURL(url); toast(`${label} downloaded`)
+    } finally { setExporting(false) }
+  }
+
+  // ── Redaction ──────────────────────────────────────────────────────────────
+
+  async function handleRedact() {
+    if (redactRegions.length === 0) return
+    const count = redactRegions.length
+    const pages = [...new Set(redactRegions.map(r => r.page + 1))].sort((a, b) => a - b).join(', ')
+    if (!confirm(
+      `Apply ${count} redaction${count !== 1 ? 's' : ''} across page${pages.includes(',') ? 's' : ''} ${pages}?\n\n` +
+      `Content is permanently removed. A new file is created; the original is preserved.`
+    )) return
+    setRedacting(true)
+    try {
+      const res = await fetch(`/pdf/api/pdf/${jobId}/redact`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          regions: redactRegions.map(r => ({ page: r.page, x0: r.ptX0, y0: r.ptY0, x1: r.ptX1, y1: r.ptY1 })),
+          scale: 1, filename, user_id: 'operator', user_name: 'Operator',
+        }),
+      })
+      const d = await res.json()
+      if (!res.ok) { toast(d.error ?? 'Redaction failed'); return }
+      if (d.jobId) { toast('Redacted — opening…'); setTimeout(() => router.push(`/pdf/editor/${d.jobId}`), 1200) }
+    } catch { toast('Redaction failed') }
+    finally { setRedacting(false) }
+  }
+
+  // ── New handlers ──────────────────────────────────────────────────────────
+
+  function goToPage(n: number) {
+    if (viewMode === 'continuous') {
+      pageRefs.current[n]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+    setCurrentPage(n)
+  }
+
+  // ── eSignature helpers ─────────────────────────────────────────────────────
+
+  function sigDown(e: React.MouseEvent<HTMLCanvasElement>) {
+    const cv = sigCanvasRef.current; if (!cv) return
+    const ctx = cv.getContext('2d')!; const r = cv.getBoundingClientRect()
+    sigDrawingRef.current = true
+    ctx.strokeStyle = sigColor; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+    ctx.beginPath(); ctx.moveTo(e.clientX - r.left, e.clientY - r.top)
+  }
+  function sigMove(e: React.MouseEvent<HTMLCanvasElement>) {
+    if (!sigDrawingRef.current || !sigCanvasRef.current) return
+    const ctx = sigCanvasRef.current.getContext('2d')!; const r = sigCanvasRef.current.getBoundingClientRect()
+    ctx.lineTo(e.clientX - r.left, e.clientY - r.top); ctx.stroke()
+  }
+  function sigUp() { sigDrawingRef.current = false }
+  function sigClear() {
+    const cv = sigCanvasRef.current; if (!cv) return
+    cv.getContext('2d')!.clearRect(0, 0, cv.width, cv.height)
+  }
+
+  async function captureSignature(): Promise<File | null> {
+    if (sigTab === 'draw') {
+      const cv = sigCanvasRef.current; if (!cv) return null
+      return new Promise(res => cv.toBlob(b => res(b ? new File([b], 'sig.png', { type: 'image/png' }) : null), 'image/png'))
+    }
+    if (sigTab === 'type') {
+      if (!sigText.trim()) return null
+      const cv = document.createElement('canvas'); cv.width = 420; cv.height = 130
+      const ctx = cv.getContext('2d')!
+      ctx.fillStyle = 'white'; ctx.fillRect(0, 0, 420, 130)
+      ctx.fillStyle = sigColor; ctx.font = `italic 56px "${sigFont}", cursive`
+      ctx.textBaseline = 'middle'; ctx.fillText(sigText, 20, 65)
+      return new Promise(res => cv.toBlob(b => res(b ? new File([b], 'sig.png', { type: 'image/png' }) : null), 'image/png'))
+    }
+    return null
+  }
+
+  async function useSignature() {
+    const file = await captureSignature(); if (!file) return
+    setImageFile(file); setTool('image'); setSigOpen(false)
+    toast('Drag on the page to place your signature')
+  }
+
+  async function addBookmark() {
+    if (!bmNewTitle.trim()) return
+    await apiPost(`/pdf/api/pdf/${jobId}/bookmarks`, { title: bmNewTitle.trim(), page: currentPage, level: 1 })
+    setBmNewTitle(''); setBmAdding(false); loadBookmarks()
+  }
+
+  async function deleteBookmark(idx: number) {
+    await fetch(`/pdf/api/pdf/${jobId}/bookmarks/${idx}`, { method: 'DELETE' })
+    loadBookmarks()
+  }
+
+  async function moveAnnot(pageIndex: number, rect: [number,number,number,number]) {
+    await fetch(`/pdf/api/pdf/${jobId}/annotate`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ page: currentPage, index: pageIndex, rect }),
+    })
+    bump()
+  }
+
+  async function deleteAnnot(pageIndex: number) {
+    await fetch(`/pdf/api/pdf/${jobId}/annotate`, {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ page: currentPage, index: pageIndex }),
+    })
+    setSelectedAnnot(null); bump()
+  }
+
+  async function loadAllAnnots() {
+    setAnnotListLoading(true)
+    const res = await fetch(`/pdf/api/pdf/${jobId}/annots`)
+    if (res.ok) { const d = await res.json(); setAllAnnots(d.annots ?? []) }
+    setAnnotListLoading(false)
+  }
+
+  async function openProps() {
+    const res = await fetch(`/pdf/api/pdf/${jobId}/props`)
+    if (res.ok) { const d = await res.json(); setPropsData({ title: d.title ?? '', author: d.author ?? '', subject: d.subject ?? '', keywords: d.keywords ?? '' }) }
+    setPropsOpen(true)
+  }
+
+  async function doSaveProps() {
+    setPropsSaving(true)
+    await apiPost(`/pdf/api/pdf/${jobId}/props`, propsData)
+    setPropsSaving(false); setPropsOpen(false); toast('Properties saved')
+  }
+
+  async function doHeaderFooter() {
+    if (!hfHeader.trim() && !hfFooter.trim()) return
+    setHfApplying(true)
+    await apiPost(`/pdf/api/pdf/${jobId}/header-footer`, { header: hfHeader, footer: hfFooter, fontSize: hfFontSize, color: hfColor })
+    setHfOpen(false); bump(); toast('Header/footer applied'); setHfApplying(false)
+  }
+
+  async function doInsertBlank() {
+    setSaving(true)
+    const d = await apiPost(`/pdf/api/pdf/${jobId}/pages/blank`, { after: currentPage })
+    bump(); setSaving(false); toast(`Blank page inserted`)
+    if (d.insertedAt !== undefined) setCurrentPage(d.insertedAt)
+  }
+
+  async function doInsertImage(x0: number, y0: number, x1: number, y1: number) {
+    if (!imageFile) return
+    setSaving(true)
+    const fd = new FormData()
+    fd.append('file', imageFile)
+    fd.append('page', String(currentPage))
+    fd.append('x0', String(x0)); fd.append('y0', String(y0))
+    fd.append('x1', String(x1)); fd.append('y1', String(y1))
+    fd.append('scale', String(renderScale))
+    await fetch(`/pdf/api/pdf/${jobId}/image`, { method: 'POST', body: fd })
+    setImageFile(null); bump(); setSaving(false)
+  }
+
+  async function doConfirmCrop() {
+    if (!cropRect) return
+    setSaving(true)
+    await apiPost(`/pdf/api/pdf/${jobId}/crop`, { page: currentPage, scale: renderScale, ...cropRect })
+    setCropRect(null); setTool('select'); bump(); setSaving(false); toast('Page cropped')
+  }
+
+  async function doReplace() {
+    if (!replaceFrom.trim()) return
+    setReplacing(true); setReplaceResult(null)
+    const d = await apiPost(`/pdf/api/pdf/${jobId}/replace`, { find: replaceFrom, replace: replaceTo })
+    setReplacing(false)
+    if (d.replaced === 0) { setReplaceResult('No matches found') }
+    else { setReplaceResult(`Replaced ${d.replaced} occurrence${d.replaced !== 1 ? 's' : ''}`); bump() }
+  }
+
+  async function addLink() {
+    if (!linkModalRect || !linkUri.startsWith('http')) return
+    await apiPost(`/pdf/api/pdf/${jobId}/links`, { page: currentPage, rect: linkModalRect, uri: linkUri })
+    setLinkModalRect(null); setTool('select'); bump(); toast('Link added')
+  }
+
+  function printPdf() {
+    const iframe = document.createElement('iframe')
+    iframe.style.display = 'none'
+    iframe.src = `/pdf/api/pdf/${jobId}/download`
+    document.body.appendChild(iframe)
+    iframe.onload = () => {
+      try { iframe.contentWindow?.print() } catch {}
+      setTimeout(() => document.body.removeChild(iframe), 60000)
+    }
+  }
 
   async function saveAnnotation(body: object) {
     setSaving(true)
     await apiPost(`/pdf/api/pdf/${jobId}/annotate`, body)
-    bump()
-    setSaving(false)
+    bump(); setSaving(false)
   }
 
   // ── SVG interaction ────────────────────────────────────────────────────────
 
   const toolCursor: Record<Tool, string> = {
-    select: 'default',
-    text: 'text',
-    sticky: 'cell',
-    arrow: 'crosshair',
-    freehand: 'crosshair',
+    select: 'default', text: 'text', sticky: 'cell',
+    arrow: 'crosshair', freehand: 'crosshair', redact: 'crosshair',
+    highlight: 'text', underline: 'text', strikethrough: 'text', comment: 'crosshair',
+    rect: 'crosshair', circle: 'crosshair', line: 'crosshair',
+    stamp: 'copy', image: 'crosshair', crop: 'crosshair', link: 'crosshair',
   }
 
   function onSvgDown(e: React.MouseEvent<SVGSVGElement>) {
-    if (tool === 'select' || !pageInfo) return
+    if (!pageInfo) return
     const [x, y] = svgPoint(e)
 
+    if (tool === 'select') {
+      // Check handle of currently selected annotation first
+      if (selectedAnnot) {
+        const h = hitHandle(x, y, selectedAnnot.rect, renderScale)
+        if (h) {
+          setDraw({ kind: 'annot-drag', pageIndex: selectedAnnot.pageIndex, handle: h,
+            origRect: selectedAnnot.rect, startX: x, startY: y, curRect: selectedAnnot.rect })
+          return
+        }
+        // Check body drag
+        if (hitAnnot(x, y, selectedAnnot.rect, renderScale)) {
+          setDraw({ kind: 'annot-drag', pageIndex: selectedAnnot.pageIndex, handle: 'body',
+            origRect: selectedAnnot.rect, startX: x, startY: y, curRect: selectedAnnot.rect })
+          return
+        }
+      }
+      // Hit test all page annotations
+      const hit = pageAnnots.find(a => hitAnnot(x, y, a.rect, renderScale))
+      if (hit) {
+        setSelectedAnnot({ pageIndex: hit.pageIndex, rect: hit.rect })
+        setDraw({ kind: 'annot-drag', pageIndex: hit.pageIndex, handle: 'body',
+          origRect: hit.rect, startX: x, startY: y, curRect: hit.rect })
+      } else {
+        setSelectedAnnot(null)
+      }
+      return
+    }
     if (tool === 'text' || tool === 'sticky') {
       setDraw({ kind: 'text-placing', x, y, sticky: tool === 'sticky' })
       setTextVal('')
       setTimeout(() => textInputRef.current?.focus(), 50)
       return
     }
-    if (tool === 'arrow') {
-      setDraw({ kind: 'arrow', x0: x, y0: y, x1: x, y1: y })
+    if (tool === 'arrow')    { setDraw({ kind: 'arrow', x0: x, y0: y, x1: x, y1: y }); return }
+    if (tool === 'freehand') { setDraw({ kind: 'freehand', pts: [[x, y]] }); return }
+    if (tool === 'redact')   { setDraw({ kind: 'redact-rect', x0: x, y0: y, x1: x, y1: y }); return }
+    if (tool === 'rect' || tool === 'circle' || tool === 'line') {
+      setDraw({ kind: 'shape-rect', x0: x, y0: y, x1: x, y1: y, shape: tool }); return
+    }
+    if (tool === 'crop')  { setCropRect(null); setDraw({ kind: 'crop-rect', x0: x, y0: y, x1: x, y1: y }); return }
+    if (tool === 'image') { setDraw({ kind: 'image-rect', x0: x, y0: y, x1: x, y1: y }); return }
+    if (tool === 'link')  { setDraw({ kind: 'link-rect', x0: x, y0: y, x1: x, y1: y }); return }
+    if (tool === 'stamp') {
+      const ptX = x / renderScale; const ptY = y / renderScale
+      const w = 150; const h = 60
+      saveAnnotation({ type: 'stamp', page: currentPage, scale: 1, stamp: pendingStamp,
+        rect: [ptX - w / 2, ptY - h / 2, ptX + w / 2, ptY + h / 2] })
       return
     }
-    if (tool === 'freehand') {
-      setDraw({ kind: 'freehand', pts: [[x, y]] })
+    if (tool === 'comment') {
+      setCommentPlacing({ svgX: x, svgY: y, ptX: x / renderScale, ptY: y / renderScale })
+      setTimeout(() => commentInputRef.current?.focus(), 50)
       return
     }
   }
@@ -275,319 +976,1298 @@ export function Editor({ jobId }: { jobId: string }) {
   function onSvgMove(e: React.MouseEvent<SVGSVGElement>) {
     if (!pageInfo) return
     const [x, y] = svgPoint(e)
-    if (draw.kind === 'arrow') {
-      setDraw({ ...draw, x1: x, y1: y })
-    } else if (draw.kind === 'freehand') {
-      setDraw({ kind: 'freehand', pts: [...draw.pts, [x, y]] })
+    if (draw.kind === 'arrow')            setDraw({ ...draw, x1: x, y1: y })
+    else if (draw.kind === 'freehand')    setDraw({ kind: 'freehand', pts: [...draw.pts, [x, y]] })
+    else if (draw.kind === 'redact-rect') setDraw({ ...draw, x1: x, y1: y })
+    else if (draw.kind === 'shape-rect')  setDraw({ ...draw, x1: x, y1: y })
+    else if (draw.kind === 'crop-rect')   setDraw({ ...draw, x1: x, y1: y })
+    else if (draw.kind === 'image-rect')  setDraw({ ...draw, x1: x, y1: y })
+    else if (draw.kind === 'link-rect')   setDraw({ ...draw, x1: x, y1: y })
+    else if (draw.kind === 'annot-drag') {
+      const dx = (x - draw.startX) / renderScale
+      const dy = (y - draw.startY) / renderScale
+      const cur = applyDrag(draw.origRect, draw.handle, dx, dy)
+      setDraw({ ...draw, curRect: cur })
+      setSelectedAnnot(prev => prev ? { ...prev, rect: cur } : null)
     }
   }
 
-  async function onSvgUp(e: React.MouseEvent<SVGSVGElement>) {
+  async function onSvgUp() {
+    if (isTextTool) { await commitTextSelection(); return }
     if (!pageInfo || draw.kind === 'idle' || draw.kind === 'text-placing') return
-    const [x, y] = svgPoint(e)
-
+    if (draw.kind === 'annot-drag') {
+      const r = draw.curRect
+      const norm: [number,number,number,number] = [Math.min(r[0],r[2]),Math.min(r[1],r[3]),Math.max(r[0],r[2]),Math.max(r[1],r[3])]
+      if (norm[2]-norm[0] > 2 && norm[3]-norm[1] > 2) {
+        await moveAnnot(draw.pageIndex, norm)
+        setSelectedAnnot({ pageIndex: draw.pageIndex, rect: norm })
+      }
+      setDraw({ kind: 'idle' }); return
+    }
+    if (draw.kind === 'redact-rect') {
+      if (Math.abs(draw.x1 - draw.x0) > 8 && Math.abs(draw.y1 - draw.y0) > 8) {
+        setRedactRegions(prev => [...prev, {
+          id: crypto.randomUUID(), page: currentPage,
+          ptX0: Math.min(draw.x0, draw.x1) / renderScale, ptY0: Math.min(draw.y0, draw.y1) / renderScale,
+          ptX1: Math.max(draw.x0, draw.x1) / renderScale, ptY1: Math.max(draw.y0, draw.y1) / renderScale,
+        }])
+      }
+      setDraw({ kind: 'idle' }); return
+    }
     if (draw.kind === 'arrow') {
-      const dx = draw.x1 - draw.x0
-      const dy = draw.y1 - draw.y0
+      const dx = draw.x1 - draw.x0; const dy = draw.y1 - draw.y0
       if (Math.sqrt(dx * dx + dy * dy) > 5) {
-        await saveAnnotation({
-          type: 'arrow', page: currentPage, scale: RENDER_SCALE, color,
-          p1: [draw.x0, draw.y0], p2: [draw.x1, draw.y1],
-        })
+        await saveAnnotation({ type: 'arrow', page: currentPage, scale: renderScale, color, p1: [draw.x0, draw.y0], p2: [draw.x1, draw.y1] })
       }
     }
-
     if (draw.kind === 'freehand' && draw.pts.length >= 2) {
-      await saveAnnotation({
-        type: 'freehand', page: currentPage, scale: RENDER_SCALE, color,
-        inkList: draw.pts,
-      })
+      await saveAnnotation({ type: 'freehand', page: currentPage, scale: renderScale, color, inkList: draw.pts })
     }
-
+    if (draw.kind === 'shape-rect') {
+      const w = Math.abs(draw.x1 - draw.x0); const h = Math.abs(draw.y1 - draw.y0)
+      if (w > 4 && h > 4) {
+        const shape = draw.shape
+        if (shape === 'line') {
+          await saveAnnotation({ type: 'line', page: currentPage, scale: renderScale, color, lineWidth,
+            p1: [draw.x0, draw.y0], p2: [draw.x1, draw.y1] })
+        } else {
+          const rect = [Math.min(draw.x0,draw.x1), Math.min(draw.y0,draw.y1), Math.max(draw.x0,draw.x1), Math.max(draw.y0,draw.y1)]
+          await saveAnnotation({ type: shape, page: currentPage, scale: renderScale, color, lineWidth, rect })
+        }
+      }
+    }
+    if (draw.kind === 'crop-rect') {
+      const w = Math.abs(draw.x1 - draw.x0); const h = Math.abs(draw.y1 - draw.y0)
+      if (w > 20 && h > 20) {
+        setCropRect({ x0: Math.min(draw.x0,draw.x1), y0: Math.min(draw.y0,draw.y1),
+                      x1: Math.max(draw.x0,draw.x1), y1: Math.max(draw.y0,draw.y1) })
+      }
+      setDraw({ kind: 'idle' }); return
+    }
+    if (draw.kind === 'image-rect') {
+      const w = Math.abs(draw.x1 - draw.x0); const h = Math.abs(draw.y1 - draw.y0)
+      if (w > 10 && h > 10) {
+        await doInsertImage(Math.min(draw.x0,draw.x1), Math.min(draw.y0,draw.y1),
+                            Math.max(draw.x0,draw.x1), Math.max(draw.y0,draw.y1))
+      }
+      setDraw({ kind: 'idle' }); return
+    }
+    if (draw.kind === 'link-rect') {
+      const w = Math.abs(draw.x1 - draw.x0); const h = Math.abs(draw.y1 - draw.y0)
+      if (w > 8 && h > 8) {
+        const r: [number,number,number,number] = [
+          Math.min(draw.x0,draw.x1)/renderScale, Math.min(draw.y0,draw.y1)/renderScale,
+          Math.max(draw.x0,draw.x1)/renderScale, Math.max(draw.y0,draw.y1)/renderScale,
+        ]
+        setLinkModalRect(r); setLinkUri('https://')
+      }
+      setDraw({ kind: 'idle' }); return
+    }
     setDraw({ kind: 'idle' })
+  }
+
+  function onSvgContextMenu(e: React.MouseEvent<SVGSVGElement>) {
+    if (tool !== 'select') return
+    e.preventDefault()
+    const [sx, sy] = svgPoint(e)
+    const hit = pageAnnots.find(a => hitAnnot(sx, sy, a.rect, renderScale))
+    if (hit) {
+      setSelectedAnnot({ pageIndex: hit.pageIndex, rect: hit.rect })
+      setContextMenu({ x: e.clientX, y: e.clientY, annotIdx: hit.pageIndex })
+    }
   }
 
   async function commitText() {
-    if (draw.kind !== 'text-placing' || !textVal.trim()) {
-      setDraw({ kind: 'idle' })
-      return
-    }
+    if (draw.kind !== 'text-placing' || !textVal.trim()) { setDraw({ kind: 'idle' }); return }
     const { x, y, sticky } = draw
-    const PAD = 4
-    const W = Math.max(textVal.length * 7 + PAD * 2, 120)
-    const H = 28
+    const W = Math.max(textVal.length * 7 + 8, 120); const H = 28
     await saveAnnotation({
-      type: sticky ? 'sticky' : 'textbox',
-      page: currentPage, scale: RENDER_SCALE, color,
-      rect: [x, y, x + W, y + H],
-      content: textVal.trim(),
-      fontSize: 12,
+      type: sticky ? 'sticky' : 'textbox', page: currentPage, scale: renderScale, color,
+      rect: [x, y, x + W, y + H], content: textVal.trim(), fontSize: 12,
     })
-    setDraw({ kind: 'idle' })
-    setTextVal('')
+    setDraw({ kind: 'idle' }); setTextVal('')
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   if (pageCount === 0 && pageInfos.length === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-fg-tertiary text-sm">
-        Loading…
-      </div>
-    )
+    return <div className="flex-1 flex items-center justify-center text-fg-tertiary text-sm">Loading…</div>
   }
+
+  const dw = displayW(); const dh = displayH()
+  const pageComments = comments.filter(c => c.page === currentPage)
+  const openComments = comments.filter(c => !c.resolved).length
 
   return (
     <div className="flex flex-col" style={{ height: 'calc(100vh - 3rem)' }}>
 
-      {/* ── Toolbar ─────────────────────────────────────────────────────── */}
-      <div className="h-11 bg-bg-raised border-b border-border flex items-center px-3 gap-1 shrink-0 overflow-x-auto">
-        <button
-          onClick={() => router.push('/pdf')}
-          className="flex items-center gap-1 text-xs text-fg-tertiary hover:text-fg-primary mr-2 shrink-0"
-        >
+      {/* ── Toolbar (fix #1: grouped, dropdowns for Pages + Security) ────────── */}
+      <div className="h-11 bg-bg-raised border-b border-border flex items-center px-2 gap-0.5 shrink-0 overflow-x-auto">
+
+        {/* Navigation */}
+        <button onClick={() => router.push('/pdf')}
+          className="flex items-center gap-1 text-xs text-fg-tertiary hover:text-fg-primary mr-1 px-1.5 py-1.5 rounded hover:bg-bg-hover shrink-0">
           <Icon d={ICONS.back} size={14} />
           <span className="hidden sm:block">Files</span>
         </button>
-
-        <span className="text-xs text-fg-secondary truncate max-w-[160px] shrink-0">{filename}</span>
-        {saving && <span className="text-xs text-fg-tertiary ml-1 shrink-0">Saving…</span>}
-        {status && <span className="text-xs text-accent ml-1 shrink-0">{status}</span>}
+        <span className="text-xs text-fg-secondary truncate max-w-[120px] shrink-0">{filename}</span>
+        {saving    && <span className="text-xs text-fg-tertiary ml-1 shrink-0">Saving…</span>}
+        {!exporting && status && <span className="text-xs text-accent ml-1 shrink-0">{status}</span>}
+        {exporting && <span className="text-xs text-fg-tertiary ml-1 shrink-0 animate-pulse">Converting…</span>}
 
         <div className="flex-1 min-w-2" />
 
+        {/* History + Find */}
+        <TBtn icon="undo"   onClick={() => handleUndoRef.current()} title="Undo (Ctrl+Z)" />
+        <TBtn icon="history" active={undoPanel} title="Undo history"
+          onClick={() => { setUndoPanel(p => { if (!p) loadUndoSteps(); return !p }) }} />
+        <TBtn icon="search" active={searchOpen}
+          onClick={() => { setSearchOpen(o => !o); setTimeout(() => searchInputRef.current?.focus(), 50) }}
+          title="Find in document (Ctrl+F)" />
+
+        <Sep />
+
         {/* Annotation tools */}
-        {(['select','text','sticky','arrow','freehand'] as Tool[]).map(t => (
-          <TBtn key={t} icon={t} active={tool === t} onClick={() => { setTool(t); setDraw({ kind: 'idle' }) }} />
+        {(['select', 'text', 'sticky', 'arrow', 'freehand'] as Tool[]).map(t => (
+          <TBtn key={t} icon={t} active={tool === t}
+            title={t.charAt(0).toUpperCase() + t.slice(1)}
+            onClick={() => { setTool(t); setDraw({ kind: 'idle' }); setSelRange(null) }} />
         ))}
 
+        {/* Text markup tools */}
+        {(['highlight', 'underline', 'strikethrough'] as Tool[]).map(t => (
+          <TBtn key={t} icon={t} active={tool === t}
+            title={t.charAt(0).toUpperCase() + t.slice(1)}
+            onClick={() => { setTool(t); setDraw({ kind: 'idle' }); setSelRange(null) }} />
+        ))}
+
+        {/* Shape tools */}
+        <Sep />
+        {(['rect', 'circle', 'line'] as Tool[]).map(t => (
+          <TBtn key={t} icon={t} active={tool === t} title={t.charAt(0).toUpperCase() + t.slice(1)}
+            onClick={() => { setTool(t); setDraw({ kind: 'idle' }) }} />
+        ))}
+        <TBtn icon="link" active={tool === 'link'} title="Insert hyperlink — drag to set area"
+          onClick={() => { setTool('link'); setDraw({ kind: 'idle' }) }} />
+
+        {/* Stamps */}
+        <div className="relative shrink-0">
+          <button onClick={() => { setStampMenuOpen(o => !o); setPagesMenuOpen(false); setSecurityMenuOpen(false); setExportOpen(false) }}
+            className={`flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors
+              ${tool === 'stamp' ? 'bg-accent text-accent-fg' : 'text-fg-secondary hover:text-fg-primary hover:bg-bg-hover'}`}>
+            <Icon d={ICONS.rubber} />
+            <Icon d={ICONS.chevDown} size={12} />
+          </button>
+          {stampMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setStampMenuOpen(false)} />
+              <div className="absolute left-0 top-full mt-1 z-50 w-52 rounded-xl border border-border bg-bg-raised shadow-lg overflow-hidden py-1">
+                {['Approved','Draft','Confidential','For Comment','For Public Release','Not Approved','Top Secret','Expired','Final'].map(s => (
+                  <button key={s} onClick={() => { setPendingStamp(s); setTool('stamp'); setStampMenuOpen(false) }}
+                    className={`w-full text-left px-4 py-2 text-xs hover:bg-bg-hover ${pendingStamp === s && tool === 'stamp' ? 'text-accent font-semibold' : 'text-fg-secondary'}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Image insert */}
+        <TBtn icon="image" active={tool === 'image'} title="Insert image — drag to place"
+          onClick={() => { imageInputRef.current?.click() }} />
+        <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
+          onChange={e => { if (e.target.files?.[0]) { setImageFile(e.target.files[0]); setTool('image'); e.target.value = '' } }} />
+
+        {/* eSignature */}
+        <TBtn icon="signature" title="Add signature" onClick={() => { setSigOpen(true); setSigTab('draw') }} />
+
         {/* Color swatches */}
-        <div className="flex gap-0.5 ml-1">
+        <div className="flex gap-0.5 mx-1">
           {COLORS.map(c => (
-            <button
-              key={c}
-              onClick={() => setColor(c)}
-              title={c}
+            <button key={c} onClick={() => setColor(c)} title={c}
               className={`w-4 h-4 rounded-full border-2 transition-transform
-                ${color === c ? 'border-fg-primary scale-110' : 'border-transparent'}
-              `}
-              style={{ background: c }}
-            />
+                ${color === c ? 'border-fg-primary scale-110' : 'border-transparent'}`}
+              style={{ background: c }} />
           ))}
         </div>
 
         <Sep />
 
-        {/* Page ops */}
+        {/* Page operations */}
         <TBtn icon="rotateCcw" onClick={() => rotate(-90)} title="Rotate left" />
         <TBtn icon="rotateCw"  onClick={() => rotate(90)}  title="Rotate right" />
-        <TBtn icon="copy"  onClick={duplicatePage} title="Duplicate page" />
-        <TBtn icon="trash" onClick={deletePage} disabled={pageCount <= 1} title="Delete page" />
+        <TBtn icon="copy"      onClick={duplicatePage}      title="Duplicate page" />
+        <TBtn icon="trash"     onClick={deletePage} disabled={pageCount <= 1} title="Delete page" />
+
+        {/* Pages dropdown (fix #1: merge + split collapsed) */}
+        <div className="relative shrink-0">
+          <button onClick={() => { setPagesMenuOpen(o => !o); setSecurityMenuOpen(false); setExportOpen(false) }}
+            className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover">
+            Pages
+            <Icon d={ICONS.chevDown} size={12} />
+          </button>
+          {pagesMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setPagesMenuOpen(false)} />
+              <div className="absolute left-0 top-full mt-1 z-50 w-40 rounded-xl border border-border bg-bg-raised shadow-lg overflow-hidden">
+                <DropItem icon="merge"    label="Merge PDF…"        onClick={() => { setPagesMenuOpen(false); mergeInputRef.current?.click() }} />
+                <DropItem icon="scissors" label="Split PDF…"         onClick={() => { setPagesMenuOpen(false); setSplitStart('1'); setSplitEnd(String(pageCount)); setSplitDialog(true) }} />
+                <DropItem icon="copy"     label="Insert blank page"  onClick={() => { setPagesMenuOpen(false); doInsertBlank() }} />
+                <DropItem icon="hf"       label="Header &amp; Footer…" onClick={() => { setPagesMenuOpen(false); setHfOpen(true) }} />
+                <DropItem icon="crop"     label="Crop page"          onClick={() => { setPagesMenuOpen(false); setTool('crop'); setCropRect(null) }} />
+              </div>
+            </>
+          )}
+        </div>
+        <input ref={mergeInputRef} type="file" accept=".pdf" className="hidden"
+          onChange={e => { if (e.target.files?.[0]) { handleMerge(e.target.files[0]); e.target.value = '' } }} />
 
         <Sep />
 
-        {/* Merge / split */}
-        <TBtn icon="merge"    onClick={() => mergeInputRef.current?.click()} title="Merge PDF" />
-        <TBtn icon="scissors" onClick={() => { setSplitStart('1'); setSplitEnd(String(pageCount)); setSplitDialog(true) }} title="Split PDF" />
-        <input
-          ref={mergeInputRef}
-          type="file"
-          accept=".pdf"
-          className="hidden"
-          onChange={e => { if (e.target.files?.[0]) { handleMerge(e.target.files[0]); e.target.value = '' } }}
-        />
+        {/* Zoom */}
+        <button onClick={() => setZoom(z => Math.max(ZOOM_MIN, z - ZOOM_STEP))} title="Zoom out (Ctrl+scroll)"
+          className="w-6 h-6 flex items-center justify-center rounded text-fg-tertiary hover:text-fg-primary hover:bg-bg-hover text-sm shrink-0">−</button>
+        <button onClick={() => setZoom(100)} title="Reset to 100%"
+          className="text-xs text-fg-tertiary hover:text-fg-primary tabular-nums w-9 text-center shrink-0">{zoom}%</button>
+        <button onClick={() => setZoom(z => Math.min(ZOOM_MAX, z + ZOOM_STEP))} title="Zoom in (Ctrl+scroll)"
+          className="w-6 h-6 flex items-center justify-center rounded text-fg-tertiary hover:text-fg-primary hover:bg-bg-hover text-sm shrink-0">+</button>
 
         <Sep />
 
-        <a
-          href={`/pdf/forms/${jobId}`}
-          className="flex items-center gap-1.5 text-xs text-fg-secondary hover:text-fg-primary px-2 py-1.5 rounded-md hover:bg-bg-hover"
-          title="Form Builder"
-        >
+        {/* View mode toggle */}
+        <TBtn icon={viewMode === 'single' ? 'contView' : 'singleView'}
+          title={viewMode === 'single' ? 'Continuous scroll' : 'Single page'}
+          onClick={() => setViewMode(v => v === 'single' ? 'continuous' : 'single')} />
+
+        {/* Bookmarks */}
+        <TBtn icon="bkmk" active={bookmarkPanel} title="Bookmarks"
+          onClick={() => setBookmarkPanel(p => !p)} />
+
+        {/* Annotation list */}
+        <TBtn icon="annList" active={annotListPanel} title="Annotations"
+          onClick={() => { setAnnotListPanel(p => { if (!p) loadAllAnnots(); return !p }) }} />
+
+        <Sep />
+
+        {/* Comments (fix #4: panel toggle only — does NOT change active tool) */}
+        <div className="relative shrink-0">
+          <button onClick={() => setCommentPanel(p => !p)} title="Comments"
+            className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium transition-colors
+              ${commentPanel ? 'bg-accent text-accent-fg' : 'text-fg-secondary hover:text-fg-primary hover:bg-bg-hover'}`}>
+            <Icon d={ICONS.comment} />
+          </button>
+          {openComments > 0 && (
+            <span className="absolute -top-1 -right-1 w-4 h-4 bg-accent text-accent-fg text-[9px] font-bold rounded-full flex items-center justify-center pointer-events-none">
+              {openComments}
+            </span>
+          )}
+        </div>
+
+        {/* Security dropdown (fix #1: watermark + protect + cert collapsed) */}
+        <div className="relative shrink-0">
+          <button onClick={() => { setSecurityMenuOpen(o => !o); setPagesMenuOpen(false); setExportOpen(false) }}
+            className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover">
+            Security
+            <Icon d={ICONS.chevDown} size={12} />
+          </button>
+          {securityMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setSecurityMenuOpen(false)} />
+              <div className="absolute right-0 top-full mt-1 z-50 w-52 rounded-xl border border-border bg-bg-raised shadow-lg overflow-hidden">
+                <DropItem icon="stamp"  label="Add watermark…"        onClick={() => { setSecurityMenuOpen(false); setWatermarkOpen(true) }} />
+                <DropItem icon="lock"   label="Password protect…"      onClick={() => { setSecurityMenuOpen(false); setProtectOpen(true) }} />
+                <DropItem icon="props"  label="Document properties…"   onClick={() => { setSecurityMenuOpen(false); openProps() }} />
+                {hasCertificate && (
+                  <a href={`/pdf/api/pdf/${jobId}/redact/certificate`} download
+                    onClick={() => setSecurityMenuOpen(false)}
+                    className="w-full text-left flex items-center gap-2.5 px-4 py-2.5 hover:bg-bg-hover text-xs text-fg-secondary hover:text-fg-primary">
+                    <Icon d={ICONS.cert} size={14} />
+                    Download certificate
+                  </a>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        <Sep />
+
+        {/* Redact */}
+        <TBtn icon="redact" label="Redact" danger active={tool === 'redact'}
+          onClick={() => { setTool(tool === 'redact' ? 'select' : 'redact'); setDraw({ kind: 'idle' }) }}
+          title="Redact — permanently remove content" />
+
+        <Sep />
+
+        {/* Output */}
+        <a href={`/pdf/forms/${jobId}`}
+          className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover shrink-0">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}
                strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
             <path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
           </svg>
-          <span className="hidden sm:block">Forms</span>
+          <span className="hidden lg:block">Forms</span>
         </a>
 
-        <a
-          href={`/pdf/api/pdf/${jobId}/download`}
-          className="flex items-center gap-1.5 text-xs text-fg-secondary hover:text-fg-primary px-2 py-1.5 rounded-md hover:bg-bg-hover"
-          title="Download"
-        >
-          <Icon d={ICONS.download} size={14} />
-          <span className="hidden sm:block">Download</span>
+        <a href={`/pdf/api/pdf/${jobId}/download`}
+          className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover shrink-0"
+          title="Download PDF">
+          <Icon d={ICONS.download} />
+          <span className="hidden lg:block">Download</span>
         </a>
+
+        <button onClick={printPdf} title="Print PDF"
+          className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover shrink-0">
+          <Icon d={ICONS.print} />
+          <span className="hidden lg:block">Print</span>
+        </button>
+
+        <div className="relative shrink-0">
+          <button onClick={() => { setExportOpen(o => !o); setPagesMenuOpen(false); setSecurityMenuOpen(false) }}
+            disabled={exporting}
+            className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover disabled:opacity-40 disabled:pointer-events-none">
+            <span className="hidden lg:block">Export As</span>
+            <span className="lg:hidden"><Icon d={ICONS.download} /></span>
+            <Icon d={ICONS.chevDown} size={12} />
+          </button>
+          {exportOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setExportOpen(false)} />
+              <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-xl border border-border bg-bg-raised shadow-lg overflow-hidden">
+                {([
+                  ['docx', 'Word (.docx)'], ['xlsx', 'Excel (.xlsx)'], ['pptx', 'PowerPoint (.pptx)'],
+                  ['png', 'PNG pages (ZIP)'], ['pdfa', 'PDF/A (archival)'],
+                ] as [string, string][]).map(([fmt, label]) => (
+                  <button key={fmt} onClick={() => { setExportOpen(false); exportAs(fmt, label) }}
+                    className="w-full text-left px-4 py-2.5 hover:bg-bg-hover text-xs text-fg-secondary hover:text-fg-primary">
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* ── Body ────────────────────────────────────────────────────────── */}
+      {/* ── Search bar ──────────────────────────────────────────────────────── */}
+      {searchOpen && (
+        <div className="h-10 bg-bg-raised border-b border-border px-3 flex items-center gap-2 shrink-0">
+          <input ref={searchInputRef} type="text" value={searchQuery}
+            onChange={e => { setSearchQuery(e.target.value); setReplaceFrom(e.target.value) }}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { e.preventDefault(); doSearch(searchQuery) }
+              if (e.key === 'Escape') { setSearchOpen(false); setSearchResults([]); setSearchQuery('') }
+              if (e.key === 'ArrowUp')   { e.preventDefault(); searchNav(-1) }
+              if (e.key === 'ArrowDown') { e.preventDefault(); searchNav(1) }
+            }}
+            placeholder="Find in document…"
+            className="w-52 border border-border rounded-md px-2.5 py-1 text-xs bg-bg-base text-fg-primary focus:outline-none focus:ring-1 focus:ring-accent" />
+          <button onClick={() => doSearch(searchQuery)}
+            className="text-xs px-2.5 py-1 border border-border rounded-md text-fg-secondary hover:text-fg-primary hover:bg-bg-hover">Find</button>
+          {searchResults.length > 0 && (
+            <>
+              <span className="text-xs text-fg-tertiary tabular-nums">{searchIndex + 1} / {searchResults.length}</span>
+              <button onClick={() => searchNav(-1)} className="w-5 h-5 flex items-center justify-center text-fg-secondary hover:text-fg-primary rounded hover:bg-bg-hover text-xs">↑</button>
+              <button onClick={() => searchNav(1)}  className="w-5 h-5 flex items-center justify-center text-fg-secondary hover:text-fg-primary rounded hover:bg-bg-hover text-xs">↓</button>
+            </>
+          )}
+          {searchQuery.trim() && searchResults.length === 0 && <span className="text-xs text-fg-tertiary">No results</span>}
+          <button onClick={() => { setReplaceOpen(o => !o); setReplaceResult(null) }}
+            className={`text-xs px-2 py-0.5 rounded ml-1 ${replaceOpen ? 'bg-accent text-accent-fg' : 'text-fg-tertiary hover:text-fg-primary'}`}>
+            Replace
+          </button>
+          <button onClick={() => { setSearchOpen(false); setSearchResults([]); setSearchQuery(''); setReplaceOpen(false) }}
+            className="ml-auto text-fg-tertiary hover:text-fg-primary text-base leading-none">×</button>
+        </div>
+      )}
+      {searchOpen && replaceOpen && (
+        <div className="h-10 bg-bg-raised border-b border-border px-3 flex items-center gap-2 shrink-0">
+          <span className="text-xs text-fg-tertiary w-16 shrink-0">Replace:</span>
+          <input type="text" value={replaceTo} onChange={e => { setReplaceTo(e.target.value); setReplaceResult(null) }}
+            onKeyDown={e => { if (e.key === 'Enter') doReplace() }}
+            placeholder="Replace with…"
+            className="w-52 border border-border rounded-md px-2.5 py-1 text-xs bg-bg-base text-fg-primary focus:outline-none focus:ring-1 focus:ring-accent" />
+          <button onClick={doReplace} disabled={replacing || !replaceFrom.trim()}
+            className="text-xs px-2.5 py-1 border border-border rounded-md text-fg-secondary hover:text-fg-primary hover:bg-bg-hover disabled:opacity-40">
+            {replacing ? 'Replacing…' : 'Replace all'}
+          </button>
+          {replaceResult && <span className={`text-xs ${replaceResult.startsWith('No') ? 'text-fg-tertiary' : 'text-accent'}`}>{replaceResult}</span>}
+        </div>
+      )}
+
+      {/* ── Crop confirmation bar ───────────────────────────────────────────── */}
+      {tool === 'crop' && (
+        <div className="h-9 border-b border-border flex items-center px-3 gap-3 shrink-0 text-xs"
+             style={{ background: 'rgba(99,102,241,0.07)' }}>
+          <Icon d={ICONS.crop} size={13} />
+          {cropRect
+            ? <><span className="text-fg-secondary">Crop region selected for page {currentPage + 1}</span>
+                <button onClick={doConfirmCrop} disabled={saving}
+                  className="px-3 py-1 bg-accent text-accent-fg rounded-md hover:bg-accent-h disabled:opacity-40">
+                  Apply crop
+                </button>
+                <button onClick={() => setCropRect(null)} className="text-fg-tertiary hover:text-fg-primary">Clear</button></>
+            : <span className="text-fg-tertiary">Drag a rectangle to set the crop area for page {currentPage + 1}</span>}
+          <button onClick={() => { setTool('select'); setCropRect(null) }} className="ml-auto text-fg-tertiary hover:text-fg-primary">Cancel</button>
+        </div>
+      )}
+
+      {/* ── Fix #7: text markup hint bar ────────────────────────────────────── */}
+      {isTextTool && (
+        <div className="h-7 border-b border-border flex items-center px-3 gap-2 shrink-0 text-xs text-fg-secondary"
+             style={{ background: 'rgba(251,191,36,0.08)' }}>
+          <Icon d={ICONS.warn} size={12} />
+          Drag over words to {tool === 'highlight' ? 'highlight' : tool === 'underline' ? 'underline' : 'apply strikethrough'}
+          &nbsp;·&nbsp;release to apply
+        </div>
+      )}
+
+      {/* ── Body ────────────────────────────────────────────────────────────── */}
       <div className="flex flex-1 min-h-0">
 
-        {/* Sidebar: thumbnail strip */}
-        <div className="w-[160px] bg-bg-surface border-r border-border flex flex-col shrink-0 overflow-y-auto py-2 gap-1">
+        {/* Thumbnail strip */}
+        <div className="w-[148px] bg-bg-surface border-r border-border flex flex-col shrink-0 overflow-y-auto py-2 gap-1">
           {Array.from({ length: pageCount }, (_, i) => {
+            const pi           = pageInfos[i]
             const isDragTarget = dragOver === i && dragFrom !== null && dragFrom !== i
+            const hasRedact    = redactRegions.some(r => r.page === i)
+            const hasComment   = comments.some(c => c.page === i && !c.resolved)
             return (
-              <div
-                key={i}
-                draggable
+              <div key={i} draggable
                 onDragStart={() => setDragFrom(i)}
                 onDragOver={e => { e.preventDefault(); setDragOver(i) }}
                 onDrop={() => { handleReorder(dragFrom!, i); setDragFrom(null); setDragOver(null) }}
                 onDragEnd={() => { setDragFrom(null); setDragOver(null) }}
-                onClick={() => setCurrentPage(i)}
-                className={`mx-2 rounded-md border cursor-pointer overflow-hidden select-none transition-all
+                onClick={() => goToPage(i)}
+                className={`mx-2 rounded-md border cursor-pointer overflow-hidden select-none transition-all relative
                   ${currentPage === i ? 'border-accent ring-1 ring-accent' : 'border-border hover:border-accent/40'}
                   ${isDragTarget ? 'ring-2 ring-accent/60 scale-95' : ''}
-                  ${dragFrom === i ? 'opacity-40' : ''}
-                `}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={pageUrl(i, THUMB_SCALE)}
-                  alt={`Page ${i + 1}`}
-                  className="w-full"
-                  draggable={false}
-                />
-                <div className={`text-center text-[10px] py-0.5
-                  ${currentPage === i ? 'text-accent font-semibold' : 'text-fg-tertiary'}
-                `}>
-                  {i + 1}
-                </div>
+                  ${dragFrom === i ? 'opacity-40' : ''}`}>
+                <LazyThumb src={pageUrl(i, THUMB_SCALE)} alt={`Page ${i + 1}`}
+                  pw={pi?.widthPx ?? 210} ph={pi?.heightPx ?? 297} />
+                {hasRedact  && <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-danger" />}
+                {hasComment && <div className="absolute top-1 left-1  w-2 h-2 rounded-full bg-amber-400" />}
+                <div className={`text-center text-[10px] py-0.5 ${currentPage === i ? 'text-accent font-semibold' : 'text-fg-tertiary'}`}>{i + 1}</div>
               </div>
             )
           })}
         </div>
 
-        {/* Page view */}
-        <div className="flex-1 bg-bg-surface overflow-auto flex items-start justify-center p-6">
-          {pageInfo ? (
+        {/* Bookmarks panel */}
+        {bookmarkPanel && (
+          <div className="w-[210px] bg-bg-surface border-r border-border flex flex-col shrink-0">
+            <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+              <span className="text-xs font-semibold text-fg-primary flex-1">Bookmarks</span>
+              <button onClick={() => setBmAdding(a => !a)} className="text-[10px] text-accent hover:underline">+ Add</button>
+              <button onClick={() => setBookmarkPanel(false)} className="text-fg-tertiary hover:text-fg-primary text-base leading-none">×</button>
+            </div>
+            {bmAdding && (
+              <div className="px-2 py-2 border-b border-border flex gap-1">
+                <input autoFocus value={bmNewTitle} onChange={e => setBmNewTitle(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addBookmark(); if (e.key === 'Escape') setBmAdding(false) }}
+                  placeholder={`Page ${currentPage + 1} title…`}
+                  className="flex-1 border border-border rounded px-2 py-1 text-xs bg-bg-base text-fg-primary focus:outline-none focus:ring-1 focus:ring-accent" />
+                <button onClick={addBookmark} className="text-xs px-2 bg-accent text-accent-fg rounded hover:bg-accent-h">Add</button>
+              </div>
+            )}
+            <div className="flex-1 overflow-y-auto">
+              {bookmarks.length === 0
+                ? <p className="text-xs text-fg-tertiary px-3 py-6 text-center">No bookmarks yet.<br />Click <strong>+ Add</strong> to create one.</p>
+                : bookmarks.map((bm, idx) => (
+                    <div key={idx} className={`flex items-center group hover:bg-bg-hover ${bm.page === currentPage ? 'bg-bg-hover/50' : ''}`}
+                      style={{ paddingLeft: `${8 + (bm.level - 1) * 12}px` }}>
+                      <button className={`flex-1 text-left py-2 text-xs truncate ${bm.page === currentPage ? 'text-accent font-medium' : 'text-fg-secondary'}`}
+                        onClick={() => goToPage(bm.page)}>
+                        {bm.title || `Page ${bm.page + 1}`}
+                        <span className="text-[10px] text-fg-tertiary ml-1">p{bm.page + 1}</span>
+                      </button>
+                      <button onClick={() => deleteBookmark(idx)}
+                        className="opacity-0 group-hover:opacity-100 pr-2 text-fg-tertiary hover:text-danger text-sm leading-none">×</button>
+                    </div>
+                  ))}
+            </div>
+          </div>
+        )}
+
+        {/* Undo history panel */}
+        {undoPanel && (
+          <div className="w-[200px] bg-bg-surface border-r border-border flex flex-col shrink-0">
+            <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+              <span className="text-xs font-semibold text-fg-primary flex-1">Undo History</span>
+              <button onClick={loadUndoSteps} className="text-[10px] text-accent hover:underline" title="Refresh">↺</button>
+              <button onClick={() => setUndoPanel(false)} className="text-fg-tertiary hover:text-fg-primary text-base leading-none">×</button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {undoSteps.length === 0
+                ? <p className="text-xs text-fg-tertiary px-3 py-6 text-center">No changes to undo.</p>
+                : (
+                  <div className="divide-y divide-border">
+                    <div className="px-3 py-2 bg-accent/5 flex items-center gap-2">
+                      <span className="text-[10px] w-2 h-2 rounded-full bg-accent inline-block shrink-0" />
+                      <span className="text-xs text-accent font-medium">Current</span>
+                    </div>
+                    {[...undoSteps].reverse().map((s, i) => {
+                      const d = new Date(s.ts)
+                      const label = isNaN(d.getTime()) ? `Step ${s.index + 1}` : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                      return (
+                        <button key={s.index} onClick={async () => {
+                          await handleUndoRef.current()
+                          loadUndoSteps()
+                        }}
+                          className="w-full text-left px-3 py-2 hover:bg-bg-hover flex items-center gap-2">
+                          <span className="text-[10px] w-2 h-2 rounded-full bg-border inline-block shrink-0" />
+                          <span className="text-xs text-fg-secondary">v{undoSteps.length - i}</span>
+                          <span className="text-[10px] text-fg-tertiary ml-auto tabular-nums">{label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+            </div>
+            {undoSteps.length > 0 && (
+              <div className="p-3 border-t border-border">
+                <button onClick={async () => { await handleUndoRef.current(); loadUndoSteps() }}
+                  className="w-full text-xs py-1.5 bg-bg-base border border-border rounded-lg text-fg-secondary hover:text-fg-primary hover:bg-bg-hover">
+                  Undo one step (Ctrl+Z)
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Page canvas — single or continuous */}
+        <div ref={containerRef} className={`flex-1 bg-bg-surface overflow-auto p-6 ${viewMode === 'single' ? 'flex items-start justify-center' : 'flex flex-col items-center gap-4'}`}>
+          {viewMode === 'continuous' && pageInfos.length > 0 && Array.from({ length: pageCount }, (_, i) => {
+            const pi = pageInfos[i]; if (!pi) return null
+            const dw2 = Math.round(pi.widthPx * zoom / 100)
+            const dh2 = Math.round(pi.heightPx * zoom / 100)
+            const isActive = i === currentPage
+            const pageComments2 = comments.filter(c => c.page === i)
+            return (
+              <div key={i} ref={el => { pageRefs.current[i] = el }} data-page={i}
+                className={`relative inline-block shadow-lg shrink-0 ${isActive ? 'ring-2 ring-accent/50' : ''}`}
+                onClick={() => !isActive && setCurrentPage(i)}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={pageUrl(i)} width={dw2} height={dh2} alt={`Page ${i + 1}`}
+                  style={{ display: 'block', userSelect: 'none', width: dw2, height: dh2 }} draggable={false} />
+                <svg style={{ position: 'absolute', top: 0, left: 0, width: dw2, height: dh2,
+                    cursor: isActive ? toolCursor[tool] : 'default',
+                    pointerEvents: isActive && tool !== 'select' ? 'all' : 'none' }}
+                  onMouseDown={isActive ? onSvgDown : undefined}
+                  onMouseMove={isActive ? onSvgMove : undefined}
+                  onMouseUp={isActive ? onSvgUp : undefined}
+                  onMouseLeave={isActive ? onSvgUp : undefined}>
+                  {searchResults.filter(r => r.page === i).map((r, ri) => {
+                    const [sx0,sy0,sx1,sy1] = r.rect.map(v => v * renderScale)
+                    return <rect key={ri} x={sx0} y={sy0} width={sx1-sx0} height={sy1-sy0}
+                      fill="rgba(251,191,36,0.4)" style={{ pointerEvents: 'none' }} />
+                  })}
+                  {redactRegions.filter(r => r.page === i).map(r => (
+                    <rect key={r.id} x={r.ptX0*renderScale} y={r.ptY0*renderScale}
+                      width={(r.ptX1-r.ptX0)*renderScale} height={(r.ptY1-r.ptY0)*renderScale}
+                      fill="rgba(239,68,68,0.35)" stroke="#ef4444" strokeWidth={1.5} />
+                  ))}
+                  {pageComments2.map((c, idx) => {
+                    if (!c.rect) return null
+                    const [cx0,cy0] = c.rect.map(v => v * renderScale)
+                    return <circle key={c.id} cx={cx0+8} cy={cy0-4} r={7}
+                      fill={c.resolved ? '#16a34a' : '#f59e0b'} stroke="white" strokeWidth={1.5}
+                      style={{ cursor: 'pointer' }} onClick={e => { e.stopPropagation(); setCommentPanel(true) }} />
+                  })}
+                  {isActive && draw.kind === 'arrow' && (
+                    <line x1={draw.x0} y1={draw.y0} x2={draw.x1} y2={draw.y1}
+                      stroke={color} strokeWidth={2} markerEnd="url(#arrowhead2)" />
+                  )}
+                  <defs>
+                    <marker id="arrowhead2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                      <polygon points="0 0, 8 3, 0 6" fill={color} />
+                    </marker>
+                  </defs>
+                </svg>
+                <div className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[10px] text-fg-tertiary bg-bg-raised/70 px-1.5 rounded select-none">{i + 1}</div>
+              </div>
+            )
+          })}
+          {viewMode === 'single' && pageInfo ? (
             <div className="relative inline-block shadow-lg">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={pageUrl(currentPage)}
-                width={pageInfo.widthPx}
-                height={pageInfo.heightPx}
+              <img src={pageUrl(currentPage)} width={dw} height={dh}
                 alt={`Page ${currentPage + 1}`}
-                style={{ display: 'block', userSelect: 'none' }}
-                draggable={false}
-              />
+                style={{ display: 'block', userSelect: 'none', width: dw, height: dh }}
+                draggable={false} />
 
-              {/* SVG annotation overlay */}
-              <svg
-                ref={svgRef}
-                style={{
-                  position: 'absolute', top: 0, left: 0,
-                  width: pageInfo.widthPx, height: pageInfo.heightPx,
-                  cursor: toolCursor[tool],
-                  pointerEvents: tool === 'select' ? 'none' : 'all',
+              <svg ref={svgRef} style={{
+                  position: 'absolute', top: 0, left: 0, width: dw, height: dh,
+                  cursor: draw.kind === 'annot-drag' ? 'grabbing' : toolCursor[tool],
+                  pointerEvents: 'all',
                 }}
-                onMouseDown={onSvgDown}
-                onMouseMove={onSvgMove}
-                onMouseUp={onSvgUp}
-                onMouseLeave={onSvgUp}
-              >
-                {/* In-progress arrow */}
+                onMouseDown={onSvgDown} onMouseMove={onSvgMove}
+                onMouseUp={onSvgUp} onMouseLeave={onSvgUp} onContextMenu={onSvgContextMenu}>
+
+                {/* Search highlights */}
+                {searchResults.map((r, i) => {
+                  if (r.page !== currentPage) return null
+                  const [sx0, sy0, sx1, sy1] = r.rect.map(v => v * renderScale)
+                  return (
+                    <rect key={`s${i}`} x={sx0} y={sy0} width={sx1 - sx0} height={sy1 - sy0}
+                      fill={i === searchIndex ? 'rgba(251,191,36,0.55)' : 'rgba(251,191,36,0.25)'}
+                      stroke={i === searchIndex ? '#f59e0b' : 'none'} strokeWidth={1.5}
+                      style={{ pointerEvents: 'none' }} />
+                  )
+                })}
+
+                {/* Word rects for text markup tools */}
+                {isTextTool && textWords.map((w, i) => {
+                  const [wx0, wy0, wx1, wy1] = w.rect.map(v => v * renderScale)
+                  const inSel = selRange !== null && i >= selRange[0] && i <= selRange[1]
+                  const fill = inSel
+                    ? tool === 'underline' ? 'rgba(59,130,246,0.3)'
+                      : tool === 'strikethrough' ? 'rgba(239,68,68,0.3)'
+                      : 'rgba(253,224,71,0.5)'
+                    : 'transparent'
+                  return (
+                    <rect key={`w${i}`} x={wx0} y={wy0} width={wx1 - wx0} height={wy1 - wy0}
+                      fill={fill} stroke="none" style={{ cursor: 'text' }}
+                      onMouseDown={e => {
+                        e.stopPropagation()
+                        selAnchorRef.current = i; selFocusRef.current = i; setSelRange([i, i])
+                      }}
+                      onMouseEnter={() => {
+                        if (selAnchorRef.current === null) return
+                        selFocusRef.current = i
+                        const a = selAnchorRef.current
+                        setSelRange([Math.min(a, i), Math.max(a, i)])
+                      }}
+                      onMouseUp={e => { e.stopPropagation(); commitTextSelection() }}
+                    />
+                  )
+                })}
+
+                {/* Redact regions */}
+                {redactRegions.filter(r => r.page === currentPage).map(r => (
+                  <rect key={r.id}
+                    x={r.ptX0 * renderScale} y={r.ptY0 * renderScale}
+                    width={(r.ptX1 - r.ptX0) * renderScale} height={(r.ptY1 - r.ptY0) * renderScale}
+                    fill="rgba(239,68,68,0.35)" stroke="#ef4444" strokeWidth={1.5} />
+                ))}
+                {draw.kind === 'redact-rect' && (
+                  <rect x={Math.min(draw.x0, draw.x1)} y={Math.min(draw.y0, draw.y1)}
+                    width={Math.abs(draw.x1 - draw.x0)} height={Math.abs(draw.y1 - draw.y0)}
+                    fill="rgba(239,68,68,0.2)" stroke="#ef4444" strokeWidth={1.5} strokeDasharray="4 2" />
+                )}
+
+                {/* Draw shapes */}
                 {draw.kind === 'arrow' && (
-                  <line
-                    x1={draw.x0} y1={draw.y0} x2={draw.x1} y2={draw.y1}
-                    stroke={color} strokeWidth={2}
-                    markerEnd="url(#arrowhead)"
-                  />
+                  <line x1={draw.x0} y1={draw.y0} x2={draw.x1} y2={draw.y1}
+                    stroke={color} strokeWidth={2} markerEnd="url(#arrowhead)" />
                 )}
-
-                {/* In-progress freehand */}
                 {draw.kind === 'freehand' && draw.pts.length >= 2 && (
-                  <polyline
-                    points={draw.pts.map(p => `${p[0]},${p[1]}`).join(' ')}
-                    fill="none" stroke={color} strokeWidth={2}
-                    strokeLinecap="round" strokeLinejoin="round"
-                  />
+                  <polyline points={draw.pts.map(p => `${p[0]},${p[1]}`).join(' ')}
+                    fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                )}
+                {draw.kind === 'shape-rect' && (() => {
+                  const x = Math.min(draw.x0, draw.x1); const y = Math.min(draw.y0, draw.y1)
+                  const w = Math.abs(draw.x1 - draw.x0); const h = Math.abs(draw.y1 - draw.y0)
+                  if (draw.shape === 'rect')
+                    return <rect x={x} y={y} width={w} height={h} fill="none" stroke={color} strokeWidth={lineWidth} strokeDasharray="4 2" />
+                  if (draw.shape === 'circle')
+                    return <ellipse cx={x + w/2} cy={y + h/2} rx={w/2} ry={h/2} fill="none" stroke={color} strokeWidth={lineWidth} strokeDasharray="4 2" />
+                  return <line x1={draw.x0} y1={draw.y0} x2={draw.x1} y2={draw.y1} stroke={color} strokeWidth={lineWidth} strokeDasharray="4 2" />
+                })()}
+                {draw.kind === 'crop-rect' && (
+                  <rect x={Math.min(draw.x0,draw.x1)} y={Math.min(draw.y0,draw.y1)}
+                    width={Math.abs(draw.x1-draw.x0)} height={Math.abs(draw.y1-draw.y0)}
+                    fill="rgba(99,102,241,0.1)" stroke="#6366f1" strokeWidth={2} strokeDasharray="6 3" />
+                )}
+                {cropRect && (
+                  <rect x={cropRect.x0} y={cropRect.y0} width={cropRect.x1-cropRect.x0} height={cropRect.y1-cropRect.y0}
+                    fill="rgba(99,102,241,0.08)" stroke="#6366f1" strokeWidth={2} />
+                )}
+                {draw.kind === 'image-rect' && (
+                  <rect x={Math.min(draw.x0,draw.x1)} y={Math.min(draw.y0,draw.y1)}
+                    width={Math.abs(draw.x1-draw.x0)} height={Math.abs(draw.y1-draw.y0)}
+                    fill="rgba(16,163,74,0.1)" stroke="#16a34a" strokeWidth={2} strokeDasharray="4 2" />
+                )}
+                {draw.kind === 'link-rect' && (
+                  <rect x={Math.min(draw.x0,draw.x1)} y={Math.min(draw.y0,draw.y1)}
+                    width={Math.abs(draw.x1-draw.x0)} height={Math.abs(draw.y1-draw.y0)}
+                    fill="rgba(59,130,246,0.1)" stroke="#3b82f6" strokeWidth={2} strokeDasharray="4 2" />
                 )}
 
-                {/* Arrow marker def */}
+                {/* Comment markers */}
+                {pageComments.map((c, idx) => {
+                  if (!c.rect) return null
+                  const [cx0, cy0, cx1, cy1] = c.rect.map(v => v * renderScale)
+                  return (
+                    <g key={c.id} style={{ cursor: 'pointer' }}
+                      onClick={e => { e.stopPropagation(); setCommentPanel(true) }}>
+                      <rect x={cx0} y={cy0} width={cx1 - cx0} height={cy1 - cy0}
+                        fill={c.resolved ? 'rgba(22,163,74,0.1)' : 'rgba(251,191,36,0.2)'}
+                        stroke={c.resolved ? '#16a34a' : '#f59e0b'} strokeWidth={1}
+                        strokeDasharray={c.resolved ? '3 2' : undefined} />
+                      <circle cx={cx0 + 10} cy={cy0 - 8} r={9} fill={c.resolved ? '#16a34a' : '#f59e0b'} stroke="white" strokeWidth={1.5} />
+                      <text x={cx0 + 10} y={cy0 - 4} fill="white" fontSize={8} textAnchor="middle" fontWeight="bold">{idx + 1}</text>
+                    </g>
+                  )
+                })}
+
+                {/* Annotation selection handles */}
+                {selectedAnnot && tool === 'select' && (() => {
+                  const [rx0,ry0,rx1,ry1] = selectedAnnot.rect.map(v => v * renderScale)
+                  const cx = (rx0+rx1)/2; const cy = (ry0+ry1)/2
+                  const hpts: [number,number,string][] = [
+                    [rx0,ry0,'nwse-resize'],[cx,ry0,'ns-resize'],[rx1,ry0,'nesw-resize'],
+                    [rx0,cy,'ew-resize'],[rx1,cy,'ew-resize'],
+                    [rx0,ry1,'nesw-resize'],[cx,ry1,'ns-resize'],[rx1,ry1,'nwse-resize'],
+                  ]
+                  return (
+                    <g>
+                      <rect x={rx0} y={ry0} width={rx1-rx0} height={ry1-ry0}
+                        fill="none" stroke="#6366f1" strokeWidth={1.5} strokeDasharray="5 3"
+                        style={{ cursor: 'move', pointerEvents: 'all' }} />
+                      {hpts.map(([hx,hy,cur], i) => (
+                        <rect key={i} x={hx-5} y={hy-5} width={10} height={10}
+                          fill="white" stroke="#6366f1" strokeWidth={1.5} rx={2}
+                          style={{ cursor: cur, pointerEvents: 'all' }} />
+                      ))}
+                      <text x={rx0} y={ry0 - 6} fill="#6366f1" fontSize={9} fontFamily="sans-serif">
+                        Del to remove
+                      </text>
+                    </g>
+                  )
+                })()}
+
                 <defs>
-                  <marker id="arrowhead" markerWidth="8" markerHeight="6"
-                          refX="8" refY="3" orient="auto">
+                  <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
                     <polygon points="0 0, 8 3, 0 6" fill={color} />
                   </marker>
                 </defs>
               </svg>
 
-              {/* Text / sticky input popup */}
+              {/* Text input overlay */}
               {draw.kind === 'text-placing' && (
-                <div
-                  style={{ position: 'absolute', left: draw.x, top: draw.y, zIndex: 10 }}
-                  className="flex"
-                >
+                <div style={{ position: 'absolute', left: draw.x, top: draw.y, zIndex: 10 }} className="flex">
                   {draw.sticky && (
-                    <div className="w-6 h-6 rounded-sm flex items-center justify-center mr-1"
-                         style={{ background: '#fef08a' }}>
+                    <div className="w-6 h-6 rounded-sm flex items-center justify-center mr-1" style={{ background: '#fef08a' }}>
                       <Icon d={ICONS.sticky} size={12} />
                     </div>
                   )}
-                  <input
-                    ref={textInputRef}
-                    value={textVal}
+                  <input ref={textInputRef} value={textVal}
                     onChange={e => setTextVal(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') commitText(); if (e.key === 'Escape') setDraw({ kind: 'idle' }) }}
                     onBlur={commitText}
                     placeholder={draw.sticky ? 'Sticky note…' : 'Type text…'}
                     className="border border-accent bg-white text-black text-sm px-2 py-0.5 rounded shadow-lg outline-none"
-                    style={{ minWidth: 120, color: color !== '#000000' ? color : '#000' }}
-                  />
+                    style={{ minWidth: 120, color: color !== '#000000' ? color : '#000' }} />
+                </div>
+              )}
+
+              {/* Comment placement popup */}
+              {commentPlacing && (
+                <div style={{ position: 'absolute', left: Math.min(commentPlacing.svgX, dw - 270), top: commentPlacing.svgY + 8, zIndex: 20 }}
+                  className="bg-bg-raised border border-border rounded-xl shadow-card p-3 w-64"
+                  onMouseDown={e => e.stopPropagation()}>
+                  <p className="text-xs font-medium text-fg-primary mb-2">Add comment</p>
+                  <textarea ref={commentInputRef} value={commentText}
+                    onChange={e => setCommentText(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) submitComment() }}
+                    rows={3} placeholder="Type your comment… (Ctrl+Enter to submit)"
+                    className="w-full border border-border rounded-md px-2 py-1.5 text-xs bg-bg-base text-fg-primary resize-none focus:outline-none focus:ring-1 focus:ring-accent" />
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={() => { setCommentPlacing(null); setTool('select') }}
+                      className="flex-1 text-xs text-fg-secondary border border-border rounded-md py-1.5 hover:bg-bg-hover">Cancel</button>
+                    <button onClick={submitComment}
+                      className="flex-1 bg-accent text-accent-fg text-xs rounded-md py-1.5 hover:bg-accent-h">Comment</button>
+                  </div>
                 </div>
               )}
             </div>
-          ) : (
+          ) : viewMode === 'single' ? (
             <div className="text-fg-tertiary text-sm">No pages</div>
-          )}
+          ) : null}
         </div>
+
+        {/* Redact panel */}
+        {tool === 'redact' && (
+          <div className="w-[220px] bg-bg-surface border-l border-border flex flex-col shrink-0">
+            <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+              <span className="text-xs font-semibold text-fg-primary flex-1">Redact Regions</span>
+              {redactRegions.length > 0 && (
+                <span className="text-[10px] bg-danger text-white rounded-full px-1.5 py-0.5 font-medium">{redactRegions.length}</span>
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {redactRegions.length === 0 ? (
+                <p className="text-xs text-fg-tertiary px-3 py-6 text-center leading-5">Draw rectangles over sensitive content to mark it for redaction.</p>
+              ) : (
+                <div className="py-1">
+                  {redactRegions.map((r, i) => (
+                    <div key={r.id} onClick={() => setCurrentPage(r.page)}
+                      className={`flex items-center px-3 py-1.5 gap-2 cursor-pointer ${r.page === currentPage ? 'bg-danger/10' : 'hover:bg-bg-hover'}`}>
+                      <span className="text-[10px] w-4 h-4 rounded-full bg-danger text-white flex items-center justify-center font-medium shrink-0">{i + 1}</span>
+                      <span className="text-xs text-fg-secondary flex-1">Page {r.page + 1}</span>
+                      <button onClick={e => { e.stopPropagation(); setRedactRegions(prev => prev.filter(x => x.id !== r.id)) }}
+                        className="text-fg-tertiary hover:text-danger text-sm leading-none">×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="p-3 border-t border-border flex flex-col gap-2">
+              <button onClick={handleRedact} disabled={redactRegions.length === 0 || redacting}
+                className="w-full bg-danger text-white text-xs font-semibold py-2 rounded-lg hover:opacity-90 disabled:opacity-40 disabled:pointer-events-none">
+                {redacting ? 'Applying…' : redactRegions.length === 0 ? 'Mark regions above' : `Apply ${redactRegions.length} Redaction${redactRegions.length !== 1 ? 's' : ''}`}
+              </button>
+              {redactRegions.length > 0 && (
+                <button onClick={() => setRedactRegions([])} className="text-xs text-fg-tertiary hover:text-danger text-center py-0.5">Clear all</button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Annotation list panel */}
+        {annotListPanel && tool !== 'redact' && (
+          <div className="w-[240px] bg-bg-surface border-l border-border flex flex-col shrink-0">
+            <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+              <span className="text-xs font-semibold text-fg-primary flex-1">Annotations</span>
+              <button onClick={loadAllAnnots} className="text-[10px] text-accent hover:underline" title="Refresh">↺</button>
+              <button onClick={() => setAnnotListPanel(false)} className="text-fg-tertiary hover:text-fg-primary text-base leading-none">×</button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {annotListLoading
+                ? <p className="text-xs text-fg-tertiary px-3 py-6 text-center">Loading…</p>
+                : allAnnots.length === 0
+                  ? <p className="text-xs text-fg-tertiary px-3 py-6 text-center">No annotations found.</p>
+                  : <div className="divide-y divide-border">
+                      {allAnnots.map((a, idx) => (
+                        <button key={idx} onClick={() => goToPage(a.page)}
+                          className={`w-full text-left px-3 py-2 hover:bg-bg-hover ${a.page === currentPage ? 'bg-bg-hover/50' : ''}`}>
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-[10px] bg-bg-base border border-border rounded px-1 text-fg-tertiary">{a.type}</span>
+                            <span className="text-[10px] text-fg-tertiary">p{a.page + 1}</span>
+                          </div>
+                          {a.content && <p className="text-xs text-fg-secondary truncate">{a.content}</p>}
+                        </button>
+                      ))}
+                    </div>}
+            </div>
+          </div>
+        )}
+
+        {/* Comment panel (fix #4: decoupled from tool; + Add sets tool) */}
+        {commentPanel && tool !== 'redact' && (
+          <div className="w-[260px] bg-bg-surface border-l border-border flex flex-col shrink-0">
+            <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+              <span className="text-xs font-semibold text-fg-primary flex-1">
+                Comments {comments.length > 0 && `(${comments.length})`}
+              </span>
+              <button onClick={() => setTool('comment')}
+                className={`text-[10px] px-2 py-0.5 rounded ${tool === 'comment' ? 'bg-accent text-accent-fg' : 'text-accent hover:underline'}`}>
+                + Add
+              </button>
+              <button onClick={() => setCommentPanel(false)} className="text-fg-tertiary hover:text-fg-primary text-base leading-none">×</button>
+            </div>
+            {/* fix #4: contextual hint when comment tool is active */}
+            {tool === 'comment' && (
+              <div className="px-3 py-2 text-[11px] text-fg-tertiary border-b border-border" style={{ background: 'rgba(251,191,36,0.06)' }}>
+                Click anywhere on the page to place a comment.
+              </div>
+            )}
+            <div className="flex-1 overflow-y-auto">
+              {comments.length === 0 ? (
+                <p className="text-xs text-fg-tertiary px-3 py-6 text-center leading-5">
+                  Click <strong>+ Add</strong> then click anywhere on the page.
+                </p>
+              ) : (
+                <div className="divide-y divide-border">
+                  {comments.map((c, idx) => (
+                    <div key={c.id} onClick={() => setCurrentPage(c.page)}
+                      className={`p-3 cursor-pointer ${c.page === currentPage ? 'bg-bg-hover' : 'hover:bg-bg-hover/50'} ${c.resolved ? 'opacity-60' : ''}`}>
+                      <div className="flex items-start gap-2 mb-1">
+                        <span className="w-5 h-5 rounded-full bg-amber-400 text-white text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">{idx + 1}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span className="text-[10px] text-fg-tertiary">p{c.page + 1}</span>
+                            {c.resolved && <span className="text-[10px] text-green-600 font-medium">Resolved</span>}
+                          </div>
+                          <p className="text-xs text-fg-primary leading-relaxed">{c.text}</p>
+                        </div>
+                      </div>
+                      {c.replies.map(r => (
+                        <div key={r.id} className="ml-7 mt-1.5 text-xs text-fg-secondary leading-relaxed border-l-2 border-border pl-2">{r.text}</div>
+                      ))}
+                      <div className="ml-7 mt-2 flex gap-1.5" onClick={e => e.stopPropagation()}>
+                        <input
+                          value={replyTexts[c.id] ?? ''}
+                          onChange={e => setReplyTexts(prev => ({ ...prev, [c.id]: e.target.value }))}
+                          onKeyDown={e => { if (e.key === 'Enter') addReply(c.id) }}
+                          placeholder="Reply…"
+                          className="flex-1 border border-border rounded-md px-2 py-1 text-[11px] bg-bg-base text-fg-primary focus:outline-none focus:ring-1 focus:ring-accent" />
+                        <button onClick={() => addReply(c.id)}
+                          className="text-[10px] px-2 bg-accent text-accent-fg rounded-md hover:bg-accent-h">↵</button>
+                      </div>
+                      <div className="ml-7 mt-1.5 flex gap-3" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => resolveComment(c.id, !c.resolved)}
+                          className={`text-[10px] ${c.resolved ? 'text-fg-tertiary hover:text-fg-secondary' : 'text-green-600 hover:text-green-700'}`}>
+                          {c.resolved ? 'Re-open' : 'Resolve'}
+                        </button>
+                        <button onClick={() => deleteComment(c.id)} className="text-[10px] text-fg-tertiary hover:text-danger">Delete</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* ── Split dialog ─────────────────────────────────────────────────── */}
+      {/* ── Fix #2 + #6: status bar — page navigation + fit controls ────────── */}
+      <div className="h-8 bg-bg-raised border-t border-border flex items-center px-4 gap-3 shrink-0 text-xs text-fg-tertiary select-none">
+        <div className="flex items-center gap-1.5">
+          <button onClick={() => goToPage(Math.max(0, currentPage - 1))} disabled={currentPage === 0}
+            className="w-5 h-5 flex items-center justify-center rounded hover:bg-bg-hover disabled:opacity-30 text-fg-secondary">
+            <Icon d={ICONS.chevLeft} size={12} />
+          </button>
+          <span>Page</span>
+          <input
+            type="number" min={1} max={pageCount}
+            value={currentPage + 1}
+            onChange={e => {
+              const n = parseInt(e.target.value) - 1
+              if (!isNaN(n) && n >= 0 && n < pageCount) goToPage(n)
+            }}
+            className="w-10 border border-border rounded px-1 py-0 text-xs text-center bg-bg-base text-fg-primary focus:outline-none focus:ring-1 focus:ring-accent" />
+          <span>of {pageCount}</span>
+          <button onClick={() => goToPage(Math.min(pageCount - 1, currentPage + 1))} disabled={currentPage >= pageCount - 1}
+            className="w-5 h-5 flex items-center justify-center rounded hover:bg-bg-hover disabled:opacity-30 text-fg-secondary">
+            <Icon d={ICONS.chevRight} size={12} />
+          </button>
+        </div>
+        <div className="w-px h-4 bg-border" />
+        {/* fix #3: fit controls */}
+        <button onClick={fitWidth} className="hover:text-fg-primary hover:bg-bg-hover px-1.5 py-0.5 rounded transition-colors">Fit Width</button>
+        <button onClick={fitPage}  className="hover:text-fg-primary hover:bg-bg-hover px-1.5 py-0.5 rounded transition-colors">Fit Page</button>
+        <div className="flex-1" />
+        <span className="tabular-nums">{zoom}%</span>
+      </div>
+
+      {/* ── Link URI modal ────────────────────────────────────────────────────── */}
+      {linkModalRect && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-bg-raised rounded-xl border border-border shadow-card p-6 w-96">
+            <h2 className="text-sm font-semibold text-fg-primary mb-1">Insert Hyperlink</h2>
+            <p className="text-xs text-fg-tertiary mb-4">The selected area will become a clickable link in the PDF.</p>
+            <label className="block mb-4">
+              <span className="text-xs text-fg-tertiary">URL</span>
+              <input autoFocus value={linkUri} onChange={e => setLinkUri(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') addLink(); if (e.key === 'Escape') setLinkModalRect(null) }}
+                placeholder="https://example.com"
+                className="mt-0.5 w-full border border-border rounded-md px-3 py-2 text-sm bg-bg-base text-fg-primary focus:outline-none focus:ring-1 focus:ring-accent" />
+            </label>
+            <div className="flex gap-2">
+              <button onClick={() => setLinkModalRect(null)}
+                className="flex-1 text-sm text-fg-secondary border border-border rounded-lg py-2 hover:bg-bg-hover">Cancel</button>
+              <button onClick={addLink}
+                disabled={!linkUri.trim() || (!linkUri.startsWith('http://') && !linkUri.startsWith('https://') && !linkUri.startsWith('mailto:'))}
+                className="flex-1 bg-accent text-accent-fg text-sm rounded-lg py-2 hover:bg-accent-h disabled:opacity-40">
+                Add link
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Right-click context menu ─────────────────────────────────────────── */}
+      {contextMenu && (
+        <div
+          style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y, zIndex: 200 }}
+          className="bg-bg-raised border border-border rounded-xl shadow-card py-1 w-44"
+          onMouseDown={e => e.stopPropagation()}
+          onClick={e => e.stopPropagation()}>
+          <button
+            onClick={() => { deleteAnnot(contextMenu.annotIdx); setContextMenu(null) }}
+            className="w-full text-left flex items-center gap-2.5 px-4 py-2.5 hover:bg-bg-hover text-xs text-danger">
+            <Icon d={ICONS.trash} size={14} />
+            Delete annotation
+          </button>
+        </div>
+      )}
+
+      {/* ── Split dialog ─────────────────────────────────────────────────────── */}
       {splitDialog && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-bg-raised rounded-xl border border-border shadow-card p-6 w-80">
             <h2 className="text-sm font-semibold text-fg-primary mb-4">Split PDF</h2>
-            <p className="text-xs text-fg-secondary mb-4">
-              Extract a page range into a new file. Original is unchanged.
-              Document has {pageCount} page{pageCount !== 1 ? 's' : ''}.
-            </p>
+            <p className="text-xs text-fg-secondary mb-4">Extract a page range into a new file. Original is unchanged. Document has {pageCount} page{pageCount !== 1 ? 's' : ''}.</p>
             <div className="flex gap-3 mb-5">
               <label className="flex-1">
                 <span className="text-xs text-fg-tertiary block mb-1">From page</span>
-                <input
-                  type="number" min={1} max={pageCount}
-                  value={splitStart}
+                <input type="number" min={1} max={pageCount} value={splitStart}
                   onChange={e => setSplitStart(e.target.value)}
-                  className="w-full border border-border rounded-md px-2 py-1.5 text-sm bg-bg-base text-fg-primary"
-                />
+                  className="w-full border border-border rounded-md px-2 py-1.5 text-sm bg-bg-base text-fg-primary" />
               </label>
               <label className="flex-1">
                 <span className="text-xs text-fg-tertiary block mb-1">To page</span>
-                <input
-                  type="number" min={1} max={pageCount}
-                  value={splitEnd}
+                <input type="number" min={1} max={pageCount} value={splitEnd}
                   onChange={e => setSplitEnd(e.target.value)}
-                  className="w-full border border-border rounded-md px-2 py-1.5 text-sm bg-bg-base text-fg-primary"
-                />
+                  className="w-full border border-border rounded-md px-2 py-1.5 text-sm bg-bg-base text-fg-primary" />
               </label>
             </div>
             <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setSplitDialog(false)}
-                className="text-sm text-fg-secondary hover:text-fg-primary px-3 py-1.5"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSplit}
-                disabled={saving}
-                className="bg-accent text-accent-fg text-sm px-4 py-1.5 rounded-lg hover:bg-accent-h"
-              >
+              <button onClick={() => setSplitDialog(false)} className="text-sm text-fg-secondary hover:text-fg-primary px-3 py-1.5">Cancel</button>
+              <button onClick={handleSplit} disabled={saving}
+                className="bg-accent text-accent-fg text-sm px-4 py-1.5 rounded-lg hover:bg-accent-h">
                 {saving ? 'Splitting…' : 'Split'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Watermark modal (fix #5: destructive warning) ─────────────────────── */}
+      {watermarkOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-bg-raised rounded-xl border border-border shadow-card p-6 w-96">
+            <h2 className="text-sm font-semibold text-fg-primary mb-1">Add Watermark</h2>
+            {/* fix #5: warn that watermark permanently modifies the stored file */}
+            <p className="text-xs text-fg-tertiary mb-4">
+              This permanently modifies the document.&nbsp;
+              <span className="font-medium text-fg-secondary">Use Undo (Ctrl+Z) to reverse.</span>
+            </p>
+            <div className="space-y-3">
+              <label className="block">
+                <span className="text-xs text-fg-tertiary">Text</span>
+                <input value={wmText} onChange={e => setWmText(e.target.value)}
+                  className="mt-0.5 w-full border border-border rounded-md px-3 py-2 text-sm bg-bg-base text-fg-primary" />
+              </label>
+              <div className="flex gap-3">
+                <label className="flex-1">
+                  <span className="text-xs text-fg-tertiary">Opacity — {wmOpacity}%</span>
+                  <input type="range" min={5} max={80} value={wmOpacity}
+                    onChange={e => setWmOpacity(Number(e.target.value))}
+                    className="mt-1 w-full accent-accent" />
+                </label>
+                <label className="flex-1">
+                  <span className="text-xs text-fg-tertiary">Angle — {wmAngle}°</span>
+                  <input type="range" min={0} max={90} value={wmAngle}
+                    onChange={e => setWmAngle(Number(e.target.value))}
+                    className="mt-1 w-full accent-accent" />
+                </label>
+              </div>
+              <label className="block">
+                <span className="text-xs text-fg-tertiary">Color</span>
+                <div className="flex items-center gap-3 mt-1">
+                  <input type="color" value={wmColor} onChange={e => setWmColor(e.target.value)}
+                    className="h-8 w-14 rounded border border-border cursor-pointer bg-transparent" />
+                  <div className="flex gap-2">
+                    {['#aaaaaa', '#ef4444', '#3b82f6', '#16a34a'].map(c => (
+                      <button key={c} onClick={() => setWmColor(c)}
+                        className={`w-6 h-6 rounded-full border-2 ${wmColor === c ? 'border-fg-primary' : 'border-transparent'}`}
+                        style={{ background: c }} />
+                    ))}
+                  </div>
+                </div>
+              </label>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setWatermarkOpen(false)}
+                className="flex-1 text-sm text-fg-secondary border border-border rounded-lg py-2 hover:bg-bg-hover">Cancel</button>
+              <button onClick={doWatermark} disabled={watermarking || !wmText.trim()}
+                className="flex-1 bg-accent text-accent-fg text-sm rounded-lg py-2 hover:bg-accent-h disabled:opacity-40">
+                {watermarking ? 'Applying…' : 'Apply to all pages'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── eSignature modal ────────────────────────────────────────────────── */}
+      {sigOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-bg-raised rounded-xl border border-border shadow-card p-6 w-[480px]">
+            <h2 className="text-sm font-semibold text-fg-primary mb-4">Add Signature</h2>
+
+            {/* Tabs */}
+            <div className="flex gap-1 mb-4 border-b border-border">
+              {(['draw','type','upload'] as const).map(t => (
+                <button key={t} onClick={() => setSigTab(t)}
+                  className={`px-3 py-1.5 text-xs capitalize rounded-t-md -mb-px border border-b-0 transition-colors
+                    ${sigTab === t ? 'border-border bg-bg-raised text-fg-primary font-medium' : 'border-transparent text-fg-tertiary hover:text-fg-secondary'}`}>
+                  {t === 'draw' ? 'Draw' : t === 'type' ? 'Type' : 'Upload image'}
+                </button>
+              ))}
+            </div>
+
+            {sigTab === 'draw' && (
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs text-fg-tertiary">Ink color</span>
+                  <input type="color" value={sigColor} onChange={e => setSigColor(e.target.value)}
+                    className="h-7 w-10 rounded border border-border cursor-pointer bg-transparent" />
+                  <button onClick={sigClear} className="ml-auto text-xs text-fg-tertiary hover:text-fg-primary">Clear</button>
+                </div>
+                <canvas ref={sigCanvasRef} width={420} height={160}
+                  className="w-full border border-border rounded-lg bg-white touch-none"
+                  style={{ cursor: 'crosshair' }}
+                  onMouseDown={sigDown} onMouseMove={sigMove} onMouseUp={sigUp} onMouseLeave={sigUp} />
+                <p className="text-[11px] text-fg-tertiary mt-1.5">Draw your signature above</p>
+              </div>
+            )}
+
+            {sigTab === 'type' && (
+              <div>
+                <input value={sigText} onChange={e => setSigText(e.target.value)}
+                  placeholder="Your name"
+                  className="w-full border border-border rounded-md px-3 py-2 text-sm bg-bg-base text-fg-primary mb-3" />
+                <div className="flex gap-3 mb-3">
+                  <label className="flex-1">
+                    <span className="text-xs text-fg-tertiary block mb-1">Font</span>
+                    <select value={sigFont} onChange={e => setSigFont(e.target.value)}
+                      className="w-full border border-border rounded-md px-2 py-1.5 text-sm bg-bg-base text-fg-primary">
+                      {['Dancing Script','Pacifico','Great Vibes','Satisfy','Caveat'].map(f => (
+                        <option key={f} value={f}>{f}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="w-24">
+                    <span className="text-xs text-fg-tertiary block mb-1">Color</span>
+                    <input type="color" value={sigColor} onChange={e => setSigColor(e.target.value)}
+                      className="h-9 w-full rounded border border-border cursor-pointer bg-transparent" />
+                  </label>
+                </div>
+                {sigText && (
+                  <div className="border border-border rounded-lg bg-white px-4 py-3 text-center"
+                    style={{ fontFamily: `"${sigFont}", cursive`, fontSize: 44, color: sigColor, fontStyle: 'italic', lineHeight: 1.3 }}>
+                    {sigText}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {sigTab === 'upload' && (
+              <div className="border-2 border-dashed border-border rounded-xl p-8 text-center">
+                <p className="text-sm text-fg-secondary mb-3">Upload a signature image (PNG with transparent background works best)</p>
+                <button onClick={() => imageInputRef.current?.click()}
+                  className="px-4 py-2 bg-accent text-accent-fg rounded-lg text-sm hover:bg-accent-h">
+                  Choose image
+                </button>
+              </div>
+            )}
+
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setSigOpen(false)} className="flex-1 text-sm text-fg-secondary border border-border rounded-lg py-2 hover:bg-bg-hover">Cancel</button>
+              {sigTab !== 'upload' && (
+                <button onClick={useSignature} disabled={sigTab === 'type' && !sigText.trim()}
+                  className="flex-1 bg-accent text-accent-fg text-sm rounded-lg py-2 hover:bg-accent-h disabled:opacity-40">
+                  Place on page →
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Document properties modal ───────────────────────────────────────── */}
+      {propsOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-bg-raised rounded-xl border border-border shadow-card p-6 w-96">
+            <h2 className="text-sm font-semibold text-fg-primary mb-4">Document Properties</h2>
+            <div className="space-y-3">
+              {(['title', 'author', 'subject', 'keywords'] as const).map(k => (
+                <label key={k} className="block">
+                  <span className="text-xs text-fg-tertiary capitalize">{k}</span>
+                  <input value={propsData[k]} onChange={e => setPropsData(p => ({ ...p, [k]: e.target.value }))}
+                    className="mt-0.5 w-full border border-border rounded-md px-3 py-2 text-sm bg-bg-base text-fg-primary focus:outline-none focus:ring-1 focus:ring-accent" />
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setPropsOpen(false)} className="flex-1 text-sm text-fg-secondary border border-border rounded-lg py-2 hover:bg-bg-hover">Cancel</button>
+              <button onClick={doSaveProps} disabled={propsSaving}
+                className="flex-1 bg-accent text-accent-fg text-sm rounded-lg py-2 hover:bg-accent-h disabled:opacity-40">
+                {propsSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Header / Footer modal ────────────────────────────────────────────── */}
+      {hfOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-bg-raised rounded-xl border border-border shadow-card p-6 w-96">
+            <h2 className="text-sm font-semibold text-fg-primary mb-1">Header &amp; Footer</h2>
+            <p className="text-xs text-fg-tertiary mb-4">Use <code className="bg-bg-base px-1 rounded">{'{page}'}</code> and <code className="bg-bg-base px-1 rounded">{'{total}'}</code> for page numbers. Applied to all pages.</p>
+            <div className="space-y-3">
+              <label className="block">
+                <span className="text-xs text-fg-tertiary">Header text</span>
+                <input value={hfHeader} onChange={e => setHfHeader(e.target.value)}
+                  placeholder="e.g. CONFIDENTIAL"
+                  className="mt-0.5 w-full border border-border rounded-md px-3 py-2 text-sm bg-bg-base text-fg-primary focus:outline-none focus:ring-1 focus:ring-accent" />
+              </label>
+              <label className="block">
+                <span className="text-xs text-fg-tertiary">Footer text</span>
+                <input value={hfFooter} onChange={e => setHfFooter(e.target.value)}
+                  placeholder="e.g. Page {page} of {total}"
+                  className="mt-0.5 w-full border border-border rounded-md px-3 py-2 text-sm bg-bg-base text-fg-primary focus:outline-none focus:ring-1 focus:ring-accent" />
+              </label>
+              <div className="flex gap-3">
+                <label className="flex-1">
+                  <span className="text-xs text-fg-tertiary">Font size</span>
+                  <input type="number" min={6} max={24} value={hfFontSize} onChange={e => setHfFontSize(Number(e.target.value))}
+                    className="mt-0.5 w-full border border-border rounded-md px-3 py-2 text-sm bg-bg-base text-fg-primary" />
+                </label>
+                <label className="flex-1">
+                  <span className="text-xs text-fg-tertiary">Color</span>
+                  <input type="color" value={hfColor} onChange={e => setHfColor(e.target.value)}
+                    className="mt-0.5 h-9 w-full rounded border border-border cursor-pointer bg-transparent" />
+                </label>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setHfOpen(false)} className="flex-1 text-sm text-fg-secondary border border-border rounded-lg py-2 hover:bg-bg-hover">Cancel</button>
+              <button onClick={doHeaderFooter} disabled={hfApplying || (!hfHeader.trim() && !hfFooter.trim())}
+                className="flex-1 bg-accent text-accent-fg text-sm rounded-lg py-2 hover:bg-accent-h disabled:opacity-40">
+                {hfApplying ? 'Applying…' : 'Apply to all pages'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Password protect modal ───────────────────────────────────────────── */}
+      {protectOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-bg-raised rounded-xl border border-border shadow-card p-6 w-80">
+            <h2 className="text-sm font-semibold text-fg-primary mb-1">Password Protect PDF</h2>
+            <p className="text-xs text-fg-tertiary mb-4">Downloads an encrypted copy. Your working file is not modified.</p>
+            <div className="space-y-3">
+              <label className="block">
+                <span className="text-xs text-fg-tertiary">Password</span>
+                <input type="password" value={protectPw} onChange={e => setProtectPw(e.target.value)}
+                  placeholder="Enter password"
+                  className="mt-0.5 w-full border border-border rounded-md px-3 py-2 text-sm bg-bg-base text-fg-primary" />
+              </label>
+              <label className="block">
+                <span className="text-xs text-fg-tertiary">Confirm password</span>
+                <input type="password" value={protectPwConfirm} onChange={e => setProtectPwConfirm(e.target.value)}
+                  placeholder="Confirm password"
+                  onKeyDown={e => { if (e.key === 'Enter') doProtect() }}
+                  className="mt-0.5 w-full border border-border rounded-md px-3 py-2 text-sm bg-bg-base text-fg-primary" />
+              </label>
+              {protectPw && protectPwConfirm && protectPw !== protectPwConfirm && (
+                <p className="text-xs text-danger">Passwords do not match</p>
+              )}
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => { setProtectOpen(false); setProtectPw(''); setProtectPwConfirm('') }}
+                className="flex-1 text-sm text-fg-secondary border border-border rounded-lg py-2 hover:bg-bg-hover">Cancel</button>
+              <button onClick={doProtect}
+                disabled={protecting || !protectPw || protectPw !== protectPwConfirm}
+                className="flex-1 bg-accent text-accent-fg text-sm rounded-lg py-2 hover:bg-accent-h disabled:opacity-40">
+                {protecting ? 'Generating…' : 'Download Protected'}
               </button>
             </div>
           </div>

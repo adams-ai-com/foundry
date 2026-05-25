@@ -19,6 +19,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="en" data-theme={theme} className={inter.variable}>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link href="https://fonts.googleapis.com/css2?family=Dancing+Script&family=Pacifico&family=Great+Vibes&family=Satisfy&family=Caveat&display=swap" rel="stylesheet" />
+      </head>
       <body className="bg-bg-base text-fg-primary antialiased flex flex-col min-h-screen">
         <TopNav session={session} activeApp="pdf" orgSlug={session.orgSlug ?? undefined} theme={theme} />
         <main className="flex-1">{children}</main>
