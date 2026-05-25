@@ -286,6 +286,10 @@ export default async function RootPage() {
               <GitHubIcon /> Self-host
             </a>
           </div>
+          <p className="mt-6 text-xs text-fg-tertiary">
+            Managed hosting available from{' '}
+            <a href="https://adams-ai.com" className="text-fg-secondary hover:text-fg-primary underline underline-offset-2 transition-colors">Adams AI</a>.
+          </p>
         </div>
       </section>
 
