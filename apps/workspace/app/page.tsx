@@ -111,6 +111,7 @@ export default async function RootPage() {
         <nav className="flex items-center gap-5">
           <a href="#apps" className="hidden sm:block text-sm text-fg-secondary hover:text-fg-primary transition-colors">Apps</a>
           <a href="#self-host" className="hidden sm:block text-sm text-fg-secondary hover:text-fg-primary transition-colors">Self-host</a>
+          <Link href="/pricing" className="hidden sm:block text-sm text-fg-secondary hover:text-fg-primary transition-colors">Pricing</Link>
           <a href="https://github.com/adams-ai-com/foundry" className="hidden sm:flex items-center gap-1.5 text-sm text-fg-secondary hover:text-fg-primary transition-colors">
             <GitHubIcon /> GitHub
           </a>
@@ -301,6 +302,7 @@ export default async function RootPage() {
             <span className="text-sm font-medium text-fg-primary">Foundry</span>
           </div>
           <div className="flex items-center gap-6 text-xs text-fg-tertiary">
+            <Link href="/pricing" className="hover:text-fg-secondary transition-colors">Pricing</Link>
             <span>AGPL-3.0</span>
             <a href="https://github.com/adams-ai-com/foundry" className="hover:text-fg-secondary transition-colors">GitHub</a>
             <span>Built by Adams AI</span>

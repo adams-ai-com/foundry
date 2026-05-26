@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -101,6 +101,11 @@ export function FormEditor({ jobId }: { jobId: string }) {
   // Fill mode
   const [fillValues, setFillValues] = useState<Record<string, string>>({})
 
+  // Signature pad
+  const [sigField, setSigField]     = useState<FieldDef | null>(null)
+  const [sigDrawing, setSigDrawing] = useState(false)
+  const sigCanvasRef = useRef<HTMLCanvasElement>(null)
+
   const svgRef   = useRef<SVGSVGElement>(null)
   const pageInfo = pageInfos[currentPage]
 
@@ -129,6 +134,17 @@ export function FormEditor({ jobId }: { jobId: string }) {
 
   useEffect(() => { reload() }, [reload])
 
+  // Wire canvas stroke style whenever signature pad opens
+  useLayoutEffect(() => {
+    if (!sigField) return
+    const ctx = sigCanvasRef.current?.getContext('2d')
+    if (!ctx) return
+    ctx.lineWidth = 2.5
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.strokeStyle = '#111'
+  }, [sigField])
+
   function bump() { setVersion(v => v + 1); reload() }
 
   function pageUrl(n: number, scale = RENDER_SCALE) {
@@ -138,6 +154,82 @@ export function FormEditor({ jobId }: { jobId: string }) {
   function toast(msg: string) {
     setStatus(msg)
     setTimeout(() => setStatus(''), 2500)
+  }
+
+  // ── Signature pad ────────────────────────────────────────────────────────
+
+  function canvasXY(canvas: HTMLCanvasElement, clientX: number, clientY: number): [number, number] {
+    const r = canvas.getBoundingClientRect()
+    return [(clientX - r.left) * canvas.width / r.width, (clientY - r.top) * canvas.height / r.height]
+  }
+
+  function onSigDown(e: React.MouseEvent<HTMLCanvasElement>) {
+    const ctx = sigCanvasRef.current?.getContext('2d')
+    if (!ctx || !sigCanvasRef.current) return
+    setSigDrawing(true)
+    const [x, y] = canvasXY(sigCanvasRef.current, e.clientX, e.clientY)
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+  }
+
+  function onSigMove(e: React.MouseEvent<HTMLCanvasElement>) {
+    if (!sigDrawing || !sigCanvasRef.current) return
+    const ctx = sigCanvasRef.current.getContext('2d')
+    if (!ctx) return
+    const [x, y] = canvasXY(sigCanvasRef.current, e.clientX, e.clientY)
+    ctx.lineTo(x, y)
+    ctx.stroke()
+  }
+
+  function onSigUp() { setSigDrawing(false) }
+
+  function onSigTouchStart(e: React.TouchEvent<HTMLCanvasElement>) {
+    e.preventDefault()
+    const ctx = sigCanvasRef.current?.getContext('2d')
+    if (!ctx || !sigCanvasRef.current) return
+    setSigDrawing(true)
+    const t = e.touches[0]
+    const [x, y] = canvasXY(sigCanvasRef.current, t.clientX, t.clientY)
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+  }
+
+  function onSigTouchMove(e: React.TouchEvent<HTMLCanvasElement>) {
+    e.preventDefault()
+    if (!sigDrawing || !sigCanvasRef.current) return
+    const ctx = sigCanvasRef.current.getContext('2d')
+    if (!ctx) return
+    const t = e.touches[0]
+    const [x, y] = canvasXY(sigCanvasRef.current, t.clientX, t.clientY)
+    ctx.lineTo(x, y)
+    ctx.stroke()
+  }
+
+  function onSigTouchEnd(e: React.TouchEvent<HTMLCanvasElement>) {
+    e.preventDefault()
+    setSigDrawing(false)
+  }
+
+  function clearSig() {
+    const canvas = sigCanvasRef.current
+    if (!canvas) return
+    canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height)
+  }
+
+  async function submitSig() {
+    if (!sigField || !sigCanvasRef.current) return
+    const imageData = sigCanvasRef.current.toDataURL('image/png')
+    setSaving(true)
+    await apiPost(`/pdf/api/pdf/${jobId}/forms/sign`, {
+      name:       sigField.name,
+      page:       sigField.page,
+      rect:       sigField.rect,
+      image_data: imageData,
+    })
+    setSigField(null)
+    bump()
+    setSaving(false)
+    toast('Signature applied')
   }
 
   // ── SVG drawing ───────────────────────────────────────────────────────────
@@ -269,6 +361,13 @@ export function FormEditor({ jobId }: { jobId: string }) {
           className="text-xs text-fg-secondary hover:text-fg-primary border border-border rounded-md px-2.5 py-1.5 hover:bg-bg-hover shrink-0"
         >
           Download
+        </a>
+        <a
+          href={`/pdf/api/pdf/${jobId}/forms/flat`}
+          className="text-xs text-fg-secondary hover:text-fg-primary border border-border rounded-md px-2.5 py-1.5 hover:bg-bg-hover shrink-0"
+          title="Download with form fields flattened to static content (fields no longer editable)"
+        >
+          Flatten &amp; Download
         </a>
       </div>
 
@@ -570,8 +669,17 @@ export function FormEditor({ jobId }: { jobId: string }) {
                               className="mt-1 w-full border border-border rounded-md px-3 py-2 text-sm bg-bg-base text-fg-primary"
                             />
                           ) : f.type === 'signature' ? (
-                            <div className="mt-1 border-2 border-dashed border-border rounded-md px-3 py-4 text-xs text-fg-tertiary text-center">
-                              Signature field — sign in your PDF reader after downloading
+                            <div className="mt-1">
+                              <button
+                                onClick={() => { setSigField(f); clearSig() }}
+                                className="w-full rounded-lg border-2 border-dashed border-border
+                                  hover:border-accent/50 bg-bg-surface hover:bg-bg-hover
+                                  transition-colors px-4 py-5 flex items-center justify-center
+                                  gap-2 text-sm text-fg-secondary"
+                              >
+                                <span className="text-lg leading-none">✍</span>
+                                Click to sign…
+                              </button>
                             </div>
                           ) : (
                             <input
@@ -617,6 +725,55 @@ export function FormEditor({ jobId }: { jobId: string }) {
           />
         )}
       </div>
+
+      {/* ── Signature pad modal ────────────────────────────────────────────── */}
+      {sigField && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-bg-raised border border-border rounded-2xl shadow-xl p-6 w-[480px] max-w-full">
+            <h3 className="text-sm font-semibold text-fg-primary mb-0.5">
+              Sign: {sigField.label || sigField.name}
+            </h3>
+            <p className="text-xs text-fg-tertiary mb-4">Draw your signature in the box below.</p>
+
+            <canvas
+              ref={sigCanvasRef}
+              width={432}
+              height={160}
+              className="w-full rounded-lg border-2 border-border bg-white cursor-crosshair select-none"
+              style={{ touchAction: 'none' }}
+              onMouseDown={onSigDown}
+              onMouseMove={onSigMove}
+              onMouseUp={onSigUp}
+              onMouseLeave={onSigUp}
+              onTouchStart={onSigTouchStart}
+              onTouchMove={onSigTouchMove}
+              onTouchEnd={onSigTouchEnd}
+            />
+
+            <div className="mt-4 flex gap-2 justify-end">
+              <button
+                onClick={() => { clearSig(); setSigField(null) }}
+                className="text-xs text-fg-secondary hover:text-fg-primary border border-border rounded-md px-3 py-1.5"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={clearSig}
+                className="text-xs text-fg-secondary hover:text-fg-primary border border-border rounded-md px-3 py-1.5"
+              >
+                Clear
+              </button>
+              <button
+                onClick={submitSig}
+                disabled={saving}
+                className="bg-accent text-accent-fg text-xs rounded-md px-4 py-1.5 hover:bg-accent-h disabled:opacity-50"
+              >
+                {saving ? '…' : 'Apply signature'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

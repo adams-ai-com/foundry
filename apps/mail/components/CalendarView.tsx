@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import type { CalendarEvent } from '@foundry/shared'
 import { listCalendarEvents, createCalendarEvent, deleteCalendarEvent } from '../lib/api'
 import { EventModal } from './EventModal'
+import { AppPasswordModal } from './AppPasswordModal'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
@@ -57,6 +58,7 @@ export function CalendarView() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editEvent, setEditEvent] = useState<CalendarEvent | null>(null)
   const [defaultDate, setDefaultDate] = useState<string | undefined>(undefined)
+  const [syncModalOpen, setSyncModalOpen] = useState(false)
 
   const fetchEvents = useCallback(() => {
     let start: string, end: string
@@ -149,6 +151,13 @@ export function CalendarView() {
             ))}
           </div>
           <button
+            onClick={() => setSyncModalOpen(true)}
+            className="text-xs text-fg-secondary hover:text-fg-primary border border-border rounded-lg px-2.5 py-1.5 hover:bg-bg-hover transition-colors"
+            title="CalDAV sync / app passwords"
+          >
+            Sync
+          </button>
+          <button
             onClick={() => openNew()}
             className="flex items-center gap-1.5 bg-accent hover:bg-accent-hover text-accent-fg text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
           >
@@ -172,6 +181,8 @@ export function CalendarView() {
           onClose={() => setModalOpen(false)}
         />
       )}
+
+      {syncModalOpen && <AppPasswordModal onClose={() => setSyncModalOpen(false)} />}
     </div>
   )
 }
