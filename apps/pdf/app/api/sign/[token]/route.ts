@@ -125,12 +125,12 @@ export async function POST(req: NextRequest, { params }: Params) {
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null
   const ua = req.headers.get('user-agent') ?? null
 
-  let body: { fields: FieldSubmission[]; signer_name?: string; signer_email?: string }
+  let body: { fields: FieldSubmission[]; signer_name?: string; signer_email?: string; foundry_user_id?: string }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  const { fields: submissions, signer_name, signer_email } = body
+  const { fields: submissions, signer_name, signer_email, foundry_user_id } = body
   if (!submissions?.length) {
     return NextResponse.json({ error: 'fields required' }, { status: 400 })
   }
@@ -214,7 +214,10 @@ export async function POST(req: NextRequest, { params }: Params) {
       VALUES
         (${ctx.envelope_id}, ${ctx.recipient_id}, 'signed',
          ${ip}::INET, ${ua},
-         ${{ cert_fingerprint: embedData.cert_fingerprint } as any})
+         ${{
+           cert_fingerprint: embedData.cert_fingerprint,
+           ...(foundry_user_id ? { foundry_user_id, foundry_identity: true } : {}),
+         } as any})
     `
   })
 

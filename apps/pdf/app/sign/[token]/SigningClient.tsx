@@ -285,14 +285,35 @@ interface Branding {
   brand_color: string
 }
 
+interface FoundryUser {
+  userId: string
+  email: string
+  name: string | null
+}
+
+// Generate a typed-signature PNG using the signer's name (canvas, client-side only)
+function generateTypedSignaturePng(name: string): string {
+  const canvas = document.createElement('canvas')
+  canvas.width = 480
+  canvas.height = 160
+  const ctx = canvas.getContext('2d')!
+  ctx.font = "52px 'Dancing Script', cursive"
+  ctx.fillStyle = '#1e3a5f'
+  ctx.textBaseline = 'middle'
+  const mw = ctx.measureText(name).width
+  ctx.fillText(name, Math.max(12, (canvas.width - mw) / 2), canvas.height / 2)
+  return canvas.toDataURL('image/png')
+}
+
 // ── Main signing client ───────────────────────────────────────────────────────
 
 export function SigningClient({
-  token, initialData, branding,
+  token, initialData, branding, foundryUser,
 }: {
   token: string
   initialData: SigningData
   branding?: Branding | null
+  foundryUser?: FoundryUser | null
 }) {
   const d = initialData
   const color = branding?.brand_color || '#2563eb'
@@ -314,8 +335,26 @@ export function SigningClient({
   const [submitted, setSubmitted] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  // Jump to first page that has unsigned required fields
+  // Foundry identity mode: auto-fill all sig fields with a typed PNG on mount
   useEffect(() => {
+    if (!foundryUser) return
+    const displayName = foundryUser.name || foundryUser.email
+    const sigPng = generateTypedSignaturePng(displayName)
+    setSigned(prev => {
+      const next = { ...prev }
+      for (const f of d.fields) {
+        if (f.field_type === 'signature' || f.field_type === 'initials') {
+          next[f.id] = { dataUrl: sigPng }
+        }
+      }
+      return next
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Jump to first page that has unsigned required fields (external signer only)
+  useEffect(() => {
+    if (foundryUser) return
     const firstUnsignedPage = d.fields
       .filter(f => f.required && !autoFill[f.id] && !signed[f.id])
       .map(f => f.page)[0]
@@ -356,8 +395,9 @@ export function SigningClient({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fields: submissions,
-          signer_name: d.recipient_name,
-          signer_email: d.recipient_email,
+          signer_name: foundryUser?.name ?? d.recipient_name,
+          signer_email: foundryUser?.email ?? d.recipient_email,
+          ...(foundryUser ? { foundry_user_id: foundryUser.userId } : {}),
         }),
       })
       if (!res.ok) {
@@ -429,6 +469,11 @@ export function SigningClient({
         <div className="text-right">
           <p className="text-xs text-gray-500">Signing as</p>
           <p className="text-sm font-medium text-gray-800">{d.recipient_name}</p>
+          {foundryUser && (
+            <p className="text-xs text-blue-600 font-medium mt-0.5">
+              ✓ Foundry Workspace identity
+            </p>
+          )}
         </div>
       </header>
 
@@ -540,7 +585,7 @@ export function SigningClient({
                       : isAuto ? 'rgba(254,249,195,0.9)' : 'rgba(239,246,255,0.85)',
                   }}
                   onClick={() => {
-                    if (isAuto || isSigned) return
+                    if (isAuto || isSigned || foundryUser) return
                     if (f.field_type === 'signature' || f.field_type === 'initials') {
                       setCaptureField(f)
                     }
@@ -601,12 +646,17 @@ export function SigningClient({
       {/* ── Footer action bar ─────────────────────────────────────────────────── */}
       <footer className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between shadow-sm">
         <div>
-          {!allSigned && (
+          {foundryUser && allSigned && (
+            <p className="text-xs text-blue-700 font-medium">
+              ✓ All fields verified — signing with Foundry Workspace identity
+            </p>
+          )}
+          {!foundryUser && !allSigned && (
             <p className="text-xs text-amber-700 font-medium">
               {totalRequired - signedCount} field{totalRequired - signedCount !== 1 ? 's' : ''} remaining
             </p>
           )}
-          {allSigned && (
+          {!foundryUser && allSigned && (
             <p className="text-xs text-green-700 font-medium">✓ All fields complete — ready to submit</p>
           )}
           {submitError && <p className="text-xs text-red-600 mt-0.5">{submitError}</p>}
@@ -618,12 +668,16 @@ export function SigningClient({
             disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shadow-sm"
           style={{ backgroundColor: color }}
         >
-          {submitting ? 'Submitting…' : 'Sign Document →'}
+          {submitting
+            ? 'Submitting…'
+            : foundryUser
+              ? 'Sign with Foundry account →'
+              : 'Sign Document →'}
         </button>
       </footer>
 
-      {/* Signature capture modal */}
-      {captureField && (captureField.field_type === 'signature' || captureField.field_type === 'initials') && (
+      {/* Signature capture modal — external signers only; Foundry identity uses auto-generated PNG */}
+      {!foundryUser && captureField && (captureField.field_type === 'signature' || captureField.field_type === 'initials') && (
         <CaptureModal
           fieldType={captureField.field_type}
           recipientName={d.recipient_name}
