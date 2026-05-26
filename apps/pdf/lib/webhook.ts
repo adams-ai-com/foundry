@@ -5,7 +5,7 @@ export interface SigningBranding {
 }
 
 export interface SigningWebhookPayload {
-  event: 'signing_invitation' | 'signing_complete'
+  event: 'signing_invitation' | 'signing_complete' | 'signing_declined'
   recipient_email: string
   recipient_name: string
   document_title: string
@@ -13,6 +13,7 @@ export interface SigningWebhookPayload {
   signing_url?: string
   envelope_id?: string
   branding?: SigningBranding
+  decline_reason?: string
 }
 
 export function fireSigningWebhook(payload: SigningWebhookPayload): void {

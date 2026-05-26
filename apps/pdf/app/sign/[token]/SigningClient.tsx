@@ -334,6 +334,11 @@ export function SigningClient({
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [showDeclineModal, setShowDeclineModal] = useState(false)
+  const [declineReason, setDeclineReason] = useState('')
+  const [declining, setDeclining] = useState(false)
+  const [declined, setDeclined] = useState(false)
+  const [declineError, setDeclineError] = useState<string | null>(null)
 
   // Foundry identity mode: auto-fill all sig fields with a typed PNG on mount
   useEffect(() => {
@@ -373,6 +378,29 @@ export function SigningClient({
     if (!captureField) return
     setSigned(prev => ({ ...prev, [captureField.id]: { dataUrl } }))
     setCaptureField(null)
+  }
+
+  async function handleDecline() {
+    setDeclining(true)
+    setDeclineError(null)
+    try {
+      const res = await fetch(`/pdf/api/sign/${token}/decline`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: declineReason.trim() || undefined }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        setDeclineError(err.error ?? 'Could not process decline. Please try again.')
+        return
+      }
+      setDeclined(true)
+      setShowDeclineModal(false)
+    } catch {
+      setDeclineError('Network error. Please try again.')
+    } finally {
+      setDeclining(false)
+    }
   }
 
   async function handleSubmit() {
@@ -432,6 +460,28 @@ export function SigningClient({
           </p>
           <p className="text-sm text-gray-500">
             {branding?.display_name || d.creator_name} will be notified when all parties have signed.
+          </p>
+          <p className="text-xs text-gray-400 mt-8">Powered by Foundry PDF · Open source</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (declined) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center max-w-md px-4">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </div>
+          <h1 className="text-xl font-semibold text-gray-900 mb-2">Signing declined</h1>
+          <p className="text-sm text-gray-500 mb-1">
+            You have declined to sign <strong>{d.title}</strong>.
+          </p>
+          <p className="text-sm text-gray-500">
+            {branding?.display_name || d.creator_name} has been notified.
           </p>
           <p className="text-xs text-gray-400 mt-8">Powered by Foundry PDF · Open source</p>
         </div>
@@ -660,6 +710,12 @@ export function SigningClient({
             <p className="text-xs text-green-700 font-medium">✓ All fields complete — ready to submit</p>
           )}
           {submitError && <p className="text-xs text-red-600 mt-0.5">{submitError}</p>}
+          <button
+            onClick={() => { setShowDeclineModal(true); setDeclineError(null) }}
+            className="text-xs text-gray-400 hover:text-gray-600 underline mt-1 block"
+          >
+            Decline to sign
+          </button>
         </div>
         <button
           onClick={handleSubmit}
@@ -684,6 +740,52 @@ export function SigningClient({
           onCapture={handleCapture}
           onClose={() => setCaptureField(null)}
         />
+      )}
+
+      {/* Decline confirm modal */}
+      {showDeclineModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="text-base font-semibold text-gray-900">Decline to sign</h2>
+              <button onClick={() => setShowDeclineModal(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600">
+                Are you sure you want to decline signing <strong>{d.title}</strong>?
+                {' '}{branding?.display_name || d.creator_name} will be notified and the signing request will be cancelled.
+              </p>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Reason <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <textarea
+                  value={declineReason}
+                  onChange={e => setDeclineReason(e.target.value)}
+                  placeholder="e.g. I need to review the terms before signing"
+                  rows={3}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-300"
+                />
+              </div>
+              {declineError && <p className="text-xs text-red-600">{declineError}</p>}
+              <div className="flex gap-3 justify-end pt-1">
+                <button
+                  onClick={() => setShowDeclineModal(false)}
+                  className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDecline}
+                  disabled={declining}
+                  className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-40"
+                >
+                  {declining ? 'Declining…' : 'Decline request'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

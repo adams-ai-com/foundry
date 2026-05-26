@@ -21,7 +21,7 @@ interface Envelope {
 
 interface Event {
   event: string; actor: string | null
-  detail: Record<string, unknown>; created_at: string
+  detail: Record<string, unknown> | null; created_at: string
 }
 
 const STATUS_LABEL: Record<RecipientStatus, string> = {
@@ -246,7 +246,14 @@ export default function EnvelopePage() {
           {events.map((ev, i) => (
             <div key={i} className="flex items-start gap-2 text-xs">
               <span className="text-fg-tertiary shrink-0 tabular-nums">{timeAgo(ev.created_at)}</span>
-              <span className="text-fg-secondary capitalize">{ev.event.replace('_', ' ')}</span>
+              <span className="text-fg-secondary capitalize">{ev.event.replace(/_/g, ' ')}</span>
+              {ev.detail?.decline_reason ? (
+                <span className="text-fg-tertiary italic truncate max-w-xs">
+                  — &ldquo;{String(ev.detail.decline_reason)}&rdquo;
+                </span>
+              ) : ev.detail?.declined_by ? (
+                <span className="text-fg-tertiary">by {String(ev.detail.declined_by)}</span>
+              ) : null}
             </div>
           ))}
         </div>

@@ -46,6 +46,9 @@ export async function GET(_: NextRequest, { params }: Params) {
   if (ctx.recipient_status === 'pending') {
     return NextResponse.json({ error: 'not_your_turn', title: ctx.title }, { status: 200 })
   }
+  if (ctx.recipient_status === 'declined') {
+    return NextResponse.json({ error: 'already_declined', title: ctx.title }, { status: 200 })
+  }
   if (ctx.token_used) {
     return NextResponse.json({ error: 'Link already used' }, { status: 410 })
   }
