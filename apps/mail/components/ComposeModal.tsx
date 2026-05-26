@@ -6,7 +6,7 @@ import { sendMail, uploadFile, type FileItem } from '../lib/api'
 import { RecipientInput, type Recipient } from './RecipientInput'
 import { RichTextEditor, type RichTextEditorRef } from './RichTextEditor'
 
-const FROM_ADDRESS = process.env.NEXT_PUBLIC_MAIL_FROM ?? ''
+const DEFAULT_FROM = process.env.NEXT_PUBLIC_MAIL_FROM ?? ''
 const DRAFT_KEY = 'foundry-mail-draft-new'
 
 export interface ComposeRequest {
@@ -15,6 +15,8 @@ export interface ComposeRequest {
   forwardMessage?: MailMessage
   to?: string
   subject?: string
+  fromAddress?: string
+  fromAccountId?: string
 }
 
 function recipientsToApi(rs: Recipient[]): { name?: string; email: string }[] {
@@ -59,12 +61,16 @@ function formatBytes(n: number) {
 interface ComposeModalProps {
   onClose: () => void
   request?: ComposeRequest
+  fromOptions?: { email: string; displayName: string; accountId: string }[]
 }
 
-export function ComposeModal({ onClose, request }: ComposeModalProps) {
+export function ComposeModal({ onClose, request, fromOptions }: ComposeModalProps) {
   const replyTo = request?.replyTo
   const forwardMessage = request?.forwardMessage
   const isNewMessage = !replyTo && !forwardMessage
+
+  const initFromAddress = request?.fromAddress ?? DEFAULT_FROM
+  const initFromAccountId = request?.fromAccountId ?? fromOptions?.[0]?.accountId ?? ''
 
   const initTo: Recipient[] = replyTo
     ? threadReplyRecipients(replyTo, request?.replyAll ?? false)
@@ -84,6 +90,8 @@ export function ComposeModal({ onClose, request }: ComposeModalProps) {
         : `Re: ${replyTo.subject}`
       : '')
 
+  const [fromAddress, setFromAddress] = useState(initFromAddress)
+  const [fromAccountId, setFromAccountId] = useState(initFromAccountId)
   const [to, setTo] = useState<Recipient[]>(initTo)
   const [cc, setCc] = useState<Recipient[]>([])
   const [bcc, setBcc] = useState<Recipient[]>([])
@@ -153,7 +161,7 @@ export function ComposeModal({ onClose, request }: ComposeModalProps) {
     setError(null)
     try {
       await sendMail({
-        from: FROM_ADDRESS,
+        from: fromAddress || DEFAULT_FROM,
         to: recipientsToApi(to),
         cc: cc.length ? recipientsToApi(cc) : undefined,
         bcc: bcc.length ? recipientsToApi(bcc) : undefined,
@@ -163,6 +171,7 @@ export function ComposeModal({ onClose, request }: ComposeModalProps) {
         inReplyTo: replyTo?.id,
         threadId: replyTo?.id,
         attachmentIds: attachments.map((a) => a.id),
+        _accountId: fromAccountId || undefined,
       })
       if (isNewMessage) localStorage.removeItem(DRAFT_KEY)
       onClose()
@@ -198,6 +207,26 @@ export function ComposeModal({ onClose, request }: ComposeModalProps) {
           </button>
         </div>
       </div>
+
+      {/* From — only shown when multiple accounts are available */}
+      {fromOptions && fromOptions.length > 1 && (
+        <div className="border-b border-gray-200 px-4 py-2 flex items-center gap-2 flex-shrink-0">
+          <span className="text-xs text-gray-400 flex-shrink-0 w-10">From</span>
+          <select
+            value={fromAccountId}
+            onChange={(e) => {
+              const opt = fromOptions.find((o) => o.accountId === e.target.value)
+              if (opt) { setFromAccountId(opt.accountId); setFromAddress(opt.email) }
+            }}
+            disabled={sending}
+            className="flex-1 text-sm outline-none bg-transparent text-gray-700"
+          >
+            {fromOptions.map((o) => (
+              <option key={o.accountId} value={o.accountId}>{o.email}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* To */}
       <div className="border-b border-gray-200 px-4 py-2 flex items-start gap-2 flex-shrink-0">

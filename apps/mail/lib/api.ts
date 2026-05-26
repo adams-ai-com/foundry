@@ -1,8 +1,14 @@
 import type { MailThread, MailMessage, MailboxInfo, CalendarEvent } from '@foundry/shared'
 
-async function req<T>(path: string, init?: RequestInit): Promise<T> {
+async function req<T>(path: string, init?: RequestInit, accountId?: string): Promise<T> {
+  const extraHeaders: Record<string, string> = {}
+  if (accountId) extraHeaders['x-mail-account'] = accountId
+
   const res = await fetch(`/mail/api/mail/${path}`, {
-    headers: init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' },
+    headers: {
+      ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+      ...extraHeaders,
+    },
     ...init,
   })
   if (!res.ok) {
@@ -13,11 +19,79 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json()
 }
 
+// ─── Mail accounts (multi-account) ───────────────────────────────────────────
+
+export interface MailAccount {
+  id: string
+  domain: string
+  displayName: string
+  avatarColor: string | null
+  canSend: boolean
+  isDefault: boolean
+  unreadCount: number
+}
+
+export interface MailAccountGroup {
+  id: string
+  name: string
+  color: string | null
+  sortOrder: number
+  accounts: MailAccount[]
+}
+
+export interface MailAccountsResponse {
+  groups: MailAccountGroup[]
+  ungrouped: MailAccount[]
+}
+
+export async function listMailAccounts(): Promise<MailAccountsResponse> {
+  return req<MailAccountsResponse>('user-accounts')
+}
+
+export interface AdminAccount {
+  id: string
+  domain: string
+  displayName: string
+  avatarColor: string | null
+  accountType: string
+  createdAt: string
+  dkimSelector: string
+  inboxUnread: number
+  inboxTotal: number
+  messageCount: number
+}
+
+export async function listAdminAccounts(): Promise<AdminAccount[]> {
+  return req<AdminAccount[]>('admin/accounts')
+}
+
+export interface AddAccountResult {
+  account: { id: string; domain: string; displayName: string }
+  dnsRecords: {
+    mx: { type: string; name: string; value: string; priority: number }
+    spf: { type: string; name: string; value: string }
+    dmarc: { type: string; name: string; value: string }
+    dkim: { type: string; name: string; note: string }
+  }
+}
+
+export async function addMailAccount(opts: {
+  domain: string
+  displayName?: string
+  avatarColor?: string
+  groupId?: string
+}): Promise<AddAccountResult> {
+  return req<AddAccountResult>('admin/accounts', {
+    method: 'POST',
+    body: JSON.stringify(opts),
+  })
+}
+
 // Raw API shapes — storage layer already maps to camelCase, dates come as ISO strings
 interface RawThread {
   id: string; subject: string; participants: { name?: string; email: string }[]
   messageCount: number; unreadCount: number; lastMessageAt: string | null
-  snippet: string; isStarred: boolean
+  snippet: string; isStarred: boolean; accountId?: string; accountDomain?: string | null
 }
 
 interface RawMessage {
@@ -49,6 +123,8 @@ function toThread(r: RawThread, threadId?: string): MailThread {
     isStarred: (r as any).isStarred ?? false,
     isArchived: false,
     isSpam: false,
+    accountId: r.accountId,
+    accountDomain: r.accountDomain,
   }
 }
 
@@ -102,9 +178,11 @@ export async function listThreads(
   mailbox = 'inbox',
   page = 1,
   sort: 'newest' | 'oldest' | 'unread' = 'newest',
+  opts: { accountIds?: string[]; accountId?: string } = {},
 ): Promise<{ threads: MailThread[]; total: number }> {
   const q = new URLSearchParams({ mailbox, page: String(page), sort })
-  const data = await req<{ threads: RawThread[]; total: number }>(`threads?${q}`)
+  if (opts.accountIds?.length) q.set('account_ids', opts.accountIds.join(','))
+  const data = await req<{ threads: RawThread[]; total: number }>(`threads?${q}`, undefined, opts.accountId)
   return {
     threads: (data.threads ?? []).map((t) => toThread(t)),
     total: data.total ?? 0,
@@ -159,8 +237,10 @@ export async function sendMail(payload: {
   inReplyTo?: string
   threadId?: string
   attachmentIds?: string[]
+  _accountId?: string
 }): Promise<void> {
-  await req('send', { method: 'POST', body: JSON.stringify(payload) })
+  const { _accountId, ...rest } = payload
+  await req('send', { method: 'POST', body: JSON.stringify(rest) }, _accountId)
 }
 
 export async function listCalendarEvents(start?: string, end?: string): Promise<CalendarEvent[]> {

@@ -15,6 +15,7 @@ import { taskRoutes } from './routes/tasks.js'
 import { decisionRoutes } from './routes/decisions.js'
 import { fileRoutes } from './routes/files.js'
 import { channelRoutes } from './routes/channels.js'
+import { accountRoutes } from './routes/accounts.js'
 import { caldavPlugin } from '../caldav/index.js'
 
 export async function buildApi() {
@@ -52,7 +53,15 @@ export async function buildApi() {
       return reply.code(401).send({ error: 'Unauthorized' })
     }
 
-    // Account is passed via header; the client (apps/mail) sets it after login
+    // Extract user ID if provided (multi-account routes)
+    const userId = req.headers['x-user-id'] as string | undefined
+    if (userId) (req as any).userId = userId
+
+    // Routes that don't require a specific account
+    const path = req.url.split('?')[0]
+    if (path === '/api/v1/user-accounts' || path.startsWith('/api/v1/admin/')) return
+
+    // All other routes require X-Account-Id
     const accountId = req.headers['x-account-id'] as string
     if (!accountId) return reply.code(400).send({ error: 'X-Account-Id required' })
 
@@ -80,6 +89,7 @@ export async function buildApi() {
   await app.register(decisionRoutes, opts)
   await app.register(fileRoutes, opts)
   await app.register(channelRoutes, opts)
+  await app.register(accountRoutes, opts)
 
   return app
 }

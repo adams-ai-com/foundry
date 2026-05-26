@@ -16,11 +16,6 @@ async function handler(req: NextRequest, { params }: { params: Promise<{ path: s
   const isMultipart = req.headers.get('content-type')?.startsWith('multipart/')
   const canHaveBody = req.method !== 'GET' && req.method !== 'HEAD'
 
-  // Determine body and Content-Type:
-  // - Multipart: stream through with original content-type
-  // - JSON with actual body text: forward as application/json
-  // - DELETE/PATCH with empty body: no body, no Content-Type (Fastify rejects empty JSON)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let body: any
   let contentType: string | undefined
   if (isMultipart && canHaveBody) {
@@ -34,24 +29,27 @@ async function handler(req: NextRequest, { params }: { params: Promise<{ path: s
     }
   }
 
+  // Allow the client to specify which account to use (falls back to default)
+  const clientAccountId = req.headers.get('x-mail-account')
+  const accountId = clientAccountId || MAILSERVER_ACCOUNT_ID
+
   const res = await fetch(upstream.toString(), {
     method: req.method,
     headers: {
       ...(contentType ? { 'Content-Type': contentType } : {}),
       'X-API-Key': MAILSERVER_API_KEY,
-      'X-Account-Id': MAILSERVER_ACCOUNT_ID,
+      'X-Account-Id': accountId,
+      'X-User-Id': session.userId,
     },
     // @ts-expect-error — duplex required when body is a ReadableStream in Node fetch
     duplex: isMultipart ? 'half' : undefined,
     body,
   })
 
-  // No-content responses (204, etc.)
   if (res.status === 204 || res.headers.get('content-length') === '0') {
     return new NextResponse(null, { status: res.status })
   }
 
-  // File downloads — stream binary response body directly
   const resContentType = res.headers.get('content-type') ?? ''
   if (!resContentType.includes('application/json') && res.body) {
     return new NextResponse(res.body, {
