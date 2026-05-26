@@ -3,6 +3,7 @@ import { verifyToken } from '@/lib/tokens'
 import { db } from '@/lib/db'
 import { fetchProc } from '@/lib/proc'
 import { generateToken, generateExpiryTimestamp } from '@/lib/tokens'
+import { fireSigningWebhook } from '@/lib/webhook'
 
 type Params = { params: Promise<{ token: string }> }
 
@@ -17,7 +18,7 @@ async function validateToken(token: string) {
       r.id AS recipient_id, r.envelope_id, r.name AS recipient_name,
       r.email AS recipient_email, r.status AS recipient_status,
       r.token_used, r.order_index,
-      e.title, e.status AS envelope_status, e.creator_name,
+      e.title, e.status AS envelope_status, e.creator_name, e.creator_email,
       e.expires_at, e.page_count
     FROM envelope_recipients r
     JOIN envelopes e ON e.id = r.envelope_id
@@ -227,19 +228,14 @@ export async function POST(req: NextRequest, { params }: Params) {
       VALUES (${ctx.envelope_id}, 'completed', ${{} as any})
     `
 
-    // Emit webhook if configured
-    const webhookUrl = process.env.SIGNING_EMAIL_WEBHOOK_URL
-    if (webhookUrl) {
-      fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          event: 'envelope_completed',
-          envelope_id: ctx.envelope_id,
-          title: ctx.title,
-        }),
-      }).catch(() => {})
-    }
+    // Email creator: all signatures collected
+    fireSigningWebhook({
+      event: 'signing_complete',
+      recipient_email: (ctx as any).creator_email,
+      recipient_name: ctx.creator_name,
+      document_title: ctx.title,
+      envelope_id: ctx.envelope_id,
+    })
 
     return NextResponse.json({ ok: true, envelope_status: 'complete' })
   }
@@ -262,6 +258,21 @@ export async function POST(req: NextRequest, { params }: Params) {
           INSERT INTO signing_events (envelope_id, recipient_id, event)
           VALUES (${ctx.envelope_id}, ${nr.id}, 'sent')
         `
+        // Email next-tier signer
+        const baseUrl = process.env.SIGNING_BASE_URL ?? 'https://foundry.adams-ai.com'
+        const nrRows = await db`SELECT token FROM envelope_recipients WHERE id = ${nr.id}`
+        const nrToken = (nrRows as any[])[0]?.token
+        if (nrToken) {
+          fireSigningWebhook({
+            event: 'signing_invitation',
+            recipient_email: nr.email,
+            recipient_name: nr.name,
+            document_title: ctx.title,
+            creator_name: ctx.creator_name,
+            signing_url: `${baseUrl}/pdf/sign/${nrToken}`,
+            envelope_id: ctx.envelope_id,
+          })
+        }
       }
     }
   }

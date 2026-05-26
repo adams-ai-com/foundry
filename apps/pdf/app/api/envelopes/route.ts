@@ -3,6 +3,7 @@ import { getSession } from '@foundry/auth'
 import { fetchProc } from '@/lib/proc'
 import { db } from '@/lib/db'
 import { generateToken, generateExpiryTimestamp } from '@/lib/tokens'
+import { fireSigningWebhook } from '@/lib/webhook'
 
 // ── GET /api/envelopes — list creator's envelopes ────────────────────────────
 
@@ -144,6 +145,19 @@ export async function POST(req: NextRequest) {
       url: `${baseUrl}/pdf/sign/${r.token}`,
       order_index: r.order_index,
     }))
+
+  // 6. Fire invitation emails to active recipients (fire-and-forget)
+  for (const link of links) {
+    fireSigningWebhook({
+      event: 'signing_invitation',
+      recipient_email: link.email,
+      recipient_name: link.name,
+      document_title: title.trim(),
+      creator_name: session.name ?? session.email,
+      signing_url: link.url,
+      envelope_id: envelopeId,
+    })
+  }
 
   return NextResponse.json({ id: envelopeId, links })
 }
