@@ -244,11 +244,12 @@ export function Editor({ jobId }: { jobId: string }) {
           setEnvTitle(template.name ?? filename.replace(/\.pdf$/i, ''))
           // Build recips with fresh local IDs
           const colors = ['#3b82f6', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899']
+          const rawOrders = (template.recipients ?? []).map((r: Record<string, unknown>, i: number) => (r.order_index as number) ?? i)
           const recips = (template.recipients ?? []).map((r: Record<string, unknown>, i: number) => ({
             id: crypto.randomUUID(),
             name: r.name as string,
             email: r.email as string,
-            order: (r.order_index as number) ?? i,
+            parallel: i > 0 && rawOrders[i] === rawOrders[i - 1],
             color: (r.color as string) ?? colors[i % colors.length],
           }))
           setEnvRecips(recips)
@@ -425,7 +426,19 @@ export function Editor({ jobId }: { jobId: string }) {
   const [toastVisible, setToastVisible]           = useState(false)
 
   // ── Envelope / request-signatures wizard ─────────────────────────────────
-  type EnvRecip = { id: string; name: string; email: string; order: number; color: string }
+  type EnvRecip = { id: string; name: string; email: string; parallel: boolean; color: string }
+
+  // Computes sequential step numbers from array position + parallel flags.
+  // Signers with parallel=true share the step number of the signer above them.
+  function computeOrders(recips: EnvRecip[]): number[] {
+    const orders: number[] = []
+    let step = 0
+    for (let i = 0; i < recips.length; i++) {
+      if (i > 0 && !recips[i].parallel) step++
+      orders.push(step)
+    }
+    return orders
+  }
   type EnvField = { id: string; recipId: string; page: number; x0: number; y0: number; x1: number; y1: number; type: 'signature' | 'initials' | 'date' | 'name' }
   const ENV_COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899']
   const [envOpen, setEnvOpen]           = useState(false)
@@ -464,8 +477,8 @@ export function Editor({ jobId }: { jobId: string }) {
       const body = {
         name,
         job_id: jobId,
-        recipients: envRecips.map(r => ({
-          name: r.name, email: r.email, order_index: r.order,
+        recipients: envRecips.map((r, i) => ({
+          name: r.name, email: r.email, order_index: computeOrders(envRecips)[i],
           required: true, color: r.color,
         })),
         fields: envFields.map(f => {
@@ -494,14 +507,23 @@ export function Editor({ jobId }: { jobId: string }) {
     const id = crypto.randomUUID()
     setEnvRecips(prev => [...prev, {
       id, name: envNewName.trim(), email: envNewEmail.trim(),
-      order: prev.length, color: ENV_COLORS[prev.length % ENV_COLORS.length],
+      parallel: false, color: ENV_COLORS[prev.length % ENV_COLORS.length],
     }])
     setEnvNewName(''); setEnvNewEmail('')
     setEnvActiveRecip(id)
   }
 
   function envRemoveRecip(id: string) {
-    setEnvRecips(prev => prev.filter(r => r.id !== id))
+    setEnvRecips(prev => {
+      const idx = prev.findIndex(r => r.id === id)
+      const next = prev.filter(r => r.id !== id)
+      // The signer that slides up to fill the gap should not inherit a parallel relationship
+      // with a signer it was never grouped with.
+      if (idx < next.length && next[idx].parallel) {
+        next[idx] = { ...next[idx], parallel: false }
+      }
+      return next
+    })
     setEnvFields(prev => prev.filter(f => f.recipId !== id))
     setEnvActiveRecip(prev => prev === id ? null : prev)
   }
@@ -556,7 +578,7 @@ export function Editor({ jobId }: { jobId: string }) {
         job_id: jobId,
         title: envTitle.trim() || filename.replace(/\.pdf$/i, ''),
         expiry_days: envExpiry,
-        recipients: envRecips.map((r, i) => ({ name: r.name, email: r.email, order_index: r.order })),
+        recipients: envRecips.map((r, i) => ({ name: r.name, email: r.email, order_index: computeOrders(envRecips)[i] })),
         fields: envFields.map(f => {
           const ri = envRecips.findIndex(r => r.id === f.recipId)
           return { recipient_index: ri, page: f.page, x0: f.x0, y0: f.y0, x1: f.x1, y1: f.y1, field_type: f.type }
@@ -2892,22 +2914,41 @@ export function Editor({ jobId }: { jobId: string }) {
                   </div>
 
                   <div className="space-y-2">
-                    {envRecips.map((r, i) => (
-                      <div key={r.id} className="flex items-center gap-2 p-2 rounded-lg border border-border bg-bg-surface">
+                    {(() => {
+                      const orders = computeOrders(envRecips)
+                      return envRecips.map((r, i) => (
+                      <div key={r.id} className={`flex items-center gap-2 p-2 rounded-lg border bg-bg-surface ${r.parallel ? 'border-accent/40 ml-4' : 'border-border'}`}>
                         <div className="w-2 h-2 rounded-full shrink-0" style={{ background: r.color }} />
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium text-fg-primary truncate">{r.name}</p>
                           <p className="text-xs text-fg-tertiary truncate">{r.email}</p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          <span className="text-xs text-fg-tertiary">Signs #{i + 1}</span>
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${r.parallel ? 'text-accent bg-accent/10' : 'text-fg-tertiary bg-bg-hover'}`}>
+                            Step {orders[i] + 1}
+                          </span>
+                          {i > 0 && (
+                            <button
+                              title={r.parallel ? 'Ungroup — sign in a separate step' : 'Sign in parallel with signer above'}
+                              onClick={() => setEnvRecips(prev => {
+                                const a = [...prev]
+                                a[i] = { ...a[i], parallel: !a[i].parallel }
+                                return a
+                              })}
+                              className={`text-xs px-1 rounded transition-colors ${r.parallel ? 'text-accent hover:text-accent/70' : 'text-fg-tertiary hover:text-fg-primary'}`}>
+                              ∥
+                            </button>
+                          )}
                           <button
                             onClick={() => {
                               if (i === 0) return
                               setEnvRecips(prev => {
                                 const a = [...prev]
                                 ;[a[i - 1], a[i]] = [a[i], a[i - 1]]
-                                return a.map((r, idx) => ({ ...r, order: idx }))
+                                a[i - 1] = { ...a[i - 1], parallel: false }
+                                a[i] = { ...a[i], parallel: false }
+                                if (a[i + 1]) a[i + 1] = { ...a[i + 1], parallel: false }
+                                return a
                               })
                             }}
                             disabled={i === 0}
@@ -2918,7 +2959,10 @@ export function Editor({ jobId }: { jobId: string }) {
                               setEnvRecips(prev => {
                                 const a = [...prev]
                                 ;[a[i], a[i + 1]] = [a[i + 1], a[i]]
-                                return a.map((r, idx) => ({ ...r, order: idx }))
+                                a[i] = { ...a[i], parallel: false }
+                                a[i + 1] = { ...a[i + 1], parallel: false }
+                                if (a[i + 2]) a[i + 2] = { ...a[i + 2], parallel: false }
+                                return a
                               })
                             }}
                             disabled={i === envRecips.length - 1}
@@ -2926,9 +2970,14 @@ export function Editor({ jobId }: { jobId: string }) {
                           <button onClick={() => envRemoveRecip(r.id)} className="text-fg-tertiary hover:text-danger ml-0.5">×</button>
                         </div>
                       </div>
-                    ))}
+                    ))})()}
                     {envRecips.length === 0 && (
                       <p className="text-xs text-fg-tertiary text-center py-4">Add at least one signer to continue</p>
+                    )}
+                    {envRecips.length > 1 && (
+                      <p className="text-[10px] text-fg-tertiary pt-1">
+                        Use ∥ to group signers into the same step. Each step receives invitations only after the previous step completes.
+                      </p>
                     )}
                   </div>
                 </div>
@@ -3062,6 +3111,49 @@ export function Editor({ jobId }: { jobId: string }) {
                       <p className="text-sm text-fg-primary">{envTitle || filename}</p>
                       <p className="text-xs text-fg-tertiary">{envRecips.length} signer{envRecips.length !== 1 ? 's' : ''} · {envFields.length} field{envFields.length !== 1 ? 's' : ''}</p>
                     </div>
+
+                    {/* Signing order flow */}
+                    {envRecips.length > 0 && (() => {
+                      const orders = computeOrders(envRecips)
+                      const stepMap = new Map<number, typeof envRecips>()
+                      envRecips.forEach((r, i) => {
+                        const s = orders[i]
+                        if (!stepMap.has(s)) stepMap.set(s, [])
+                        stepMap.get(s)!.push(r)
+                      })
+                      const steps = Array.from(stepMap.entries()).sort((a, b) => a[0] - b[0])
+                      const allParallel = steps.length === 1
+                      return (
+                        <div>
+                          <p className="text-xs font-medium text-fg-secondary mb-2">Signing order</p>
+                          <div className="flex items-start gap-2 flex-wrap">
+                            {steps.map(([stepIdx, stepRecips], si) => (
+                              <div key={stepIdx} className="flex items-center gap-2">
+                                {si > 0 && <span className="text-fg-tertiary self-center">→</span>}
+                                <div className="border border-border rounded-lg px-3 py-2 bg-bg-surface min-w-0">
+                                  <p className="text-[10px] font-semibold text-fg-tertiary uppercase tracking-wide mb-1">
+                                    Step {si + 1}
+                                  </p>
+                                  <div className="space-y-0.5">
+                                    {stepRecips.map(r => (
+                                      <div key={r.id} className="flex items-center gap-1.5">
+                                        <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: r.color }} />
+                                        <span className="text-xs text-fg-primary">{r.name}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="text-[10px] text-fg-tertiary mt-2">
+                            {allParallel
+                              ? 'All signers receive invitations simultaneously.'
+                              : 'Each step receives invitations only after the previous step completes.'}
+                          </p>
+                        </div>
+                      )
+                    })()}
 
                     <div>
                       <p className="text-xs font-medium text-fg-secondary mb-2">Signers & fields</p>

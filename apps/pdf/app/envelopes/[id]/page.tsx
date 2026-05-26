@@ -25,7 +25,7 @@ interface Event {
 }
 
 const STATUS_LABEL: Record<RecipientStatus, string> = {
-  pending: 'Waiting', active: 'Action needed', signed: 'Signed',
+  pending: 'Awaiting invitation', active: 'Action needed', signed: 'Signed',
   declined: 'Declined', voided: 'Voided',
 }
 const STATUS_COLOR: Record<RecipientStatus, string> = {
@@ -170,44 +170,71 @@ export default function EnvelopePage() {
         )}
       </div>
 
-      {/* Recipients */}
+      {/* Recipients — grouped by signing step */}
       <div className="bg-bg-raised border border-border rounded-xl overflow-hidden mb-4">
         <div className="px-4 py-3 border-b border-border">
           <h2 className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">Signers</h2>
         </div>
-        <div className="divide-y divide-border">
-          {recipients.map(r => (
-            <div key={r.id} className="px-4 py-3 flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-fg-primary truncate">{r.name}</p>
-                <p className="text-xs text-fg-tertiary truncate">{r.email}</p>
-                {r.viewed_at && !r.signed_at && (
-                  <p className="text-xs text-fg-tertiary">Viewed {timeAgo(r.viewed_at)}</p>
-                )}
-                {r.signed_at && (
-                  <p className="text-xs text-green-600">Signed {timeAgo(r.signed_at)}</p>
-                )}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLOR[r.status]}`}>
-                  {STATUS_LABEL[r.status]}
-                </span>
-                {r.signing_url && r.status === 'active' && (
-                  <div className="flex gap-1">
-                    <button onClick={() => copyLink(r.signing_url!, r.id)}
-                      className="text-xs border border-border rounded px-2 py-1 hover:bg-bg-hover">
-                      {copied === r.id ? '✓ Copied' : 'Copy link'}
-                    </button>
-                    <button onClick={() => resendLink(r.id)} disabled={resending === r.id}
-                      className="text-xs border border-border rounded px-2 py-1 hover:bg-bg-hover disabled:opacity-40">
-                      {resending === r.id ? '…' : 'Refresh'}
-                    </button>
+        {(() => {
+          const sortedRecips = [...recipients].sort((a, b) => a.order_index - b.order_index)
+          const uniqueSteps = [...new Set(sortedRecips.map(r => r.order_index))]
+          const multiStep = uniqueSteps.length > 1
+          return uniqueSteps.map((stepOrd, si) => {
+            const stepRecips = sortedRecips.filter(r => r.order_index === stepOrd)
+            const allSigned = stepRecips.every(r => r.status === 'signed')
+            const anyActive = stepRecips.some(r => r.status === 'active')
+            const allPending = stepRecips.every(r => r.status === 'pending')
+            const stepLabel = allSigned ? 'Complete' : anyActive ? 'In progress' : allPending ? 'Waiting' : ''
+            const stepLabelColor = allSigned ? 'text-green-600' : anyActive ? 'text-amber-600' : 'text-fg-tertiary'
+            return (
+              <div key={stepOrd}>
+                {multiStep && (
+                  <div className="px-4 py-1.5 bg-bg-base border-b border-border flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-fg-tertiary uppercase tracking-wide">
+                      Step {si + 1}
+                    </span>
+                    {stepLabel && (
+                      <span className={`text-[10px] font-medium ${stepLabelColor}`}>{stepLabel}</span>
+                    )}
                   </div>
                 )}
+                <div className="divide-y divide-border">
+                  {stepRecips.map(r => (
+                    <div key={r.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-fg-primary truncate">{r.name}</p>
+                        <p className="text-xs text-fg-tertiary truncate">{r.email}</p>
+                        {r.viewed_at && !r.signed_at && (
+                          <p className="text-xs text-fg-tertiary">Viewed {timeAgo(r.viewed_at)}</p>
+                        )}
+                        {r.signed_at && (
+                          <p className="text-xs text-green-600">Signed {timeAgo(r.signed_at)}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLOR[r.status]}`}>
+                          {STATUS_LABEL[r.status]}
+                        </span>
+                        {r.signing_url && r.status === 'active' && (
+                          <div className="flex gap-1">
+                            <button onClick={() => copyLink(r.signing_url!, r.id)}
+                              className="text-xs border border-border rounded px-2 py-1 hover:bg-bg-hover">
+                              {copied === r.id ? '✓ Copied' : 'Copy link'}
+                            </button>
+                            <button onClick={() => resendLink(r.id)} disabled={resending === r.id}
+                              className="text-xs border border-border rounded px-2 py-1 hover:bg-bg-hover disabled:opacity-40">
+                              {resending === r.id ? '…' : 'Refresh'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            )
+          })
+        })()}
       </div>
 
       {/* Audit timeline */}
