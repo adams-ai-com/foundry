@@ -264,8 +264,9 @@ function CaptureModal({
             <button
               onClick={handleUse}
               disabled={tab === 'draw' && !hasDrawn}
-              className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg
-                hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-5 py-2 text-white text-sm font-medium rounded-lg
+                disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ backgroundColor: '#2563eb' }}
             >
               Use this {fieldType === 'initials' ? 'initials' : 'signature'} →
             </button>
@@ -276,10 +277,25 @@ function CaptureModal({
   )
 }
 
+// ── Branding type ─────────────────────────────────────────────────────────────
+
+interface Branding {
+  display_name: string
+  logo_url: string
+  brand_color: string
+}
+
 // ── Main signing client ───────────────────────────────────────────────────────
 
-export function SigningClient({ token, initialData }: { token: string; initialData: SigningData }) {
+export function SigningClient({
+  token, initialData, branding,
+}: {
+  token: string
+  initialData: SigningData
+  branding?: Branding | null
+}) {
   const d = initialData
+  const color = branding?.brand_color || '#2563eb'
 
   // Auto-fill date and name fields immediately
   const autoFill: Record<string, SignedValue> = {}
@@ -366,12 +382,16 @@ export function SigningClient({ token, initialData }: { token: string; initialDa
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
+          {branding?.logo_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={branding.logo_url} alt={branding.display_name} className="h-8 object-contain mx-auto mb-4" />
+          )}
           <h1 className="text-xl font-semibold text-gray-900 mb-2">Signed successfully</h1>
           <p className="text-sm text-gray-500 mb-1">
             Your signature has been applied to <strong>{d.title}</strong>.
           </p>
           <p className="text-sm text-gray-500">
-            {d.creator_name} will be notified when all parties have signed.
+            {branding?.display_name || d.creator_name} will be notified when all parties have signed.
           </p>
           <p className="text-xs text-gray-400 mt-8">Powered by Foundry PDF · Open source</p>
         </div>
@@ -388,14 +408,19 @@ export function SigningClient({ token, initialData }: { token: string; initialDa
       <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shadow-sm">
         <div>
           <div className="flex items-center gap-2">
-            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
+            {branding?.logo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={branding.logo_url} alt={branding.display_name} className="h-6 object-contain shrink-0" />
+            ) : (
+              <svg className="w-5 h-5 shrink-0" style={{ color }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            )}
             <span className="text-sm font-semibold text-gray-900 truncate max-w-xs">{d.title}</span>
           </div>
           <p className="text-xs text-gray-500 mt-0.5">
-            Requested by <strong>{d.creator_name}</strong>
+            Requested by <strong>{branding?.display_name || d.creator_name}</strong>
             {d.expires_at && (
               <> · Expires {new Date(d.expires_at).toLocaleDateString()}</>
             )}
@@ -417,8 +442,11 @@ export function SigningClient({ token, initialData }: { token: string; initialDa
             </p>
             <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
               <div
-                className="h-full bg-blue-500 rounded-full transition-all duration-300"
-                style={{ width: `${totalRequired ? (signedCount / totalRequired) * 100 : 0}%` }}
+                className="h-full rounded-full transition-all duration-300"
+                style={{
+                  width: `${totalRequired ? (signedCount / totalRequired) * 100 : 0}%`,
+                  backgroundColor: color,
+                }}
               />
             </div>
           </div>
@@ -434,7 +462,8 @@ export function SigningClient({ token, initialData }: { token: string; initialDa
                   key={i}
                   onClick={() => setActivePage(i)}
                   className={`w-full text-left px-4 py-2 text-xs flex items-center justify-between transition-colors
-                    ${activePage === i ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
+                    ${activePage === i ? 'font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
+                  style={activePage === i ? { backgroundColor: color + '18', color } : undefined}
                 >
                   <span>Page {i + 1}</span>
                   {fieldCount > 0 && (
@@ -585,9 +614,9 @@ export function SigningClient({ token, initialData }: { token: string; initialDa
         <button
           onClick={handleSubmit}
           disabled={!allSigned || submitting}
-          className="px-6 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg
-            hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed
-            transition-colors shadow-sm"
+          className="px-6 py-2.5 text-white text-sm font-semibold rounded-lg
+            disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shadow-sm"
+          style={{ backgroundColor: color }}
         >
           {submitting ? 'Submitting…' : 'Sign Document →'}
         </button>

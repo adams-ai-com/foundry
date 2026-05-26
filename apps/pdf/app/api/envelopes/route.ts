@@ -14,11 +14,13 @@ export async function GET() {
   const rows = await db`
     SELECT
       e.id, e.title, e.status, e.page_count, e.created_at, e.expires_at, e.completed_at,
+      e.bulk_send_id,
       COUNT(r.id)                                           AS total_recipients,
       COUNT(r.id) FILTER (WHERE r.status = 'signed')        AS signed_recipients
     FROM envelopes e
     LEFT JOIN envelope_recipients r ON r.envelope_id = e.id AND r.required = true
     WHERE e.creator_id = ${session.userId}
+      AND e.status != 'draft'
     GROUP BY e.id
     ORDER BY e.created_at DESC
     LIMIT 100
@@ -102,12 +104,24 @@ export async function POST(req: NextRequest) {
     token: generateToken({ r: r.id, e: envelopeId, exp: expUnix }),
   }))
 
-  // 4. Persist everything in a transaction
+  // 4. Snapshot creator's branding into envelope metadata
+  const [brandingRow] = await db`
+    SELECT display_name, logo_url, brand_color FROM signing_branding WHERE creator_id = ${session.userId}
+  `
+  const metadata = {
+    branding: {
+      display_name: brandingRow?.display_name || (session.name ?? session.email) || '',
+      logo_url: brandingRow?.logo_url || process.env.SIGNING_PAGE_LOGO_URL || '',
+      brand_color: brandingRow?.brand_color || process.env.SIGNING_PAGE_BRAND_COLOR || '#2563eb',
+    },
+  }
+
+  // 5. Persist everything in a transaction
   await db.begin(async sql => {
     await sql`
-      INSERT INTO envelopes (id, job_id, creator_id, creator_name, creator_email, title, status, page_count, expires_at)
+      INSERT INTO envelopes (id, job_id, creator_id, creator_name, creator_email, title, status, page_count, expires_at, metadata)
       VALUES (${envelopeId}, ${job_id}, ${session.userId}, ${session.name ?? session.email}, ${session.email},
-              ${title.trim()}, 'sent', ${pageCount}, ${expiresAt})
+              ${title.trim()}, 'sent', ${pageCount}, ${expiresAt}, ${JSON.stringify(metadata)})
     `
 
     for (const r of recipientsWithFinalTokens) {
@@ -135,7 +149,7 @@ export async function POST(req: NextRequest) {
     `
   })
 
-  // 5. Build signing link list for creator
+  // 6. Build signing link list for creator
   const baseUrl = process.env.SIGNING_BASE_URL ?? 'https://foundry.adams-ai.com'
   const links = recipientsWithFinalTokens
     .filter(r => r.status === 'active')
@@ -146,16 +160,17 @@ export async function POST(req: NextRequest) {
       order_index: r.order_index,
     }))
 
-  // 6. Fire invitation emails to active recipients (fire-and-forget)
+  // 7. Fire invitation emails to active recipients (fire-and-forget)
   for (const link of links) {
     fireSigningWebhook({
       event: 'signing_invitation',
       recipient_email: link.email,
       recipient_name: link.name,
       document_title: title.trim(),
-      creator_name: session.name ?? session.email,
+      creator_name: metadata.branding.display_name || (session.name ?? session.email) || '',
       signing_url: link.url,
       envelope_id: envelopeId,
+      branding: metadata.branding,
     })
   }
 

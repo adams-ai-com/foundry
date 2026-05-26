@@ -15,6 +15,7 @@ interface Envelope {
   completed_at: string | null
   total_recipients: string
   signed_recipients: string
+  bulk_send_id: string | null
 }
 
 const STATUS_LABEL: Record<EnvelopeStatus, string> = {
@@ -79,12 +80,32 @@ export default function EnvelopesPage() {
           </button>
           <h1 className="text-lg font-semibold text-fg-primary">Envelopes</h1>
         </div>
-        <button
-          onClick={() => router.push('/pdf')}
-          className="text-sm font-medium bg-accent text-white px-4 py-2 rounded-lg hover:opacity-90 transition-opacity"
-        >
-          New envelope
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => router.push('/pdf/envelopes/branding')}
+            className="text-sm text-fg-secondary border border-border px-3 py-2 rounded-lg hover:bg-bg-hover transition-colors"
+          >
+            Branding
+          </button>
+          <button
+            onClick={() => router.push('/pdf/envelopes/bulk-send')}
+            className="text-sm text-fg-secondary border border-border px-3 py-2 rounded-lg hover:bg-bg-hover transition-colors"
+          >
+            Bulk send
+          </button>
+          <button
+            onClick={() => router.push('/pdf/envelopes/templates')}
+            className="text-sm text-fg-secondary border border-border px-3 py-2 rounded-lg hover:bg-bg-hover transition-colors"
+          >
+            Templates
+          </button>
+          <button
+            onClick={() => router.push('/pdf')}
+            className="text-sm font-medium bg-accent text-white px-4 py-2 rounded-lg hover:opacity-90 transition-opacity"
+          >
+            New envelope
+          </button>
+        </div>
       </div>
 
       {/* Empty state */}
@@ -129,6 +150,11 @@ export default function EnvelopesPage() {
                       <span className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLOR[env.status]}`}>
                         {STATUS_LABEL[env.status]}
                       </span>
+                      {env.bulk_send_id && (
+                        <span className="shrink-0 text-xs font-medium px-2 py-0.5 rounded-full text-purple-700 bg-purple-100">
+                          Bulk
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-3 text-xs text-fg-tertiary">
                       <span>{fmt(env.created_at)}</span>

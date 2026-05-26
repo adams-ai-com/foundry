@@ -221,15 +221,56 @@ function LazyThumb({ src, alt, pw, ph }: { src: string; alt: string; pw: number;
 
 export function Editor({ jobId }: { jobId: string }) {
   const router = useRouter()
-  // Auto-open envelope wizard when ?sign=1
+  // Auto-open envelope wizard when ?sign=1 or ?template=<id>
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
+    const templateId = params.get('template')
+
     if (params.get('sign') === '1') {
       setEnvTitle(filename.replace(/\.pdf$/i, ''))
       setEnvOpen(true)
       const url = new URL(window.location.href)
       url.searchParams.delete('sign')
       window.history.replaceState({}, '', url.toString())
+    } else if (templateId) {
+      // Load template data, pre-populate wizard, open
+      const url = new URL(window.location.href)
+      url.searchParams.delete('template')
+      window.history.replaceState({}, '', url.toString())
+
+      fetch(`/pdf/api/envelope-templates/${templateId}`)
+        .then(r => r.ok ? r.json() : Promise.reject())
+        .then(({ template }) => {
+          setEnvTitle(template.name ?? filename.replace(/\.pdf$/i, ''))
+          // Build recips with fresh local IDs
+          const colors = ['#3b82f6', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899']
+          const recips = (template.recipients ?? []).map((r: Record<string, unknown>, i: number) => ({
+            id: crypto.randomUUID(),
+            name: r.name as string,
+            email: r.email as string,
+            order: (r.order_index as number) ?? i,
+            color: (r.color as string) ?? colors[i % colors.length],
+          }))
+          setEnvRecips(recips)
+          // Build fields mapping recipient_index → new recip ID
+          const fields = (template.fields ?? []).map((f: Record<string, unknown>) => ({
+            id: crypto.randomUUID(),
+            recipId: recips[(f.recipient_index as number) ?? 0]?.id ?? recips[0]?.id ?? '',
+            page: f.page as number,
+            x0: f.x0 as number, y0: f.y0 as number,
+            x1: f.x1 as number, y1: f.y1 as number,
+            type: (f.field_type as 'signature' | 'initials' | 'date' | 'name') ?? 'signature',
+          }))
+          setEnvFields(fields)
+          if (recips[0]) setEnvActiveRecip(recips[0].id)
+          setEnvOpen(true)
+          setEnvStep(0)
+        })
+        .catch(() => {
+          // Template load failed — open blank wizard
+          setEnvTitle(filename.replace(/\.pdf$/i, ''))
+          setEnvOpen(true)
+        })
     }
   }, [])
 
@@ -404,12 +445,48 @@ export function Editor({ jobId }: { jobId: string }) {
   const [envResult, setEnvResult]       = useState<{ id: string; links: { name: string; email: string; url: string }[] } | null>(null)
   const [envCopied, setEnvCopied]       = useState<string | null>(null)
   const envPageRef                      = useRef<HTMLDivElement>(null)
+  const [envTmplName, setEnvTmplName]   = useState('')
+  const [envTmplSaving, setEnvTmplSaving] = useState(false)
+  const [envTmplSaved, setEnvTmplSaved] = useState(false)
 
   function envReset() {
     setEnvOpen(false); setEnvStep(0); setEnvTitle(filename.replace(/\.pdf$/i, ''))
     setEnvRecips([]); setEnvFields([]); setEnvExpiry(14)
     setEnvNewName(''); setEnvNewEmail(''); setEnvActiveRecip(null)
     setEnvFieldType('signature'); setEnvPage(0); setEnvResult(null)
+    setEnvTmplName(''); setEnvTmplSaving(false); setEnvTmplSaved(false)
+  }
+
+  async function envSaveTemplate() {
+    const name = envTmplName.trim() || envTitle.trim() || filename.replace(/\.pdf$/i, '')
+    setEnvTmplSaving(true)
+    try {
+      const body = {
+        name,
+        job_id: jobId,
+        recipients: envRecips.map(r => ({
+          name: r.name, email: r.email, order_index: r.order,
+          required: true, color: r.color,
+        })),
+        fields: envFields.map(f => {
+          const ri = envRecips.findIndex(r => r.id === f.recipId)
+          return { recipient_index: ri, page: f.page, x0: f.x0, y0: f.y0, x1: f.x1, y1: f.y1,
+                   field_type: f.type, required: true }
+        }),
+      }
+      const res = await fetch('/pdf/api/envelope-templates', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (res.ok) {
+        setEnvTmplSaved(true)
+      } else {
+        const data = await res.json()
+        toast(data.error ?? 'Failed to save template')
+      }
+    } finally {
+      setEnvTmplSaving(false)
+    }
   }
 
   function envAddRecip() {
@@ -3021,6 +3098,32 @@ export function Editor({ jobId }: { jobId: string }) {
                         Some signers have no fields assigned. They will be able to sign without placing a signature.
                       </p>
                     )}
+
+                    {/* Save as template */}
+                    <div className="border border-border rounded-xl p-4 bg-bg-surface space-y-2">
+                      <p className="text-xs font-medium text-fg-secondary">Save as template</p>
+                      <p className="text-xs text-fg-tertiary">
+                        Reuse these signers and field placements on future documents.
+                      </p>
+                      {envTmplSaved ? (
+                        <p className="text-xs text-green-600 font-medium">✓ Template saved</p>
+                      ) : (
+                        <div className="flex gap-2">
+                          <input
+                            value={envTmplName}
+                            onChange={e => setEnvTmplName(e.target.value)}
+                            placeholder={envTitle.trim() || filename.replace(/\.pdf$/i, '')}
+                            className="flex-1 border border-border rounded-lg px-3 py-1.5 text-sm bg-bg-base text-fg-primary"
+                          />
+                          <button
+                            onClick={envSaveTemplate}
+                            disabled={envTmplSaving}
+                            className="text-xs border border-border rounded-lg px-3 py-1.5 hover:bg-bg-hover disabled:opacity-40 text-fg-secondary shrink-0">
+                            {envTmplSaving ? 'Saving…' : 'Save'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </>
                 ) : (
                   /* Success state */

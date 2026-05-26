@@ -19,7 +19,7 @@ async function validateToken(token: string) {
       r.email AS recipient_email, r.status AS recipient_status,
       r.token_used, r.order_index,
       e.title, e.status AS envelope_status, e.creator_name, e.creator_email,
-      e.expires_at, e.page_count
+      e.expires_at, e.page_count, e.metadata
     FROM envelope_recipients r
     JOIN envelopes e ON e.id = r.envelope_id
     WHERE r.id = ${payload.r} AND e.id = ${payload.e}
@@ -69,6 +69,13 @@ export async function GET(_: NextRequest, { params }: Params) {
     WHERE id = ${ctx.recipient_id}
   `
 
+  const metaBranding = (ctx as any).metadata?.branding
+  const branding = {
+    display_name: metaBranding?.display_name || process.env.SIGNING_PAGE_DISPLAY_NAME || 'Foundry PDF',
+    logo_url: metaBranding?.logo_url || process.env.SIGNING_PAGE_LOGO_URL || '',
+    brand_color: metaBranding?.brand_color || process.env.SIGNING_PAGE_BRAND_COLOR || '#2563eb',
+  }
+
   return NextResponse.json({
     envelope_id: ctx.envelope_id,
     title: ctx.title,
@@ -81,6 +88,7 @@ export async function GET(_: NextRequest, { params }: Params) {
     page_count: info.pageCount,
     pages: info.pages,
     status: 'ready',
+    branding,
   })
 }
 

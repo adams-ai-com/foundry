@@ -1,3 +1,9 @@
+export interface SigningBranding {
+  display_name: string
+  logo_url: string
+  brand_color: string
+}
+
 export interface SigningWebhookPayload {
   event: 'signing_invitation' | 'signing_complete'
   recipient_email: string
@@ -6,6 +12,7 @@ export interface SigningWebhookPayload {
   creator_name?: string
   signing_url?: string
   envelope_id?: string
+  branding?: SigningBranding
 }
 
 export function fireSigningWebhook(payload: SigningWebhookPayload): void {

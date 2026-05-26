@@ -65,6 +65,7 @@ export default async function SignPage({ params }: Props) {
     <SigningClient
       token={token}
       initialData={data}
+      branding={data?.branding ?? null}
     />
   )
 }
@@ -89,7 +90,7 @@ function InfoPage({ title, heading, body }: { title: string; heading: string; bo
         <p className="text-xs text-gray-400 mb-1 uppercase tracking-wide">{title}</p>
         <h1 className="text-lg font-semibold text-gray-900 mb-2">{heading}</h1>
         <p className="text-sm text-gray-500">{body}</p>
-        <p className="text-xs text-gray-400 mt-8">Powered by Foundry PDF</p>
+        <p className="text-xs text-gray-400 mt-8">Powered by Foundry PDF · Open source</p>
       </div>
     </div>
   )
