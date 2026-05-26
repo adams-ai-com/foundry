@@ -24,7 +24,7 @@ function recipientsToApi(rs: Recipient[]): { name?: string; email: string }[] {
 }
 
 function threadReplyRecipients(thread: MailThread, replyAll: boolean): Recipient[] {
-  const others = thread.participants.filter((p) => p.email !== FROM_ADDRESS)
+  const others = thread.participants.filter((p) => p.email !== DEFAULT_FROM)
   return (replyAll ? others : others.slice(0, 1)).map((p) => ({
     email: p.email,
     name: p.name ?? undefined,
