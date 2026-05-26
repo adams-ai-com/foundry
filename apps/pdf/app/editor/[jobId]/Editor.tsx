@@ -221,6 +221,17 @@ function LazyThumb({ src, alt, pw, ph }: { src: string; alt: string; pw: number;
 
 export function Editor({ jobId }: { jobId: string }) {
   const router = useRouter()
+  // Auto-open envelope wizard when ?sign=1
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('sign') === '1') {
+      setEnvTitle(filename.replace(/\.pdf$/i, ''))
+      setEnvOpen(true)
+      const url = new URL(window.location.href)
+      url.searchParams.delete('sign')
+      window.history.replaceState({}, '', url.toString())
+    }
+  }, [])
 
   // Page state
   const [pageCount, setPageCount] = useState(0)
@@ -1425,9 +1436,9 @@ export function Editor({ jobId }: { jobId: string }) {
         <button
           onClick={() => { setEnvTitle(filename.replace(/\.pdf$/i, '')); setEnvOpen(true) }}
           title="Request signatures"
-          className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover shrink-0">
+          className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-semibold text-accent hover:bg-accent/10 shrink-0 border border-accent/30">
           <Icon d={ICONS.fieldSig} />
-          <span className="hidden xl:block">Signatures</span>
+          <span className="hidden xl:block">Send for signing</span>
         </button>
         <Sep />
         <a href={`/pdf/api/pdf/${jobId}/download`} title="Download PDF"
@@ -2813,7 +2824,29 @@ export function Editor({ jobId }: { jobId: string }) {
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <span className="text-xs text-fg-tertiary">Signs #{i + 1}</span>
-                          <button onClick={() => envRemoveRecip(r.id)} className="text-fg-tertiary hover:text-danger ml-1">×</button>
+                          <button
+                            onClick={() => {
+                              if (i === 0) return
+                              setEnvRecips(prev => {
+                                const a = [...prev]
+                                ;[a[i - 1], a[i]] = [a[i], a[i - 1]]
+                                return a.map((r, idx) => ({ ...r, order: idx }))
+                              })
+                            }}
+                            disabled={i === 0}
+                            className="text-fg-tertiary hover:text-fg-primary disabled:opacity-30 text-xs px-0.5">↑</button>
+                          <button
+                            onClick={() => {
+                              if (i === envRecips.length - 1) return
+                              setEnvRecips(prev => {
+                                const a = [...prev]
+                                ;[a[i], a[i + 1]] = [a[i + 1], a[i]]
+                                return a.map((r, idx) => ({ ...r, order: idx }))
+                              })
+                            }}
+                            disabled={i === envRecips.length - 1}
+                            className="text-fg-tertiary hover:text-fg-primary disabled:opacity-30 text-xs px-0.5">↓</button>
+                          <button onClick={() => envRemoveRecip(r.id)} className="text-fg-tertiary hover:text-danger ml-0.5">×</button>
                         </div>
                       </div>
                     ))}

@@ -96,9 +96,21 @@ export default function PdfHome() {
 
   return (
     <div className="max-w-2xl w-full mx-auto px-6 py-10">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold tracking-tight text-fg-primary">Foundry PDF</h1>
-        <p className="text-sm text-fg-tertiary mt-1">Upload a PDF to view, edit, create forms, convert, or redact.</p>
+      <div className="mb-6 flex items-end justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-fg-primary">Foundry PDF</h1>
+          <p className="text-sm text-fg-tertiary mt-1">Upload a PDF to edit, create forms, convert, redact, or send for signing.</p>
+        </div>
+        <a href="/pdf/envelopes"
+          className="flex items-center gap-1.5 text-sm font-medium text-fg-secondary hover:text-accent border border-border rounded-lg px-3 py-1.5 hover:border-accent/40 transition-colors">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="9" y1="15" x2="15" y2="15"/>
+            <line x1="12" y1="12" x2="12" y2="18"/>
+          </svg>
+          Envelopes
+        </a>
       </div>
 
       {/* Drop zone */}
@@ -201,6 +213,13 @@ export default function PdfHome() {
                     className="text-fg-tertiary hover:text-fg-primary shrink-0" onClick={e => e.stopPropagation()}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                    </svg>
+                  </a>
+                  <a href={`/pdf/editor/${f.jobId}?sign=1`} title="Send for signing"
+                    className="text-fg-tertiary hover:text-accent shrink-0" onClick={e => e.stopPropagation()}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                      <path d="M12 20h9"/>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
                     </svg>
                   </a>
                 </li>
