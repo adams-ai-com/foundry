@@ -35,3 +35,8 @@ Thumbs.db
 # testing
 coverage
 tsconfig.tsbuildinfo
+
+# playwright
+test-results/
+playwright-report/
+.pw-browsers/

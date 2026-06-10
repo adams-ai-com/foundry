@@ -4,6 +4,7 @@ import { fetchProc } from '@/lib/proc'
 import { db } from '@/lib/db'
 import { generateToken, generateExpiryTimestamp } from '@/lib/tokens'
 import { fireSigningWebhook } from '@/lib/webhook'
+import { isValidEmail } from '@/lib/email'
 
 // ── GET /api/envelopes — list creator's envelopes ────────────────────────────
 
@@ -66,6 +67,12 @@ export async function POST(req: NextRequest) {
   if (!fields?.length) {
     return NextResponse.json({ error: 'At least one field required' }, { status: 400 })
   }
+  const badEmails = recipients.filter(r => !isValidEmail(r.email ?? ''))
+  if (badEmails.length) {
+    return NextResponse.json({
+      error: `Invalid recipient email: ${badEmails.map(r => r.email).slice(0, 3).join(', ')}`,
+    }, { status: 400 })
+  }
 
   // 1. Create envelope ID and copy PDF to persistent store
   const envelopeId = crypto.randomUUID()
@@ -121,7 +128,7 @@ export async function POST(req: NextRequest) {
     await sql`
       INSERT INTO envelopes (id, job_id, creator_id, creator_name, creator_email, title, status, page_count, expires_at, metadata)
       VALUES (${envelopeId}, ${job_id}, ${session.userId}, ${session.name ?? session.email}, ${session.email},
-              ${title.trim()}, 'sent', ${pageCount}, ${expiresAt}, ${JSON.stringify(metadata)})
+              ${title.trim()}, 'sent', ${pageCount}, ${expiresAt}, ${db.json(metadata as any)})
     `
 
     for (const r of recipientsWithFinalTokens) {

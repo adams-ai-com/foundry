@@ -135,16 +135,26 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: 'Link already used' }, { status: 409 })
   }
 
+  // Release the claim so the signer can retry — used on every failure path
+  // after the claim. Without this, a single rejected request bricks the link.
+  const releaseClaim = () => db`
+    UPDATE envelope_recipients
+    SET token_used = false
+    WHERE id = ${ctx.recipient_id} AND status != 'signed'
+  `
+
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null
   const ua = req.headers.get('user-agent') ?? null
 
   let body: { fields: FieldSubmission[]; signer_name?: string; signer_email?: string; foundry_user_id?: string }
   try { body = await req.json() } catch {
+    await releaseClaim()
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
   const { fields: submissions, signer_name, signer_email, foundry_user_id } = body
   if (!submissions?.length) {
+    await releaseClaim()
     return NextResponse.json({ error: 'fields required' }, { status: 400 })
   }
 
@@ -157,6 +167,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (rf.field_type === 'date' || rf.field_type === 'name') continue
     const sub = submissions.find(s => s.field_id === rf.id)
     if (!sub?.image_b64) {
+      await releaseClaim()
       return NextResponse.json({ error: `Field ${rf.id} requires a signature` }, { status: 400 })
     }
   }
@@ -202,12 +213,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   })
   if (!embedRes.ok) {
     const detail = await embedRes.json().catch(() => ({}))
-    // Roll back the token claim so the signer can retry
-    await db`
-      UPDATE envelope_recipients
-      SET token_used = false
-      WHERE id = ${ctx.recipient_id} AND status != 'signed'
-    `
+    await releaseClaim()
     return NextResponse.json({ error: 'Signing failed', detail }, { status: 502 })
   }
   const embedData = await embedRes.json()
@@ -242,7 +248,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   // Check if envelope is complete or advance to next order tier
   const remaining = await db`
-    SELECT id, order_index, status FROM envelope_recipients
+    SELECT id, name, email, order_index, status FROM envelope_recipients
     WHERE envelope_id = ${ctx.envelope_id} AND required = true AND status != 'signed'
     ORDER BY order_index
   `

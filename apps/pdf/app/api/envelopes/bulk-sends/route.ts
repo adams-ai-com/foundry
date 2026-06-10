@@ -159,7 +159,7 @@ export async function POST(req: NextRequest) {
         VALUES (${rec.envelopeId}, ${template_id}, ${session.userId},
                 ${session.name ?? session.email}, ${session.email},
                 ${rec.title}, 'draft', ${pageCount}, ${expiresAt},
-                ${JSON.stringify({ branding })}, ${bulkId})
+                ${sql.json({ branding } as any)}, ${bulkId})
       `
 
       await sql`

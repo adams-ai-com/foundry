@@ -66,8 +66,8 @@ export async function POST(req: NextRequest) {
       ${session.name ?? session.email ?? session.userId},
       ${name.trim()},
       ${page_count},
-      ${JSON.stringify(recipients)},
-      ${JSON.stringify(fields ?? [])}
+      ${db.json(recipients as any)},
+      ${db.json((fields ?? []) as any)}
     )
   `
 
