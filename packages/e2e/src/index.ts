@@ -91,13 +91,17 @@ export function cookieHeader(sessionId: string) {
  * 5 failures lock the account for 15 minutes.
  * Idempotent: creates on first call, reuses (and unlocks) afterwards.
  */
-export async function ensureTotpTestUser(): Promise<{ userId: string; email: string; secret: string; password: string }> {
-  const sql = wsDb()
-  // Same shape as workspace admin-actions: pbkdf2:100000:<salt>:<sha512-base64>
+/** Same shape as workspace admin-actions: pbkdf2:100000:<salt>:<sha512-base64> */
+async function mintPasswordHash(password: string): Promise<string> {
   const { pbkdf2Sync } = await import('crypto')
   const salt = randomBytes(16).toString('hex')
-  const hash = pbkdf2Sync(E2E_TOTP_PASSWORD, salt, 100_000, 64, 'sha512').toString('base64')
-  const passwordHash = `pbkdf2:100000:${salt}:${hash}`
+  const hash = pbkdf2Sync(password, salt, 100_000, 64, 'sha512').toString('base64')
+  return `pbkdf2:100000:${salt}:${hash}`
+}
+
+export async function ensureTotpTestUser(): Promise<{ userId: string; email: string; secret: string; password: string }> {
+  const sql = wsDb()
+  const passwordHash = await mintPasswordHash(E2E_TOTP_PASSWORD)
 
   const [existing] = await sql`SELECT id, totp_secret, password_hash FROM users WHERE email = ${E2E_TOTP_EMAIL}`
   if (existing) {
@@ -122,6 +126,28 @@ export async function ensureTotpTestUser(): Promise<{ userId: string; email: str
   return { userId: id, email: E2E_TOTP_EMAIL, secret, password: E2E_TOTP_PASSWORD }
 }
 
+export const E2E_PW_EMAIL = 'e2e-pwonly@test.local'
+
+/** Password-only user (NO totp_secret) — pins the direct password login path. */
+export async function ensurePasswordOnlyTestUser(): Promise<{ userId: string; email: string; password: string }> {
+  const sql = wsDb()
+  const [existing] = await sql`SELECT id FROM users WHERE email = ${E2E_PW_EMAIL}`
+  if (existing) return { userId: existing.id, email: E2E_PW_EMAIL, password: E2E_TOTP_PASSWORD }
+  const id = randomUUID()
+  const passwordHash = await mintPasswordHash(E2E_TOTP_PASSWORD)
+  await sql`
+    INSERT INTO users (id, email, name, password_hash)
+    VALUES (${id}, ${E2E_PW_EMAIL}, ${'E2E Password Tester'}, ${passwordHash})`
+  const { orgId } = await testUser()
+  if (orgId) {
+    await sql`
+      INSERT INTO org_members (user_id, org_id, role)
+      VALUES (${id}, ${orgId}, 'member')
+      ON CONFLICT DO NOTHING`
+  }
+  return { userId: id, email: E2E_PW_EMAIL, password: E2E_TOTP_PASSWORD }
+}
+
 export async function resetTotpLock(userId: string) {
   await wsDb()`
     UPDATE users SET totp_failed_count = 0, totp_locked_until = NULL WHERE id = ${userId}`
@@ -137,7 +163,8 @@ export async function totpLockState(userId: string) {
 export async function cleanupSessions() {
   await wsDb()`DELETE FROM sessions WHERE user_agent = ${E2E_USER_AGENT}`
   await wsDb()`
-    DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE email = ${E2E_TOTP_EMAIL})`
+    DELETE FROM sessions WHERE user_id IN
+      (SELECT id FROM users WHERE email IN (${E2E_TOTP_EMAIL}, ${E2E_PW_EMAIL}))`
 }
 
 export async function closeDb() {

@@ -69,7 +69,7 @@ export async function passwordLogin(formData: FormData) {
   if (!password) return { error: 'Password required' }
 
   const rows = await db`
-    SELECT id, password_hash, deactivated_at FROM users WHERE email = ${email}
+    SELECT id, password_hash, deactivated_at, totp_secret FROM users WHERE email = ${email}
   `
   if (!rows.length || !rows[0].password_hash) {
     await writeAudit({ orgId: null, actorEmail: email, action: 'auth.sign_in_failed', metadata: { reason: 'no_password' } })
@@ -96,6 +96,13 @@ export async function passwordLogin(formData: FormData) {
     const orgRows = await db`SELECT org_id FROM org_members WHERE user_id = ${user.id} LIMIT 1`
     await writeAudit({ orgId: (orgRows[0]?.org_id ?? null) as string | null, actorId: user.id as string, actorEmail: email, action: 'auth.sign_in_failed', metadata: { reason: 'bad_password' } })
     return { error: 'Invalid credentials' }
+  }
+
+  // Password verified. A user with TOTP configured must still present the
+  // second factor — the verify step owns session creation. EMAIL_COOKIE stays
+  // set because /login/verify requires it.
+  if (user.totp_secret) {
+    redirect('/login/verify')
   }
 
   jar.delete(EMAIL_COOKIE)
@@ -129,7 +136,7 @@ export async function verifyTotp(formData: FormData) {
   if (!code || code.length !== 6) return { error: 'Enter the 6-digit code' }
 
   const rows = await db`
-    SELECT id, totp_secret, deactivated_at, totp_failed_count, totp_locked_until
+    SELECT id, email, totp_secret, deactivated_at, totp_failed_count, totp_locked_until
     FROM users WHERE email = ${email}
   `
   if (!rows.length || !rows[0].totp_secret) redirect('/login/setup')

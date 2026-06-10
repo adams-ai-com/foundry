@@ -3,6 +3,7 @@ import {
   E2E_TOTP_EMAIL,
   authenticator,
   cookieHeader,
+  ensurePasswordOnlyTestUser,
   ensureTotpTestUser,
   mintSession,
   resetTotpLock,
@@ -49,17 +50,34 @@ test.describe.serial('workspace — login flows', () => {
     await wsDb()`DELETE FROM sessions WHERE user_id = ${user.userId}`
   })
 
-  test('password login establishes a session', async ({ page }) => {
-    // NOTE (observed 2026-06-10): password login does NOT challenge for TOTP
-    // even when the user has a TOTP secret configured. Flagged to operator as
-    // a security posture question; this test pins current behavior.
+  test('password login with TOTP configured requires the code step', async ({ page }) => {
     await submitEmailStep(page, user.email)
     await page.fill('input[name="password"]', user.password)
     await page.click('button[type="submit"]')
 
+    // must land on the verify step with NO session yet
+    await page.waitForURL(/\/login\/verify/, { timeout: 15_000 })
+    expect(await sessionCount(user.userId)).toBe(0)
+
+    // completing the code step establishes the session
+    await page.waitForSelector('input[name="code"]', { timeout: 15_000 })
+    await submitCode(page, authenticator.generate(user.secret))
     await expect
       .poll(() => sessionCount(user.userId), { timeout: 15_000 })
       .toBeGreaterThan(0)
+  })
+
+  test('password-only user (no TOTP) logs in directly', async ({ page }) => {
+    const pwUser = await ensurePasswordOnlyTestUser()
+    await wsDb()`DELETE FROM sessions WHERE user_id = ${pwUser.userId}`
+    await submitEmailStep(page, pwUser.email)
+    await page.fill('input[name="password"]', pwUser.password)
+    await page.click('button[type="submit"]')
+
+    await expect
+      .poll(() => sessionCount(pwUser.userId), { timeout: 15_000 })
+      .toBeGreaterThan(0)
+    await wsDb()`DELETE FROM sessions WHERE user_id = ${pwUser.userId}`
   })
 
   test('wrong password does not create a session', async ({ page }) => {
