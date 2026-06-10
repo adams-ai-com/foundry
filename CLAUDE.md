@@ -7,6 +7,25 @@ pnpm monorepo (Turborepo). AGPL-licensed open-source workspace replacing MS 365 
 - **SSH**: `sudo -u manager ssh -n -i ~manager/.ssh/id_ed25519 manager@142.93.61.78 '<cmd>'`
 - **Repo on server**: cloned to `/var/www/foundry` as `foundry` unix user from `github.com/adams-ai-com/foundry`
 
+## Deploying — ALWAYS use foundry-deploy (e2e gate on every deploy)
+
+```
+sudo /usr/local/bin/foundry-deploy <app>   # on foundry-srv
+# apps: workspace docs sheets mail mailserver wiki channels sites pdf pdf-proc
+```
+
+One command = build -> systemctl restart -> FULL e2e verification (e2e-suite
+61 tests across all apps + the 28-test PDF deep suite). Exit nonzero means
+the deploy did NOT verify — fix or roll back before walking away. Log at
+/var/log/foundry-deploy.log. Canonical script: scripts/foundry-deploy
+(git-tracked); installed copy: /usr/local/bin/foundry-deploy.
+
+Do NOT hand-roll pnpm build + systemctl restart anymore — that skips the gate.
+Tests live in e2e-suite/ (all apps) and apps/pdf/e2e/ (PDF deep); shared
+helpers in packages/e2e. Run suites standalone:
+`cd /var/www/foundry/e2e-suite && ./node_modules/.bin/playwright test`
+(as foundry, HOME=/home/foundry).
+
 ## Monorepo layout
 - `apps/workspace` — Auth shell: magic-link login, org management, app launcher (port 3000) ← **entry point**
 - `apps/docs` — Foundry Docs (word processor, port 3001)
