@@ -24,7 +24,7 @@ REPO=/var/www/foundry
 STATE_DIR=/var/lib/foundry-promote
 APPS_FILE=/etc/foundry-promote/staging-apps
 LOG=/var/log/foundry-promote.log
-DEPLOY_WAIT_SECS=${DEPLOY_WAIT_SECS:-900}
+DEPLOY_WAIT_SECS=${DEPLOY_WAIT_SECS:-2400}
 
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$LOG"; }
 as_foundry() { sudo -u foundry env HOME=/home/foundry "$@"; }
