@@ -29,7 +29,9 @@ export MAIL_BASE="http://127.0.0.1:4004"
 export CHANNELS_BASE="http://127.0.0.1:4008"; export CHANNELS_DB_URL=$(chan_stg_db)
 # sites — staging 4007
 export SITES_BASE="http://127.0.0.1:4007"
+# workspace — staging 4000 (shares the PROD foundry_workspace auth DB; no clone)
+export WORKSPACE_BASE="http://127.0.0.1:4000"
 
 # Default: every converted app's spec. Override with explicit spec args.
-SPECS=${@:-specs/wiki.spec.ts specs/docs.spec.ts specs/sheets.spec.ts specs/mail.spec.ts specs/channels.spec.ts specs/sites.spec.ts}
+SPECS=${@:-specs/wiki.spec.ts specs/docs.spec.ts specs/sheets.spec.ts specs/mail.spec.ts specs/channels.spec.ts specs/sites.spec.ts specs/workspace.spec.ts}
 exec ./node_modules/.bin/playwright test $SPECS --reporter=line

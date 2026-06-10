@@ -20,7 +20,7 @@ MONOREPO=/var/www/foundry
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$LOG"; }
 
 case "$APP" in
-  workspace)  PKG=@foundry/workspace  SVC=foundry-workspace ;;
+  workspace)  echo "workspace is on Coolify now — deploy by pushing to gitea (staging->staging, main->production)" >&2; exit 2 ;;
   docs)       echo "docs is on Coolify now — deploy by pushing to gitea (staging branch -> staging, main -> production)" >&2; exit 2 ;;
   sheets)       echo "sheets is on Coolify now — deploy by pushing to gitea (staging branch -> staging, main -> production)" >&2; exit 2 ;;
   mail)       echo "mail is on Coolify now — deploy by pushing to gitea (staging branch -> staging, main -> production)" >&2; exit 2 ;;

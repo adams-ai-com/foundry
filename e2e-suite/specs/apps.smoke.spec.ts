@@ -14,7 +14,7 @@ interface AppTarget {
 }
 
 const APPS: AppTarget[] = [
-  { name: 'workspace', base: 'http://127.0.0.1:3000', home: '/', marker: /foundry/i },
+  { name: 'workspace', base: 'http://127.0.0.1:4100', home: '/', marker: /foundry/i },
   { name: 'docs', base: 'http://127.0.0.1:4101', home: '/docs', marker: /docs|document/i },
   { name: 'sheets', base: 'http://127.0.0.1:4102', home: '/sheets', marker: /sheet/i },
   { name: 'mail', base: 'http://127.0.0.1:4104', home: '/mail', marker: /mail|inbox/i },
@@ -79,7 +79,7 @@ test.describe('pdf-proc (API, port 3200)', () => {
 
 test.describe('auth shell', () => {
   test('workspace login page renders', async ({ page }) => {
-    const res = await page.goto('http://127.0.0.1:3000/login')
+    const res = await page.goto('http://127.0.0.1:4100/login')
     expect(res!.status()).toBeLessThan(400)
     await expect(page.locator('body')).toContainText(/sign in|email|log ?in/i)
   })

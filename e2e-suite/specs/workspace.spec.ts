@@ -11,7 +11,7 @@ import {
   wsDb,
 } from '@foundry/e2e'
 
-const BASE = 'http://127.0.0.1:3000'
+const BASE = process.env.WORKSPACE_BASE ?? 'http://127.0.0.1:4100'
 
 /** Email step — sets the foundry_login_email cookie and lands on the password page. */
 async function submitEmailStep(page: import('@playwright/test').Page, email: string) {
