@@ -1,8 +1,10 @@
 import { test, expect } from '@playwright/test'
 import { randomUUID } from 'crypto'
-import { E2E_PREFIX, dbFromEnvFile, mintSession } from '@foundry/e2e'
+import { E2E_PREFIX, dbFromEnvFile, dbFromUrl, mintSession } from '@foundry/e2e'
 
-const BASE = 'http://127.0.0.1:3005'
+// WIKI_BASE / WIKI_DB_URL override the live-production defaults so the same
+// spec can verify a staging container (used by the staging test runner).
+const BASE = process.env.WIKI_BASE ?? 'http://127.0.0.1:3005'
 const ENV = '/var/www/foundry/apps/wiki/.env'
 
 const TIPTAP_DOC = {
@@ -13,7 +15,8 @@ const TIPTAP_DOC = {
 test.describe.serial('wiki', () => {
   let sess: string
   let pageId: string
-  const db = () => dbFromEnvFile(ENV)
+  const db = () =>
+    process.env.WIKI_DB_URL ? dbFromUrl(process.env.WIKI_DB_URL) : dbFromEnvFile(ENV)
 
   test.beforeAll(async () => {
     sess = await mintSession()
