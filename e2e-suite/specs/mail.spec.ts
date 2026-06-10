@@ -87,7 +87,7 @@ test.describe('mailserver API', () => {
 test.describe('mail client UI', () => {
   test('inbox shell renders with account sidebar', async ({ page, context }) => {
     const sess = await mintSession()
-    const base = 'http://127.0.0.1:3004'
+    const base = process.env.MAIL_BASE ?? 'http://127.0.0.1:4104'
     await context.addCookies([{ name: 'foundry_session', value: sess, url: base }])
     const res = await page.goto(`${base}/mail`)
     expect(res!.status()).toBeLessThan(400)

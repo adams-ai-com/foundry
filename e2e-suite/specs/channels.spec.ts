@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test'
 import { randomUUID } from 'crypto'
-import { E2E_PREFIX, dbFromEnvFile, mintSession, testUser, wsDb } from '@foundry/e2e'
+import { E2E_PREFIX, dbFromEnvFile, dbFromUrl, mintSession, testUser, wsDb } from '@foundry/e2e'
 
 // Channels read path with seeded org data. Video calls (LiveKit), AI summaries
 // (llmbox), and importers are external-dependency paths — deliberately not
 // exercised here; they need mocks when their suites are built.
-const BASE = 'http://127.0.0.1:3008'
+const BASE = process.env.CHANNELS_BASE ?? 'http://127.0.0.1:4108'
 const ENV = '/var/www/foundry/apps/channels/.env'
 
 test.describe.serial('channels', () => {
@@ -15,7 +15,8 @@ test.describe.serial('channels', () => {
   let userId: string
   let channelId: string
   let topicId: string
-  const db = () => dbFromEnvFile(ENV, 'CHANNELS_DATABASE_URL')
+  const db = () =>
+    process.env.CHANNELS_DB_URL ? dbFromUrl(process.env.CHANNELS_DB_URL) : dbFromEnvFile(ENV, 'CHANNELS_DATABASE_URL')
 
   test.beforeAll(async () => {
     sess = await mintSession()

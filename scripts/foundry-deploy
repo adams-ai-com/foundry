@@ -23,11 +23,11 @@ case "$APP" in
   workspace)  PKG=@foundry/workspace  SVC=foundry-workspace ;;
   docs)       echo "docs is on Coolify now — deploy by pushing to gitea (staging branch -> staging, main -> production)" >&2; exit 2 ;;
   sheets)       echo "sheets is on Coolify now — deploy by pushing to gitea (staging branch -> staging, main -> production)" >&2; exit 2 ;;
-  mail)       PKG=@foundry/mail       SVC=foundry-mail-client ;;
+  mail)       echo "mail is on Coolify now — deploy by pushing to gitea (staging branch -> staging, main -> production)" >&2; exit 2 ;;
   mailserver) PKG=@foundry/mailserver SVC=foundry-mail ;;
   wiki)       echo "wiki is on Coolify now — deploy by pushing to gitea (staging branch -> staging, main -> production)" >&2; exit 2 ;;
-  channels)   PKG=@foundry/channels   SVC=foundry-channels ;;
-  sites)      PKG=@foundry/sites      SVC=foundry-sites ;;
+  channels)       echo "channels is on Coolify now — deploy by pushing to gitea (staging branch -> staging, main -> production)" >&2; exit 2 ;;
+  sites)       echo "sites is on Coolify now — deploy by pushing to gitea (staging branch -> staging, main -> production)" >&2; exit 2 ;;
   pdf)        PKG=@foundry/pdf        SVC=foundry-pdf ;;
   pdf-proc)   PKG=""                  SVC=foundry-pdf-proc ;;
   *) echo "unknown app: $APP" >&2; exit 2 ;;

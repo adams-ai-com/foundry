@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import { randomUUID } from 'crypto'
 import { mintSession } from '@foundry/e2e'
 
-const BASE = 'http://127.0.0.1:3007'
+const BASE = process.env.SITES_BASE ?? 'http://127.0.0.1:4107'
 
 test.describe('sites', () => {
   test('health endpoint answers', async ({ request }) => {
