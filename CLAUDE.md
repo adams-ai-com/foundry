@@ -7,7 +7,22 @@ pnpm monorepo (Turborepo). AGPL-licensed open-source workspace replacing MS 365 
 - **SSH**: `sudo -u manager ssh -n -i ~manager/.ssh/id_ed25519 manager@142.93.61.78 '<cmd>'`
 - **Repo on server**: cloned to `/var/www/foundry` as `foundry` unix user from `github.com/adams-ai-com/foundry`
 
-## Deploying — ALWAYS use foundry-deploy (e2e gate on every deploy)
+## Deploying — converted apps: push to STAGING only (promotion is automatic)
+
+Apps converted to Coolify (currently: **wiki**) deploy via git push:
+
+
+
+Flow: push to staging -> Coolify auto-deploys the staging container ->
+foundry-promote (systemd timer, every minute) waits for the staging
+container to run your commit, runs e2e-suite/run-staging-tests.sh, and on
+GREEN fast-forwards main -> Coolify auto-deploys production. RED = main
+does not move; see /var/log/foundry-promote.log and
+/var/lib/foundry-promote/status. Each staging SHA is gated once — push a
+fix to staging to re-trigger. Converted-app registry:
+/etc/foundry-promote/staging-apps.
+
+## Deploying unconverted apps — foundry-deploy (e2e gate on every deploy)
 
 ```
 sudo /usr/local/bin/foundry-deploy <app>   # on foundry-srv

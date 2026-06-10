@@ -1,0 +1,96 @@
+#!/bin/bash
+# foundry-promote — staging → production promotion gate for the Foundry suite.
+#
+# Runs from a systemd timer (every minute). Flow per new commit on the gitea
+# `staging` branch:
+#   1. wait until every converted app's STAGING container runs that commit
+#      (Coolify tags container images with the commit SHA)
+#   2. run the staging test suite (e2e-suite/run-staging-tests.sh)
+#   3. GREEN  -> fast-forward push the commit to `main` (Coolify then
+#               auto-deploys production via its webhook)
+#      RED    -> production does not move; status file records the block
+#
+# Each staging SHA is processed exactly once (state in /var/lib/foundry-promote).
+# A red run is NOT retried automatically — push a fix to staging instead.
+# Fast-forward-only push: this script can never rewrite main history.
+#
+# Converted apps are listed in /etc/foundry-promote/staging-apps
+# (lines: <coolify-app-uuid> <label>). Update it as apps convert.
+#
+# Canonical copy: /var/www/foundry/scripts/foundry-promote (git-tracked).
+set -uo pipefail
+
+REPO=/var/www/foundry
+STATE_DIR=/var/lib/foundry-promote
+APPS_FILE=/etc/foundry-promote/staging-apps
+LOG=/var/log/foundry-promote.log
+DEPLOY_WAIT_SECS=${DEPLOY_WAIT_SECS:-900}
+
+log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$LOG"; }
+as_foundry() { sudo -u foundry env HOME=/home/foundry "$@"; }
+
+exec 9>/var/lock/foundry-promote.lock
+flock -n 9 || exit 0
+mkdir -p "$STATE_DIR"
+
+TARGET=$(as_foundry git -C "$REPO" ls-remote gitea-foundry refs/heads/staging 2>/dev/null | awk '{print $1}')
+MAIN=$(as_foundry git -C "$REPO" ls-remote gitea-foundry refs/heads/main 2>/dev/null | awk '{print $1}')
+if [ -z "$TARGET" ] || [ -z "$MAIN" ]; then
+  log "cannot read branch SHAs from gitea — skipping cycle"
+  exit 1
+fi
+
+if [ "$TARGET" = "$MAIN" ]; then
+  echo "$TARGET" > "$STATE_DIR/last-processed"
+  exit 0   # nothing to promote
+fi
+
+LAST=$(cat "$STATE_DIR/last-processed" 2>/dev/null || true)
+if [ "$TARGET" = "$LAST" ]; then
+  exit 0   # already handled (promoted or blocked) — new pushes re-trigger
+fi
+
+log "=== new staging commit $TARGET (main at ${MAIN:0:12}) ==="
+
+# 1. Wait until every converted staging app runs TARGET
+deadline=$(( $(date +%s) + DEPLOY_WAIT_SECS ))
+while :; do
+  pending=""
+  while read -r uuid label; do
+    [ -z "$uuid" ] && continue
+    img=$(docker ps --filter "name=$uuid" --format '{{.Image}}' | head -1)
+    [ "${img#*:}" = "$TARGET" ] || pending="$pending $label"
+  done < "$APPS_FILE"
+  [ -z "$pending" ] && break
+  if [ "$(date +%s)" -ge "$deadline" ]; then
+    log "TIMEOUT waiting for staging deploys of:$pending — production NOT moved"
+    echo "blocked $TARGET staging-deploy-timeout $(date -u +%FT%TZ)" > "$STATE_DIR/status"
+    echo "$TARGET" > "$STATE_DIR/last-processed"
+    exit 1
+  fi
+  sleep 15
+done
+log "staging containers are on $TARGET"
+
+# 2. Staging test suite
+if as_foundry "$REPO/e2e-suite/run-staging-tests.sh" >>"$LOG" 2>&1; then
+  log "staging tests GREEN"
+else
+  log "staging tests RED — production NOT moved. Inspect $REPO/e2e-suite/test-results/ and $LOG"
+  echo "blocked $TARGET tests-failed $(date -u +%FT%TZ)" > "$STATE_DIR/status"
+  echo "$TARGET" > "$STATE_DIR/last-processed"
+  exit 1
+fi
+
+# 3. Promote — fast-forward only
+if as_foundry git -C "$REPO" push gitea "$TARGET:refs/heads/main" >>"$LOG" 2>&1; then
+  log "PROMOTED $TARGET to main — Coolify deploys production"
+  echo "promoted $TARGET $(date -u +%FT%TZ)" > "$STATE_DIR/status"
+else
+  log "PROMOTION PUSH FAILED (non-fast-forward or auth) — inspect manually"
+  echo "blocked $TARGET push-failed $(date -u +%FT%TZ)" > "$STATE_DIR/status"
+  echo "$TARGET" > "$STATE_DIR/last-processed"
+  exit 1
+fi
+
+echo "$TARGET" > "$STATE_DIR/last-processed"
