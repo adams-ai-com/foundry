@@ -25,7 +25,7 @@ case "$APP" in
   sheets)     PKG=@foundry/sheets     SVC=foundry-sheets ;;
   mail)       PKG=@foundry/mail       SVC=foundry-mail-client ;;
   mailserver) PKG=@foundry/mailserver SVC=foundry-mail ;;
-  wiki)       PKG=@foundry/wiki       SVC=foundry-wiki ;;
+  wiki)       echo "wiki is on Coolify now — deploy by pushing to gitea (staging branch -> staging, main -> production)" >&2; exit 2 ;;
   channels)   PKG=@foundry/channels   SVC=foundry-channels ;;
   sites)      PKG=@foundry/sites      SVC=foundry-sites ;;
   pdf)        PKG=@foundry/pdf        SVC=foundry-pdf ;;
