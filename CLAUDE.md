@@ -15,12 +15,13 @@ pnpm monorepo (Turborepo). AGPL-licensed open-source workspace replacing MS 365 
 - `apps/wiki` — Foundry Wiki (knowledge base, port 3005)
 - `apps/sites` — Foundry Sites (CMS, port 3007)
 - `apps/channels` — Foundry Channels (real-time chat + video + AI memory, port 3008) ← C15a live
+- `apps/pdf` — Foundry PDF (PDF editing, forms, conversion, redaction, port 3009) ← P1 live
 - `services/mailserver` — Foundry Mail server (Node.js, port 3100, REST API + SMTP)
 - `packages/` — shared libs
 
 ## Public URL
 `https://foundry.adams-ai.com` → nginx → workspace shell at port 3000.
-nginx routes: `/docs`→3001, `/sheets`→3003, `/mail`→3004, `/wiki`→3005, `/sites`→3007, `/channels`→3008, `/import`→3008, `/api/import`→3008, `/api/sse`→3008 (no buffering), `/org`→3008, `/`→3000.
+nginx routes: `/pdf`→3009, `/docs`→3001, `/sheets`→3003, `/mail`→3004, `/wiki`→3005, `/sites`→3007, `/channels`→3008, `/import`→3008, `/api/import`→3008, `/api/sse`→3008 (no buffering), `/org`→3008, `/`→3000.
 Cloudflare proxied (free TLS). Self-signed origin cert at `/etc/ssl/certs/foundry-origin.crt`.
 
 ## Services on foundry-srv
@@ -34,6 +35,8 @@ Cloudflare proxied (free TLS). Self-signed origin cert at `/etc/ssl/certs/foundr
 | Wiki | `foundry-wiki.service` | 3005 | `/var/www/foundry/apps/wiki/.env` |
 | Sites | `foundry-sites.service` | 3007 | `/var/www/foundry/apps/sites/.env` |
 | Channels | `foundry-channels.service` | 3008 | `/var/www/foundry/apps/channels/.env` |
+| PDF | `foundry-pdf.service` | 3009 | `/var/www/foundry/apps/pdf/.env` |
+| PDF proc | `foundry-pdf-proc.service` | 3200 (localhost) | `/etc/foundry/pdf-proc.env` (640 root:foundry) |
 | Mail server | `foundry-mail.service` | 3100 (localhost) | `/etc/foundry-mail/secrets.env` (640 root:foundry) |
 
 ## Workspace auth model
