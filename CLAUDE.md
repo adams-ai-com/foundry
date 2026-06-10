@@ -22,24 +22,17 @@ does not move; see /var/log/foundry-promote.log and
 fix to staging to re-trigger. Converted-app registry:
 /etc/foundry-promote/staging-apps.
 
-## Deploying unconverted apps — foundry-deploy (e2e gate on every deploy)
+## Running the test suites
 
+All apps are Coolify push-to-deploy (see section above); `foundry-deploy` is
+RETIRED. Tests live in `e2e-suite/` (all apps) and `apps/pdf/e2e/` (PDF deep);
+shared helpers in `packages/e2e`. The promoter runs them automatically on
+staging. Run standalone as the foundry user (HOME=/home/foundry):
 ```
-sudo /usr/local/bin/foundry-deploy <app>   # on foundry-srv
-# apps: workspace docs sheets mail mailserver wiki channels sites pdf pdf-proc
+cd /var/www/foundry/e2e-suite && ./node_modules/.bin/playwright test
+cd /var/www/foundry/apps/pdf && ./node_modules/.bin/playwright test   # PDF deep
+./e2e-suite/run-staging-tests.sh   # verify the staging containers
 ```
-
-One command = build -> systemctl restart -> FULL e2e verification (e2e-suite
-61 tests across all apps + the 28-test PDF deep suite). Exit nonzero means
-the deploy did NOT verify — fix or roll back before walking away. Log at
-/var/log/foundry-deploy.log. Canonical script: scripts/foundry-deploy
-(git-tracked); installed copy: /usr/local/bin/foundry-deploy.
-
-Do NOT hand-roll pnpm build + systemctl restart anymore — that skips the gate.
-Tests live in e2e-suite/ (all apps) and apps/pdf/e2e/ (PDF deep); shared
-helpers in packages/e2e. Run suites standalone:
-`cd /var/www/foundry/e2e-suite && ./node_modules/.bin/playwright test`
-(as foundry, HOME=/home/foundry).
 
 ## Monorepo layout
 - `apps/workspace` — Auth shell: magic-link login, org management, app launcher (port 3000) ← **entry point**
