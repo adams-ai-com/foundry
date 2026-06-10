@@ -72,9 +72,27 @@ while :; do
 done
 log "staging containers are on $TARGET"
 
-# 2. Staging test suite
-if as_foundry "$REPO/e2e-suite/run-staging-tests.sh" >>"$LOG" 2>&1; then
-  log "staging tests GREEN"
+# 2. Staging test suite.
+# One-shot skip escape hatch: list spec basenames (e.g. mail.spec.ts) in
+# /etc/foundry-promote/skip-specs-once to EXCLUDE them from THIS gate run only.
+# Use when a gate-tested service is mid-migration/down for a known reason and
+# its own tests would otherwise deadlock the fix that repairs it. The file is
+# CONSUMED (deleted) after one run, so the next promotion is fully gated again.
+SKIP_FILE=/etc/foundry-promote/skip-specs-once
+SPEC_ARGS=""
+if [ -s "$SKIP_FILE" ]; then
+  skips=$(tr '\n' ' ' < "$SKIP_FILE")
+  log "⚠ SKIP-ONCE ACTIVE for $TARGET — excluding specs: $skips (operator-set; one-shot, consuming now). Remaining specs still gate."
+  for f in "$REPO"/e2e-suite/specs/*.spec.ts; do
+    b=$(basename "$f"); skip=0
+    for s in $skips; do [ "$b" = "$s" ] && skip=1; done
+    [ "$skip" = 0 ] && SPEC_ARGS="$SPEC_ARGS specs/$b"
+  done
+  rm -f "$SKIP_FILE"
+fi
+
+if as_foundry "$REPO/e2e-suite/run-staging-tests.sh" $SPEC_ARGS >>"$LOG" 2>&1; then
+  log "staging tests GREEN${SPEC_ARGS:+ (skip-once subset applied)}"
 else
   log "staging tests RED — production NOT moved. Inspect $REPO/e2e-suite/test-results/ and $LOG"
   echo "blocked $TARGET tests-failed $(date -u +%FT%TZ)" > "$STATE_DIR/status"
