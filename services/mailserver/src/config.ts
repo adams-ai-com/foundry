@@ -1,6 +1,7 @@
 export const config = {
   db: process.env.DATABASE_URL ?? 'postgresql://foundry:foundry@localhost:5432/foundry_mail',
   apiPort: parseInt(process.env.API_PORT ?? '3002'),
+  apiHost: process.env.API_HOST ?? '127.0.0.1',
   apiKey: process.env.API_KEY ?? 'dev-key',
   smtp: {
     port: parseInt(process.env.SMTP_PORT ?? '0'),

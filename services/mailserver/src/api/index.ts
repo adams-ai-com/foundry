@@ -96,7 +96,7 @@ export async function buildApi() {
 
 export async function startApi() {
   const app = await buildApi()
-  await app.listen({ port: config.apiPort, host: '127.0.0.1' })
+  await app.listen({ port: config.apiPort, host: config.apiHost })
   console.log(`Mail API listening on port ${config.apiPort}`)
   return app
 }
