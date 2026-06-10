@@ -617,6 +617,15 @@ importers:
         specifier: ^1.50.0
         version: 1.60.0
 
+  e2e-suite:
+    devDependencies:
+      '@foundry/e2e':
+        specifier: workspace:*
+        version: link:../packages/e2e
+      '@playwright/test':
+        specifier: ^1.50.0
+        version: 1.60.0
+
   packages/ai:
     devDependencies:
       '@types/node':
@@ -647,6 +656,9 @@ importers:
 
   packages/e2e:
     dependencies:
+      otplib:
+        specifier: ^12.0.1
+        version: 12.0.1
       postgres:
         specifier: ^3.4.0
         version: 3.4.9

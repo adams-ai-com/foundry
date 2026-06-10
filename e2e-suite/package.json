@@ -1,9 +1,10 @@
 {
-  "name": "@foundry/e2e-smoke",
+  "name": "@foundry/e2e-suite",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "test": "playwright test"
+    "test": "playwright test",
+    "test:smoke": "playwright test specs/apps.smoke.spec.ts"
   },
   "devDependencies": {
     "@foundry/e2e": "workspace:*",

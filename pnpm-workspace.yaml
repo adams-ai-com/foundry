@@ -2,4 +2,4 @@ packages:
   - 'apps/*'
   - 'packages/*'
   - 'services/*'
-  - 'e2e-smoke'
+  - 'e2e-suite'

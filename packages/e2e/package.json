@@ -5,6 +5,7 @@
   "main": "src/index.ts",
   "types": "src/index.ts",
   "dependencies": {
+    "otplib": "^12.0.1",
     "postgres": "^3.4.0"
   }
 }
