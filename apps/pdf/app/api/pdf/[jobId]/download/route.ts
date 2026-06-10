@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@foundry/auth'
+import { assertJobOwner } from '@/lib/proc'
 
 interface Params {
   params: Promise<{ jobId: string }>
@@ -10,6 +11,8 @@ export async function GET(req: NextRequest, { params }: Params) {
   if (!session) return new NextResponse('Unauthorized', { status: 401 })
 
   const { jobId } = await params
+  const deny = await assertJobOwner(jobId, session.userId)
+  if (deny) return deny
   const procUrl = process.env.FOUNDRY_PDF_PROC_URL ?? 'http://127.0.0.1:3200'
   const secret  = process.env.FOUNDRY_PDF_PROC_SECRET ?? ''
 

@@ -13,7 +13,7 @@ export default async function OrgChannelsPage({ params }: Props) {
 
   // Auto-create default channels if the org has none
   const existing = await db`
-    SELECT id, name FROM channels WHERE org_id = ${session.orgId!} AND is_archived = false ORDER BY name ASC
+    SELECT id, name FROM channels WHERE org_id = ${session.orgId!} AND is_archived = false ORDER BY created_at ASC
   `
 
   if (existing.length === 0) {

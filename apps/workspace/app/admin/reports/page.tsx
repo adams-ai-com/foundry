@@ -34,31 +34,43 @@ export default async function ReportsPage() {
   ` as unknown as Array<{ email: string }>
   const orgEmailSet = new Set(memberEmails.map(r => r.email))
 
-  // All failed sign-in events relevant to this org:
-  // — those logged with org_id = this org, OR
-  // — those with org_id = null but email is an org member
+  const orgMemberArray = memberEmails.map(r => r.email)
+
+  // Aggregate counts from DB — not capped, so attack-volume stats are accurate
+  const [aggRow] = await db`
+    SELECT
+      COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours') AS count_24h,
+      COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '7 days')   AS count_7d,
+      COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days')  AS count_30d,
+      COUNT(DISTINCT actor_email) FILTER (WHERE created_at > NOW() - INTERVAL '30 days') AS unique_emails
+    FROM audit_log
+    WHERE action = 'auth.sign_in_failed'
+      AND (
+        org_id = ${session.orgId!}
+        OR (org_id IS NULL AND actor_email = ANY(${orgMemberArray}::text[]))
+      )
+  ` as unknown as Array<{ count_24h: string; count_7d: string; count_30d: string; unique_emails: string }>
+
+  const count24h     = Number(aggRow.count_24h)
+  const count7d      = Number(aggRow.count_7d)
+  const count30d     = Number(aggRow.count_30d)
+  const uniqueEmails = Number(aggRow.unique_emails)
+
+  // Detail rows for per-email table (capped — display only)
   const failures = await db`
     SELECT actor_email, metadata, created_at
     FROM audit_log
     WHERE action = 'auth.sign_in_failed'
       AND (
         org_id = ${session.orgId!}
-        OR (org_id IS NULL AND actor_email = ANY(${memberEmails.map(r => r.email)}::text[]))
+        OR (org_id IS NULL AND actor_email = ANY(${orgMemberArray}::text[]))
       )
     ORDER BY created_at DESC
     LIMIT 500
   ` as unknown as Array<{ actor_email: string; metadata: { reason?: string }; created_at: string }>
 
-  // Summary stats
   const now = Date.now()
   const ms24h = 24 * 60 * 60 * 1000
-  const ms7d  =  7 * 24 * 60 * 60 * 1000
-  const ms30d = 30 * 24 * 60 * 60 * 1000
-
-  const count24h  = failures.filter(f => now - new Date(f.created_at).getTime() < ms24h).length
-  const count7d   = failures.filter(f => now - new Date(f.created_at).getTime() < ms7d).length
-  const count30d  = failures.filter(f => now - new Date(f.created_at).getTime() < ms30d).length
-  const uniqueEmails = new Set(failures.map(f => f.actor_email)).size
 
   // Group by email
   const byEmail = new Map<string, FailureSummary>()

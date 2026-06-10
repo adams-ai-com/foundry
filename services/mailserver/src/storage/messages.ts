@@ -53,7 +53,7 @@ export async function storeInboundMessage(
       ${messageId}, ${accountId}, ${mailboxId}, ${threadId}, 'smtp',
       ${parsed.messageId}, ${parsed.inReplyTo}, ${parsed.references},
       ${parsed.subject}, ${parsed.fromName}, ${parsed.fromEmail},
-      ${JSON.stringify(parsed.toAddrs)}, ${JSON.stringify(parsed.ccAddrs)},
+      ${sql.json(parsed.toAddrs)}, ${sql.json(parsed.ccAddrs)},
       ${parsed.date}, ${parsed.bodyHtml}, ${parsed.bodyText},
       ${parsed.rawSize}, false
     )

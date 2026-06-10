@@ -150,7 +150,7 @@ export default async function SessionsPage({
       ) : (
         <div className="space-y-3">
           {groups.map(({ user, sessions: userSessions }) => {
-            const canAct = !userSessions.every(s => s.is_self_session) && canActOn(user.role)
+            const canAct = user.user_id !== session.userId && canActOn(user.role)
             return (
               <div key={user.user_id} className="bg-bg-raised border border-border rounded-xl overflow-hidden">
                 <div className="flex items-center justify-between gap-4 px-5 py-3 border-b border-border">

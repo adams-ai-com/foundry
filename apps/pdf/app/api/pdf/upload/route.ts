@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
 
   const upstream = new FormData()
   upstream.append('file', file)
+  upstream.append('creator_id', session?.userId ?? '')
 
   const res = await fetch(`${procUrl}/upload`, {
     method: 'POST',

@@ -1,0 +1,48 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getSession } from '@foundry/auth'
+import { fetchProc, assertJobOwner } from '@/lib/proc'
+
+export async function POST(req: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { jobId } = await params
+  const deny = await assertJobOwner(jobId, session.userId)
+  if (deny) return deny
+  const body = await req.json()
+  const res = await fetchProc(`/annotate/${jobId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return NextResponse.json(await res.json(), { status: res.status })
+}
+
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { jobId } = await params
+  const deny = await assertJobOwner(jobId, session.userId)
+  if (deny) return deny
+  const body = await req.json()
+  const res = await fetchProc(`/annotate/${jobId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return NextResponse.json(await res.json(), { status: res.status })
+}
+
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { jobId } = await params
+  const deny = await assertJobOwner(jobId, session.userId)
+  if (deny) return deny
+  const body = await req.json()
+  const res = await fetchProc(`/annotate/${jobId}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return NextResponse.json(await res.json(), { status: res.status })
+}

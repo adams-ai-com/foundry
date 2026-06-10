@@ -12,6 +12,8 @@ export interface MailThread {
   isSpam: boolean
   isStarred: boolean
   snoozedUntil?: Date | null
+  accountId?: string
+  accountDomain?: string | null
 }
 
 export interface MailMessage {

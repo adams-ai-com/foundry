@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { requireAdmin } from '@/lib/auth'
 import { getOrgTimezone } from '@/lib/timezone'
 import db from '@/lib/db'
-import { deactivateUser, reactivateUser, removeFromOrg, resetTotp, changeRole, updateAppAccess } from '@/lib/admin-actions'
+import { deactivateUser, reactivateUser, removeFromOrg, resetTotp, changeRole, updateAppAccess, setUserPassword } from '@/lib/admin-actions'
 import ConfirmForm from '@/components/ConfirmForm'
 
 export const dynamic = 'force-dynamic'
@@ -18,6 +18,8 @@ type UserDetail = {
   active_sessions: number
   last_sign_in: string | null
   has_totp: boolean
+  has_password: boolean
+  has_ms_sso: boolean
 }
 
 async function getUserDetail(orgId: string, userId: string): Promise<UserDetail | null> {
@@ -27,7 +29,9 @@ async function getUserDetail(orgId: string, userId: string): Promise<UserDetail 
       m.role, m.joined_at,
       COUNT(CASE WHEN s.expires_at > NOW() THEN 1 END)::int AS active_sessions,
       MAX(s.created_at) AS last_sign_in,
-      (u.totp_secret IS NOT NULL) AS has_totp
+      (u.totp_secret IS NOT NULL) AS has_totp,
+      (u.password_hash IS NOT NULL) AS has_password,
+      (u.ms_oid IS NOT NULL) AS has_ms_sso
     FROM users u
     LEFT JOIN org_members m ON m.user_id = u.id AND m.org_id = ${orgId}
     LEFT JOIN sessions s ON s.user_id = u.id
@@ -82,6 +86,7 @@ export default async function UserDetailPage({
   const resetTotpWithId = resetTotp.bind(null, id)
   const changeRoleWithId = changeRole.bind(null, id)
   const updateAppAccessWithId = updateAppAccess.bind(null, id)
+  const setPasswordWithId = setUserPassword.bind(null, id)
 
   // App access — no row = default (enabled); explicit row can disable
   const appAccessRows = await db`
@@ -215,7 +220,7 @@ export default async function UserDetailPage({
               </span>
             )}
           </div>
-          <div className="flex items-center justify-between py-2">
+          <div className="flex items-center justify-between py-2 border-b border-border">
             <div>
               <div className="text-sm font-medium text-fg-primary">Reset TOTP</div>
               <div className="text-xs text-fg-tertiary">
@@ -242,6 +247,38 @@ export default async function UserDetailPage({
               </span>
             )}
           </div>
+
+          {/* Set password (non-MS users) */}
+          {!user.has_ms_sso && canAct && (
+            <div className="pt-2">
+              <div className="mb-2">
+                <div className="text-sm font-medium text-fg-primary">
+                  {user.has_password ? 'Reset password' : 'Set password'}
+                </div>
+                <div className="text-xs text-fg-tertiary mt-0.5">
+                  {user.has_password
+                    ? 'Replace the current password for this account'
+                    : 'Set a password so this user can sign in'}
+                </div>
+              </div>
+              <form action={setPasswordWithId} className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="password"
+                  name="password"
+                  required
+                  minLength={10}
+                  placeholder="New password (min 10 chars)"
+                  className="text-xs bg-bg-base border border-border rounded-lg px-3 py-1.5 text-fg-primary placeholder:text-fg-tertiary focus:outline-none focus:ring-2 focus:ring-accent/30 w-56"
+                />
+                <button
+                  type="submit"
+                  className="text-xs font-medium text-fg-primary border border-border hover:bg-bg-hover px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+                >
+                  {user.has_password ? 'Reset' : 'Set password'}
+                </button>
+              </form>
+            </div>
+          )}
         </div>
       </div>
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { InboxView, type InboxViewHandle } from './InboxView'
+import { InboxView, type InboxViewHandle, type AccountScope } from './InboxView'
 import { MessageReader } from './MessageReader'
 import { CalendarView } from './CalendarView'
 import { TasksView } from './TasksView'
@@ -10,8 +10,8 @@ import { FilesView } from './FilesView'
 import { ChannelsView } from './ChannelsView'
 import { ComposeModal, type ComposeRequest } from './ComposeModal'
 import { ThemeSwitcher } from '@foundry/ui'
-import type { MailThread, MailboxInfo } from '@foundry/shared'
-import { listMailboxes, archiveThread, trashThread, starThread, markThreadUnread } from '../lib/api'
+import type { MailThread } from '@foundry/shared'
+import { listMailAccounts, archiveThread, trashThread, starThread, markThreadUnread, type MailAccountsResponse } from '../lib/api'
 
 type View  = 'mail' | 'calendar' | 'contacts' | 'tasks' | 'decisions' | 'files' | 'channels'
 type Theme = 'light' | 'dark' | 'warm'
@@ -90,28 +90,125 @@ const VIEWS: { id: View; label: string; Icon: (p: { className?: string }) => Rea
   { id: 'files',     label: 'Files',     Icon: FilesIcon     },
 ]
 
+function ChevronDownIcon({ className = '' }: { className?: string }) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M6 9l6 6 6-6"/></svg>
+}
+function ChevronRightIcon({ className = '' }: { className?: string }) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M9 18l6-6-6-6"/></svg>
+}
+function AdminIcon({ className = '' }: { className?: string }) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+}
+
 export function MailShell({ defaultTheme = 'light' }: { defaultTheme?: Theme }) {
   const [view, setView] = useState<View>('mail')
   const [mailbox, setMailbox] = useState('inbox')
   const [selectedThread, setSelectedThread] = useState<MailThread | null>(null)
   const [composing, setComposing] = useState(false)
   const [composeRequest, setComposeRequest] = useState<ComposeRequest | undefined>(undefined)
-  const [mailboxes, setMailboxes] = useState<MailboxInfo[]>([])
+  const [mailAccounts, setMailAccounts] = useState<MailAccountsResponse | null>(null)
+  const [accountScope, setAccountScope] = useState<AccountScope | undefined>(undefined)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const inboxRef = useRef<InboxViewHandle>(null)
 
-  useEffect(() => { listMailboxes().then(setMailboxes).catch(() => setMailboxes([])) }, [])
+  useEffect(() => {
+    listMailAccounts().then((data) => {
+      setMailAccounts(data)
+      // Default to "All Inboxes" with all account IDs
+      const allIds = [
+        ...data.groups.flatMap((g) => g.accounts.map((a) => a.id)),
+        ...data.ungrouped.map((a) => a.id),
+      ]
+      if (allIds.length > 0) {
+        setAccountScope({ type: 'all', accountIds: allIds })
+      }
+    }).catch(() => {})
+  }, [])
+
+  // All account IDs for the current user
+  const allAccountIds = mailAccounts
+    ? [
+        ...mailAccounts.groups.flatMap((g) => g.accounts.map((a) => a.id)),
+        ...mailAccounts.ungrouped.map((a) => a.id),
+      ]
+    : []
+
+  // Accounts the user can send from
+  const sendableAccounts = mailAccounts
+    ? [
+        ...mailAccounts.groups.flatMap((g) => g.accounts.filter((a) => a.canSend)),
+        ...mailAccounts.ungrouped.filter((a) => a.canSend),
+      ]
+    : []
+
+  // Total unread across all accounts
+  const totalUnread = mailAccounts
+    ? mailAccounts.groups.reduce((s, g) => s + g.accounts.reduce((ss, a) => ss + a.unreadCount, 0), 0)
+      + mailAccounts.ungrouped.reduce((s, a) => s + a.unreadCount, 0)
+    : 0
 
   const closeSidebarOnMobile = () => {
     if (window.innerWidth < 768) setSidebarOpen(false)
   }
 
-  const handleSelectMailbox = (path: string) => {
-    setMailbox(path); setSelectedThread(null); setView('mail')
+  const handleSelectMailbox = (path: string, keepScope = false) => {
+    setMailbox(path)
+    setSelectedThread(null)
+    setView('mail')
+    if (!keepScope) {
+      // System mailbox clicks outside account context → use all accounts
+      setAccountScope(allAccountIds.length > 0 ? { type: 'all', accountIds: allAccountIds } : undefined)
+    }
     closeSidebarOnMobile()
   }
-  const handleCompose = (req?: ComposeRequest) => { setComposeRequest(req); setComposing(true) }
+
+  const handleSelectAllInboxes = () => {
+    setMailbox('inbox')
+    setSelectedThread(null)
+    setView('mail')
+    setAccountScope(allAccountIds.length > 0 ? { type: 'all', accountIds: allAccountIds } : undefined)
+    closeSidebarOnMobile()
+  }
+
+  const handleSelectGroup = (groupId: string, accountIds: string[]) => {
+    setMailbox('inbox')
+    setSelectedThread(null)
+    setView('mail')
+    setAccountScope({ type: 'group', groupId, accountIds })
+    closeSidebarOnMobile()
+  }
+
+  const handleSelectAccount = (accountId: string) => {
+    setMailbox('inbox')
+    setSelectedThread(null)
+    setView('mail')
+    setAccountScope({ type: 'account', accountId })
+    closeSidebarOnMobile()
+  }
+
+  const handleCompose = (req?: ComposeRequest) => {
+    // Default from address: thread's account domain if replying, else default account
+    const fromAccount = req?.replyTo?.accountDomain
+      ? sendableAccounts.find((a) => a.domain === req.replyTo!.accountDomain) ?? sendableAccounts[0]
+      : sendableAccounts.find((a) => a.isDefault) ?? sendableAccounts[0]
+    setComposeRequest({
+      ...req,
+      fromAccountId: fromAccount?.id,
+      fromAddress: fromAccount ? `john@${fromAccount.domain}` : undefined,
+    })
+    setComposing(true)
+  }
+
+  const toggleGroupCollapse = (groupId: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(groupId)) next.delete(groupId)
+      else next.add(groupId)
+      return next
+    })
+  }
 
   useEffect(() => {
     const handler = async (e: KeyboardEvent) => {
@@ -140,13 +237,25 @@ export function MailShell({ defaultTheme = 'light' }: { defaultTheme?: Theme }) 
   }, [view, selectedThread, composing]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const mailboxLabel = (p: string) => p.charAt(0).toUpperCase() + p.slice(1)
-  const sidebarMailboxes = SYSTEM_MAILBOXES.map((path) => {
-    const found = mailboxes.find((m) => m.path === path)
-    return { path, unreadCount: found?.unreadCount ?? 0 }
-  })
-  const customMailboxes = mailboxes.filter((m) => !SYSTEM_MAILBOXES.includes(m.path))
 
-  const currentViewLabel = view === 'mail' ? mailboxLabel(mailbox) : (VIEWS.find((v) => v.id === view)?.label ?? view)
+  const isMailboxActive = (path: string) =>
+    view === 'mail' && mailbox === path &&
+    (!accountScope || accountScope.type === 'all' || mailbox !== 'inbox')
+
+  const isAllInboxesActive = () =>
+    view === 'mail' && mailbox === 'inbox' && accountScope?.type === 'all'
+
+  const isGroupActive = (groupId: string) =>
+    view === 'mail' && mailbox === 'inbox' && accountScope?.type === 'group' && accountScope.groupId === groupId
+
+  const isAccountActive = (accountId: string) =>
+    view === 'mail' && mailbox === 'inbox' && accountScope?.type === 'account' && accountScope.accountId === accountId
+
+  const currentViewLabel = view === 'mail'
+    ? (accountScope?.type === 'all' ? 'All Inboxes'
+      : accountScope?.type === 'group' ? (mailAccounts?.groups.find((g) => g.id === (accountScope as any).groupId)?.name ?? mailboxLabel(mailbox))
+      : mailboxLabel(mailbox))
+    : (VIEWS.find((v) => v.id === view)?.label ?? view)
 
   return (
     <div className="h-screen flex bg-bg-base overflow-hidden">
@@ -192,36 +301,90 @@ export function MailShell({ defaultTheme = 'light' }: { defaultTheme?: Theme }) 
         </div>
 
         <nav className="px-2 flex flex-col gap-px overflow-y-auto flex-1">
-          {sidebarMailboxes.map(({ path, unreadCount }) => {
+          {/* All Inboxes */}
+          <button onClick={handleSelectAllInboxes}
+            className={`flex items-center gap-2.5 text-sm px-2.5 py-1.5 rounded-lg w-full text-left transition-colors ${isAllInboxesActive() ? 'bg-accent/10 text-accent font-medium' : 'text-fg-secondary hover:bg-bg-hover hover:text-fg-primary'}`}>
+            <InboxIcon className="w-4 h-4 flex-shrink-0 opacity-70" />
+            <span className="flex-1">All Inboxes</span>
+            {totalUnread > 0 && <span className="text-xs bg-accent text-accent-fg rounded-full px-1.5 py-0.5 font-medium leading-none">{totalUnread}</span>}
+          </button>
+
+          {/* System mailboxes (not inbox — that's "All Inboxes") */}
+          {SYSTEM_MAILBOXES.filter((p) => p !== 'inbox').map((path) => {
             const Icon = MAILBOX_ICON[path] ?? InboxIcon
-            const isActive = view === 'mail' && mailbox === path
+            const isActive = isMailboxActive(path)
             return (
               <button key={path} onClick={() => handleSelectMailbox(path)}
                 className={`flex items-center gap-2.5 text-sm px-2.5 py-1.5 rounded-lg w-full text-left transition-colors ${isActive ? 'bg-accent/10 text-accent font-medium' : 'text-fg-secondary hover:bg-bg-hover hover:text-fg-primary'}`}>
                 <Icon className="w-4 h-4 flex-shrink-0 opacity-70" />
                 <span className="flex-1">{mailboxLabel(path)}</span>
-                {unreadCount > 0 && <span className="text-xs bg-accent text-accent-fg rounded-full px-1.5 py-0.5 font-medium leading-none">{unreadCount}</span>}
               </button>
             )
           })}
 
-          {customMailboxes.length > 0 && (
+          {/* Account groups */}
+          {mailAccounts && (mailAccounts.groups.length > 0 || mailAccounts.ungrouped.length > 0) && (
             <>
-              <div className="text-[10.5px] font-semibold text-fg-tertiary uppercase tracking-[0.15em] px-2.5 pt-4 pb-1.5">Folders</div>
-              {customMailboxes.map((m) => {
-                const isActive = view === 'mail' && mailbox === m.path
+              <div className="text-[10.5px] font-semibold text-fg-tertiary uppercase tracking-[0.15em] px-2.5 pt-4 pb-1">Accounts</div>
+
+              {mailAccounts.groups.map((group) => {
+                const groupUnread = group.accounts.reduce((s, a) => s + a.unreadCount, 0)
+                const collapsed = collapsedGroups.has(group.id)
+                const groupActive = isGroupActive(group.id)
                 return (
-                  <button key={m.path} onClick={() => handleSelectMailbox(m.path)}
-                    className={`flex items-center gap-2.5 text-sm px-2.5 py-1.5 rounded-lg w-full text-left transition-colors ${isActive ? 'bg-accent/10 text-accent font-medium' : 'text-fg-secondary hover:bg-bg-hover hover:text-fg-primary'}`}>
-                    <FolderCustomIcon className="w-4 h-4 flex-shrink-0 opacity-70" />
-                    <span className="flex-1">{m.displayName}</span>
-                    {m.unreadCount > 0 && <span className="text-xs bg-accent text-accent-fg rounded-full px-1.5 py-0.5 font-medium leading-none">{m.unreadCount}</span>}
+                  <div key={group.id}>
+                    <div className="flex items-center">
+                      <button onClick={() => handleSelectGroup(group.id, group.accounts.map((a) => a.id))}
+                        className={`flex-1 flex items-center gap-2 text-xs px-2 py-1.5 rounded-lg text-left transition-colors min-w-0 ${groupActive ? 'bg-accent/10 text-accent font-semibold' : 'text-fg-secondary hover:bg-bg-hover hover:text-fg-primary font-medium'}`}>
+                        {group.color && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: group.color }} />}
+                        <span className="flex-1 truncate">{group.name}</span>
+                        {groupUnread > 0 && <span className="text-xs bg-accent text-accent-fg rounded-full px-1.5 py-0.5 font-medium leading-none">{groupUnread}</span>}
+                      </button>
+                      <button onClick={() => toggleGroupCollapse(group.id)}
+                        className="p-1 rounded text-fg-tertiary hover:text-fg-secondary transition-colors flex-shrink-0">
+                        {collapsed ? <ChevronRightIcon className="w-3 h-3" /> : <ChevronDownIcon className="w-3 h-3" />}
+                      </button>
+                    </div>
+                    {!collapsed && group.accounts.map((account) => {
+                      const accountActive = isAccountActive(account.id)
+                      return (
+                        <button key={account.id} onClick={() => handleSelectAccount(account.id)}
+                          className={`flex items-center gap-2 text-xs pl-6 pr-2.5 py-1 rounded-lg w-full text-left transition-colors ${accountActive ? 'bg-accent/10 text-accent font-medium' : 'text-fg-tertiary hover:bg-bg-hover hover:text-fg-primary'}`}>
+                          <span
+                            className="w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
+                            style={{ backgroundColor: account.avatarColor ?? '#6366f1' }}
+                          >
+                            {account.domain.charAt(0).toUpperCase()}
+                          </span>
+                          <span className="flex-1 truncate">{account.displayName}</span>
+                          {account.unreadCount > 0 && <span className="text-[10px] bg-accent text-accent-fg rounded-full px-1 py-0.5 font-medium leading-none">{account.unreadCount}</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )
+              })}
+
+              {mailAccounts.ungrouped.map((account) => {
+                const accountActive = isAccountActive(account.id)
+                return (
+                  <button key={account.id} onClick={() => handleSelectAccount(account.id)}
+                    className={`flex items-center gap-2 text-sm px-2.5 py-1.5 rounded-lg w-full text-left transition-colors ${accountActive ? 'bg-accent/10 text-accent font-medium' : 'text-fg-secondary hover:bg-bg-hover hover:text-fg-primary'}`}>
+                    <span
+                      className="w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
+                      style={{ backgroundColor: account.avatarColor ?? '#6366f1' }}
+                    >
+                      {account.domain.charAt(0).toUpperCase()}
+                    </span>
+                    <span className="flex-1 truncate">{account.displayName}</span>
+                    {account.unreadCount > 0 && <span className="text-xs bg-accent text-accent-fg rounded-full px-1.5 py-0.5 font-medium leading-none">{account.unreadCount}</span>}
                   </button>
                 )
               })}
             </>
           )}
 
+          {/* Other views */}
           <div className="border-t border-border mt-2 pt-2 flex flex-col gap-px">
             {VIEWS.map(({ id, label, Icon }) => {
               const isActive = view === id
@@ -236,6 +399,11 @@ export function MailShell({ defaultTheme = 'light' }: { defaultTheme?: Theme }) 
           </div>
 
           <div className="mt-auto pt-2 border-t border-border pb-1">
+            <a href="/mail/admin"
+              className="flex items-center gap-2 text-xs text-fg-tertiary hover:text-fg-secondary px-2.5 py-1.5 w-full text-left transition-colors rounded-lg hover:bg-bg-hover">
+              <AdminIcon className="w-3.5 h-3.5" />
+              Manage accounts
+            </a>
             <div className="px-2.5 py-1.5"><ThemeSwitcher defaultTheme={defaultTheme} /></div>
             <button onClick={() => setShowShortcuts(true)}
               className="flex items-center gap-2 text-xs text-fg-tertiary hover:text-fg-secondary px-2.5 py-1.5 w-full text-left transition-colors rounded-lg hover:bg-bg-hover">
@@ -261,7 +429,7 @@ export function MailShell({ defaultTheme = 'light' }: { defaultTheme?: Theme }) 
         </div>
 
         <main className="flex-1 overflow-hidden flex">
-          {view === 'mail' && <><InboxView ref={inboxRef} mailbox={mailbox} selectedThread={selectedThread} onSelectThread={setSelectedThread} /><MessageReader thread={selectedThread} onCompose={handleCompose} /></>}
+          {view === 'mail' && <><InboxView ref={inboxRef} mailbox={mailbox} selectedThread={selectedThread} onSelectThread={setSelectedThread} accountScope={accountScope} /><MessageReader thread={selectedThread} onCompose={handleCompose} /></>}
           {view === 'calendar'  && <CalendarView />}
           {view === 'contacts'  && <div className="flex-1 flex items-center justify-center text-fg-tertiary text-sm">Contacts coming soon</div>}
           {view === 'tasks'     && <div className="flex-1 overflow-hidden bg-bg-surface text-fg-primary"><TasksView /></div>}
@@ -271,7 +439,17 @@ export function MailShell({ defaultTheme = 'light' }: { defaultTheme?: Theme }) 
         </main>
       </div>
 
-      {composing && <ComposeModal onClose={() => { setComposing(false); setComposeRequest(undefined) }} request={composeRequest} />}
+      {composing && (
+        <ComposeModal
+          onClose={() => { setComposing(false); setComposeRequest(undefined) }}
+          request={composeRequest}
+          fromOptions={sendableAccounts.map((a) => ({
+            email: `john@${a.domain}`,
+            displayName: a.displayName,
+            accountId: a.id,
+          }))}
+        />
+      )}
 
       {showShortcuts && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowShortcuts(false)}>

@@ -33,8 +33,9 @@ function buildTransport() {
         : undefined,
     })
   }
-  // Direct delivery fallback (development only)
-  return createTransport({ sendmail: true })
+  // Direct delivery via SMTP port 25 (no relay configured)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return createTransport({ direct: true, port: 25, name: config.domain } as any)
 }
 
 function loadDkimKey(): string | null {

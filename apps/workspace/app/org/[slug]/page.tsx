@@ -51,6 +51,16 @@ function SitesIcon({ className = '' }: { className?: string }) {
     </svg>
   )
 }
+function PdfIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}
+         strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <path d="M9 13h1.5a1.5 1.5 0 010 3H9v-3zm0 3v2m4-5h1a2 2 0 010 4h-1V13z"/>
+    </svg>
+  )
+}
 function ArrowIcon({ className = '' }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}
@@ -179,6 +189,13 @@ const APPS = [
     path: '/sites',
     Icon: SitesIcon,
   },
+  {
+    id: 'pdf',
+    label: 'PDF',
+    desc: 'Edit, annotate, redact, and sign PDF documents — plus convert to and from Office formats.',
+    path: '/pdf',
+    Icon: PdfIcon,
+  },
 ]
 
 const FEATURES = [
@@ -252,6 +269,8 @@ export default async function OrgLauncherPage({ params }: { params: Promise<{ sl
   ` as unknown as Array<{ app: string; enabled: boolean }>
   const disabledApps = new Set(accessRows.filter(r => !r.enabled).map(r => r.app))
   const allowedApps = APPS.filter(a => !disabledApps.has(a.id))
+
+  if (allowedApps.length === 1) redirect(allowedApps[0].path)
 
   const jar = await cookies()
   const theme = (jar.get('foundry_theme')?.value ?? 'light') as 'light' | 'dark' | 'warm'

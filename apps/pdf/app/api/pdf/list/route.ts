@@ -9,7 +9,8 @@ export async function GET(req: NextRequest) {
   const secret  = process.env.FOUNDRY_PDF_PROC_SECRET ?? ''
 
   try {
-    const res = await fetch(`${procUrl}/list`, {
+    const creatorFilter = session ? `?creator_id=${encodeURIComponent(session.userId)}` : ''
+    const res = await fetch(`${procUrl}/list${creatorFilter}`, {
       headers: { 'X-Proc-Secret': secret },
       cache: 'no-store',
     })

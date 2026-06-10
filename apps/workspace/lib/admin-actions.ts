@@ -68,6 +68,29 @@ export async function removeFromOrg(userId: string, _fd: FormData): Promise<void
   redirect(`/admin/users?msg=User+removed+from+organization`)
 }
 
+export async function setUserPassword(userId: string, formData: FormData): Promise<void> {
+  const session = await requireAdmin()
+
+  const target = await getOrgUser(session.orgId!, userId)
+  if (!target) redirect(`/admin/users/${userId}?err=User+not+found+in+this+organization`)
+  if (!canActOn(session.role!, target.role)) redirect(`/admin/users/${userId}?err=Insufficient+permissions+to+set+password+for+this+user`)
+
+  const password = (formData.get('password') as string ?? '').trim()
+  if (!password || password.length < 10) {
+    redirect(`/admin/users/${userId}?err=Password+must+be+at+least+10+characters`)
+  }
+
+  const { pbkdf2Sync, randomBytes } = await import('crypto')
+  const salt = randomBytes(16).toString('base64')
+  const hash = pbkdf2Sync(password, salt, 100_000, 64, 'sha512').toString('base64')
+  const stored = `pbkdf2:100000:${salt}:${hash}`
+
+  await db`UPDATE users SET password_hash = ${stored} WHERE id = ${userId}`
+  await writeAudit({ orgId: session.orgId!, actorId: session.userId, actorEmail: session.email, action: 'user.set_password', targetId: userId, targetEmail: target.email })
+
+  redirect(`/admin/users/${userId}?msg=Password+set`)
+}
+
 export async function resetTotp(userId: string, _fd: FormData): Promise<void> {
   const session = await requireAdmin()
 
@@ -328,6 +351,7 @@ export async function setPrimaryDomain(domainId: string, _fd: FormData): Promise
     await sql`UPDATE domains SET is_primary = false WHERE org_id = ${session.orgId!}`
     await sql`UPDATE domains SET is_primary = true  WHERE id = ${domainId}`
   })
+  await writeAudit({ orgId: session.orgId!, actorId: session.userId, actorEmail: session.email, action: 'domain.set_primary', metadata: { domain: row.domain } })
 
   redirect(`/admin/domains?msg=${encodeURIComponent(row.domain + ' is now the primary domain')}`)
 }
@@ -540,7 +564,7 @@ export async function forceSignOutAll(userId: string, _fd: FormData): Promise<vo
   if (!canActOn(session.role!, target.role)) redirect('/admin/sessions?err=Insufficient+permissions')
 
   const result = await db`
-    DELETE FROM sessions WHERE user_id = ${userId} AND org_id = ${session.orgId!}
+    DELETE FROM sessions WHERE user_id = ${userId}
     RETURNING id
   `
   await writeAudit({
@@ -592,7 +616,7 @@ export async function updateSmtpConfig(formData: FormData): Promise<void> {
       relay_host     = EXCLUDED.relay_host,
       relay_port     = EXCLUDED.relay_port,
       relay_username = EXCLUDED.relay_username,
-      relay_password = CASE WHEN EXCLUDED.relay_password = '' THEN smtp_config.relay_password
+      relay_password = CASE WHEN EXCLUDED.relay_password IS NULL THEN smtp_config.relay_password
                             ELSE EXCLUDED.relay_password END,
       from_address   = EXCLUDED.from_address,
       from_name      = EXCLUDED.from_name,

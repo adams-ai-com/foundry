@@ -10,10 +10,17 @@ export interface InboxViewHandle {
   removeThread: (id: string) => void
   getThreads: () => MailThread[]
 }
+
+export type AccountScope =
+  | { type: 'all'; accountIds: string[] }
+  | { type: 'group'; groupId: string; accountIds: string[] }
+  | { type: 'account'; accountId: string }
+
 interface InboxViewProps {
   mailbox: string
   selectedThread: MailThread | null
   onSelectThread: (thread: MailThread) => void
+  accountScope?: AccountScope
 }
 
 function StarIcon({ className = '' }: { className?: string }) {
@@ -38,7 +45,7 @@ function ChevronRightIcon({ className = '' }: { className?: string }) {
 const PAGE_SIZE = 50
 
 export const InboxView = forwardRef<InboxViewHandle, InboxViewProps>(
-  function InboxView({ mailbox, selectedThread, onSelectThread }, ref) {
+  function InboxView({ mailbox, selectedThread, onSelectThread, accountScope }, ref) {
     const [threads, setThreads] = useState<MailThread[]>([])
     const [total, setTotal] = useState(0)
     const [loading, setLoading] = useState(true)
@@ -48,9 +55,12 @@ export const InboxView = forwardRef<InboxViewHandle, InboxViewProps>(
     const [sort, setSort] = useState<'newest' | 'oldest' | 'unread'>('newest')
     const [filter, setFilter] = useState<'all' | 'unread' | 'starred'>('all')
 
-    // Reset to page 1 when mailbox/filter/sort changes
-    const prevKeyRef = useRef(`${mailbox}|${filter}|${sort}`)
-    const key = `${mailbox}|${filter}|${sort}`
+    // Reset to page 1 when mailbox/filter/sort/scope changes
+    const scopeKey = accountScope?.type === 'account' ? accountScope.accountId
+      : accountScope?.type === 'group' ? accountScope.groupId
+      : 'all'
+    const prevKeyRef = useRef(`${mailbox}|${filter}|${sort}|${scopeKey}`)
+    const key = `${mailbox}|${filter}|${sort}|${scopeKey}`
     if (prevKeyRef.current !== key) {
       prevKeyRef.current = key
       if (page !== 1) setPage(1)
@@ -69,7 +79,12 @@ export const InboxView = forwardRef<InboxViewHandle, InboxViewProps>(
           setThreads(rows)
           setTotal(rows.length)
         } else {
-          const { threads: rows, total: t } = await listThreads(mailbox, page, sort)
+          const listOpts = accountScope?.type === 'account'
+            ? { accountId: accountScope.accountId }
+            : accountScope?.accountIds?.length
+            ? { accountIds: accountScope.accountIds }
+            : {}
+          const { threads: rows, total: t } = await listThreads(mailbox, page, sort, listOpts)
           setThreads(rows)
           setTotal(t)
         }
@@ -79,7 +94,7 @@ export const InboxView = forwardRef<InboxViewHandle, InboxViewProps>(
       } finally {
         setLoading(false)
       }
-    }, [mailbox, page, sort, filter, search])
+    }, [mailbox, page, sort, filter, search, accountScope]) // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => { load() }, [load])
 

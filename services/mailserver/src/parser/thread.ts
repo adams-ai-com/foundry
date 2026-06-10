@@ -78,7 +78,7 @@ export async function resolveThread(accountId: string, msg: {
     INSERT INTO threads (id, account_id, subject, normalized_subject, participants, last_message_at, snippet)
     VALUES (
       ${threadId}, ${accountId}, ${msg.subject}, ${normalized},
-      ${JSON.stringify(participants)}, ${msg.date}, ''
+      ${sql.json(participants)}, ${msg.date}, ''
     )
   `
   return threadId
@@ -127,7 +127,7 @@ export async function updateThreadMeta(threadId: string, accountId: string) {
       unread_count  = ${unread},
       last_message_at = ${last},
       snippet = ${snippetText},
-      participants = ${JSON.stringify(allParticipants)}
+      participants = ${sql.json(allParticipants)}
     WHERE id = ${threadId}
   `
 }

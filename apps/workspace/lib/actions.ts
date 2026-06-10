@@ -9,6 +9,7 @@ import { sendInvite, sendSecurityAlert } from './mailer'
 import { writeAudit } from './audit'
 
 const ALLOWLIST = new Set(['john@adams-ai.com'])
+const MS_DOMAIN = 'adams-ai.com'
 const EMAIL_COOKIE = 'foundry_login_email'
 const PENDING_SECRET_COOKIE = 'foundry_totp_pending'
 const INVITE_TOKEN_COOKIE = 'foundry_invite'
@@ -19,7 +20,6 @@ const COOKIE_OPTS = {
   path: '/',
 }
 
-// Rate limit: lock after this many bad codes
 const TOTP_LOCK_THRESHOLD = 5
 const TOTP_LOCK_MINUTES = 15
 
@@ -36,6 +36,12 @@ export async function submitEmail(formData: FormData) {
   const email = (formData.get('email') as string ?? '').trim().toLowerCase()
   if (!email || !email.includes('@')) return { error: 'Valid email required' }
 
+  // @adams-ai.com users always go through Entra SSO
+  if (email.endsWith(`@${MS_DOMAIN}`)) {
+    redirect('/api/auth/microsoft/start')
+  }
+
+  // External users: must already have an account
   if (!ALLOWLIST.has(email)) {
     const rows = await db`
       SELECT u.id FROM users u
@@ -51,7 +57,67 @@ export async function submitEmail(formData: FormData) {
 
   const jar = await cookies()
   jar.set(EMAIL_COOKIE, email, { ...COOKIE_OPTS, maxAge: 10 * 60 })
-  redirect('/login/verify')
+  redirect('/login/password')
+}
+
+export async function passwordLogin(formData: FormData) {
+  const jar = await cookies()
+  const email = jar.get(EMAIL_COOKIE)?.value
+  if (!email) redirect('/login')
+
+  const password = (formData.get('password') as string ?? '').trim()
+  if (!password) return { error: 'Password required' }
+
+  const rows = await db`
+    SELECT id, password_hash, deactivated_at FROM users WHERE email = ${email}
+  `
+  if (!rows.length || !rows[0].password_hash) {
+    await writeAudit({ orgId: null, actorEmail: email, action: 'auth.sign_in_failed', metadata: { reason: 'no_password' } })
+    return { error: 'No password set for this account. Contact your administrator.' }
+  }
+
+  const user = rows[0]
+
+  if (user.deactivated_at) {
+    const orgRows = await db`SELECT org_id FROM org_members WHERE user_id = ${user.id} LIMIT 1`
+    await writeAudit({ orgId: (orgRows[0]?.org_id ?? null) as string | null, actorId: user.id as string, actorEmail: email, action: 'auth.sign_in_failed', metadata: { reason: 'deactivated' } })
+    return { error: 'This account has been deactivated. Contact your administrator.' }
+  }
+
+  const { pbkdf2Sync } = await import('crypto')
+  const stored = user.password_hash as string
+  const parts = stored.split(':')
+  if (parts.length !== 4 || parts[0] !== 'pbkdf2') {
+    return { error: 'Invalid credentials' }
+  }
+  const [, iterStr, salt, expectedHash] = parts
+  const actual = pbkdf2Sync(password, salt, parseInt(iterStr, 10), 64, 'sha512').toString('base64')
+  if (actual !== expectedHash) {
+    const orgRows = await db`SELECT org_id FROM org_members WHERE user_id = ${user.id} LIMIT 1`
+    await writeAudit({ orgId: (orgRows[0]?.org_id ?? null) as string | null, actorId: user.id as string, actorEmail: email, action: 'auth.sign_in_failed', metadata: { reason: 'bad_password' } })
+    return { error: 'Invalid credentials' }
+  }
+
+  jar.delete(EMAIL_COOKIE)
+
+  const memberRows = await db`
+    SELECT org_id FROM org_members WHERE user_id = ${user.id} ORDER BY joined_at ASC LIMIT 1
+  `
+  let orgId = (memberRows[0]?.org_id ?? null) as string | null
+
+  const inviteToken = jar.get(INVITE_TOKEN_COOKIE)?.value
+  if (inviteToken) {
+    orgId = await acceptInvite(user.id as string, inviteToken, jar) ?? orgId
+  }
+
+  const { ip, ua } = await getRequestMeta()
+  const { sessionId, timeoutHours } = await createSession(user.id as string, orgId, { ip, ua })
+  await setSessionCookie(sessionId, timeoutHours)
+  await writeAudit({ orgId, actorId: user.id as string, actorEmail: email, action: 'auth.sign_in', metadata: { method: 'password' } })
+
+  const returnTo = jar.get('foundry_return_to')?.value
+  jar.delete('foundry_return_to')
+  redirect(returnTo && returnTo.startsWith('/') ? returnTo : '/')
 }
 
 export async function verifyTotp(formData: FormData) {
@@ -85,19 +151,24 @@ export async function verifyTotp(formData: FormData) {
   if (!verifyCode(user.totp_secret as string, code)) {
     const orgRows = await db`SELECT org_id FROM org_members WHERE user_id = ${user.id} LIMIT 1`
     const orgId = (orgRows[0]?.org_id ?? null) as string | null
-    await writeAudit({ orgId, actorId: user.id as string, actorEmail: email, action: 'auth.sign_in_failed', metadata: { reason: 'bad_totp' } })
 
-    const newCount = (user.totp_failed_count as number) + 1
-    const shouldLock = newCount >= TOTP_LOCK_THRESHOLD
-    await db`
+    const updated = await db`
       UPDATE users SET
-        totp_failed_count = ${newCount},
-        totp_locked_until = ${shouldLock ? db.unsafe(`NOW() + INTERVAL '${TOTP_LOCK_MINUTES} minutes'`) : db`totp_locked_until`}
+        totp_failed_count = totp_failed_count + 1,
+        totp_locked_until = CASE
+          WHEN totp_failed_count + 1 >= ${TOTP_LOCK_THRESHOLD}
+          THEN NOW() + (${TOTP_LOCK_MINUTES} * INTERVAL '1 minute')
+          ELSE totp_locked_until
+        END
       WHERE id = ${user.id}
+      RETURNING totp_failed_count
     `
+    const newCount = updated[0].totp_failed_count as number
+    const isNowLocked = newCount >= TOTP_LOCK_THRESHOLD
 
-    if (shouldLock) {
-      // Alert the org's contact email
+    await writeAudit({ orgId, actorId: user.id as string, actorEmail: email, action: 'auth.sign_in_failed', metadata: { reason: 'bad_totp', locked: isNowLocked } })
+
+    if (isNowLocked) {
       void sendLockAlert(user.id as string, email, orgId).catch(() => {})
       return { error: `Too many failed attempts. Account locked for ${TOTP_LOCK_MINUTES} minutes.` }
     }
@@ -122,8 +193,8 @@ export async function verifyTotp(formData: FormData) {
   }
 
   const { ip, ua } = await getRequestMeta()
-  const sessionId = await createSession(user.id as string, orgId, { ip, ua })
-  await setSessionCookie(sessionId)
+  const { sessionId, timeoutHours } = await createSession(user.id as string, orgId, { ip, ua })
+  await setSessionCookie(sessionId, timeoutHours)
   await writeAudit({ orgId, actorId: user.id as string, actorEmail: user.email as string, action: 'auth.sign_in' })
 
   const returnTo = jar.get('foundry_return_to')?.value
@@ -186,8 +257,8 @@ export async function confirmTotpSetup(formData: FormData) {
   }
 
   const { ip, ua } = await getRequestMeta()
-  const sessionId = await createSession(userId, orgId, { ip, ua })
-  await setSessionCookie(sessionId)
+  const { sessionId, timeoutHours } = await createSession(userId, orgId, { ip, ua })
+  await setSessionCookie(sessionId, timeoutHours)
   await writeAudit({ orgId, actorId: userId, actorEmail: email, action: 'auth.totp_setup' })
   redirect('/')
 }

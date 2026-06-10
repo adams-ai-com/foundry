@@ -121,10 +121,26 @@ CREATE TABLE IF NOT EXISTS files (
 CREATE INDEX IF NOT EXISTS files_account ON files(account_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS files_message ON files(message_id);
 
+-- ─── Calendars ───────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS calendars (
+  id          TEXT PRIMARY KEY,
+  account_id  TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  color       TEXT NOT NULL DEFAULT '#10b981',
+  description TEXT,
+  is_default  BOOLEAN NOT NULL DEFAULT FALSE,
+  ctag        TEXT NOT NULL DEFAULT '',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS calendars_account_default
+  ON calendars(account_id) WHERE is_default = TRUE;
+
 -- ─── Calendar Events ────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS calendar_events (
   id                TEXT PRIMARY KEY,
   account_id        TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  calendar_id       TEXT REFERENCES calendars(id) ON DELETE SET NULL,
   workspace_id      TEXT,
   title             TEXT NOT NULL,
   description       TEXT,
@@ -132,16 +148,37 @@ CREATE TABLE IF NOT EXISTS calendar_events (
   start_at          TIMESTAMPTZ NOT NULL,
   end_at            TIMESTAMPTZ NOT NULL,
   all_day           BOOLEAN NOT NULL DEFAULT FALSE,
-  rrule             TEXT,                           -- RFC 5545 recurrence rule
-  attendees         JSONB NOT NULL DEFAULT '[]',   -- [{name, email, status}]
+  rrule             TEXT,
+  attendees         JSONB NOT NULL DEFAULT '[]',
   organizer_email   TEXT,
-  source_message_id TEXT REFERENCES messages(id),  -- if created from email invite
-  ical_uid          TEXT,                           -- iCal UID for dedup
+  source_message_id TEXT REFERENCES messages(id),
+  ical_uid          TEXT UNIQUE,
+  etag              TEXT NOT NULL DEFAULT '',
+  sequence          INTEGER NOT NULL DEFAULT 0,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS calendar_account_time ON calendar_events(account_id, start_at);
+
+-- Additive migrations for existing deployments (run before indexes that use new columns)
+ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS calendar_id TEXT REFERENCES calendars(id) ON DELETE SET NULL;
+ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS ical_uid TEXT;
+ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS etag TEXT NOT NULL DEFAULT '';
+ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS sequence INTEGER NOT NULL DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS calendar_events_calendar ON calendar_events(calendar_id);
+CREATE UNIQUE INDEX IF NOT EXISTS calendar_events_uid ON calendar_events(ical_uid) WHERE ical_uid IS NOT NULL;
+
+-- ─── CalDAV App Passwords ────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS caldav_app_passwords (
+  id           TEXT PRIMARY KEY,
+  account_id   TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  label        TEXT NOT NULL,
+  token        TEXT NOT NULL UNIQUE,
+  last_used_at TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 -- ─── Contacts ──────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS contacts (

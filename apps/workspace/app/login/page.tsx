@@ -22,18 +22,24 @@ async function getOrgFromHost(host: string): Promise<{ name: string } | null> {
   return (rows[0] as { name: string }) ?? null
 }
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string>>
+}) {
   const session = await getSession()
   if (session) redirect('/')
 
   const hdrs = await headers()
   const host = hdrs.get('host') ?? ''
   const org = await getOrgFromHost(host)
+  const sp = await searchParams
+  const urlError = sp.err ?? null
 
   const heading = org ? `Sign in to ${org.name}` : 'Sign in to Foundry'
   const subheading = org
-    ? 'Enter your email address to continue.'
-    : "Enter your email address and we'll verify your identity."
+    ? 'Use your Microsoft account or email and password.'
+    : 'Use your Microsoft account or email and password.'
 
   return (
     <AuthShell>
@@ -47,7 +53,7 @@ export default async function LoginPage() {
           </p>
         </div>
 
-        <LoginForm />
+        <LoginForm urlError={urlError} />
 
         <p className="mt-6 text-center text-[11.5px] text-fg-tertiary leading-relaxed">
           By signing in you agree to keep your access credentials private.
