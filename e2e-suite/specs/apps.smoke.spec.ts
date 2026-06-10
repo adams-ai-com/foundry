@@ -22,7 +22,7 @@ const APPS: AppTarget[] = [
   { name: 'charts', base: 'http://127.0.0.1:3006', home: '/' },
   { name: 'sites', base: 'http://127.0.0.1:4107', home: '/sites' },
   { name: 'channels', base: 'http://127.0.0.1:4108', home: '/' },
-  { name: 'pdf', base: 'http://127.0.0.1:3009', home: '/pdf', marker: /pdf|upload|envelope/i },
+  { name: 'pdf', base: 'http://127.0.0.1:4109', home: '/pdf', marker: /pdf|upload|envelope/i },
 ]
 
 let sess: string
@@ -85,7 +85,7 @@ test.describe('auth shell', () => {
   })
 
   test('protected app route without session redirects to login', async ({ page }) => {
-    await page.goto('http://127.0.0.1:3009/pdf/envelopes')
+    await page.goto('http://127.0.0.1:4109/pdf/envelopes')
     await page.waitForURL(/\/login/, { timeout: 15_000 })
   })
 })

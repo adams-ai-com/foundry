@@ -28,7 +28,7 @@ case "$APP" in
   wiki)       echo "wiki is on Coolify now — deploy by pushing to gitea (staging branch -> staging, main -> production)" >&2; exit 2 ;;
   channels)       echo "channels is on Coolify now — deploy by pushing to gitea (staging branch -> staging, main -> production)" >&2; exit 2 ;;
   sites)       echo "sites is on Coolify now — deploy by pushing to gitea (staging branch -> staging, main -> production)" >&2; exit 2 ;;
-  pdf)        PKG=@foundry/pdf        SVC=foundry-pdf ;;
+  pdf)        echo "pdf is on Coolify now — deploy by pushing to gitea. NOTE: foundry-pdf-proc (Python sidecar) stays systemd." >&2; exit 2 ;;
   pdf-proc)   PKG=""                  SVC=foundry-pdf-proc ;;
   *) echo "unknown app: $APP" >&2; exit 2 ;;
 esac
