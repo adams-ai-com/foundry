@@ -1,14 +1,15 @@
 import { test, expect } from '@playwright/test'
 import { randomUUID } from 'crypto'
-import { E2E_PREFIX, dbFromEnvFile, mintSession } from '@foundry/e2e'
+import { E2E_PREFIX, dbFromEnvFile, dbFromUrl, mintSession } from '@foundry/e2e'
 
-const BASE = 'http://127.0.0.1:3002'
+const BASE = process.env.SHEETS_BASE ?? 'http://127.0.0.1:4102'
 const ENV = '/var/www/foundry/apps/sheets/.env'
 
 test.describe.serial('sheets', () => {
   let sess: string
   let sheetId: string
-  const db = () => dbFromEnvFile(ENV)
+  const db = () =>
+    process.env.SHEETS_DB_URL ? dbFromUrl(process.env.SHEETS_DB_URL) : dbFromEnvFile(ENV)
 
   test.beforeAll(async () => {
     sess = await mintSession()

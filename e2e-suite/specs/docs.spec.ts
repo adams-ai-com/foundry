@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test'
 import { randomUUID } from 'crypto'
-import { E2E_PREFIX, cookieHeader, dbFromEnvFile, mintSession } from '@foundry/e2e'
+import { E2E_PREFIX, cookieHeader, dbFromEnvFile, dbFromUrl, mintSession } from '@foundry/e2e'
 
-const BASE = 'http://127.0.0.1:3001'
+const BASE = process.env.DOCS_BASE ?? 'http://127.0.0.1:4101'
 const ENV = '/var/www/foundry/apps/docs/.env'
 
 const TIPTAP_DOC = {
@@ -13,7 +13,8 @@ const TIPTAP_DOC = {
 test.describe.serial('docs', () => {
   let sess: string
   let docId: string
-  const db = () => dbFromEnvFile(ENV)
+  const db = () =>
+    process.env.DOCS_DB_URL ? dbFromUrl(process.env.DOCS_DB_URL) : dbFromEnvFile(ENV)
 
   test.beforeAll(async () => {
     sess = await mintSession()

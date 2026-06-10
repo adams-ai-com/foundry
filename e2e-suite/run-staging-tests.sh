@@ -11,10 +11,17 @@ export HOME=${HOME:-/home/foundry}
 
 env_value() { grep -m1 "^$2=" "$1" | cut -d= -f2-; }
 
-# wiki — staging container on host port 4005, content DB foundry_wiki_staging
-WIKI_PROD_DB=$(env_value /var/www/foundry/apps/wiki/.env DATABASE_URL)
-export WIKI_BASE="http://127.0.0.1:4005"
-export WIKI_DB_URL=$(echo "$WIKI_PROD_DB" | sed 's|/foundry_wiki$|/foundry_wiki_staging|')
+# Per converted app: <APP>_BASE = staging container port, <APP>_DB_URL =
+# staging DB. Each app's spec reads these (falls back to live prod otherwise).
+stg_db() { echo "$(env_value "/var/www/foundry/apps/$1/.env" DATABASE_URL)" | sed "s|/foundry_$1\$|/foundry_${1}_staging|"; }
 
-SPECS=${@:-specs/wiki.spec.ts}
+# wiki — staging 4005
+export WIKI_BASE="http://127.0.0.1:4005";   export WIKI_DB_URL=$(stg_db wiki)
+# docs — staging 4001
+export DOCS_BASE="http://127.0.0.1:4001";   export DOCS_DB_URL=$(stg_db docs)
+# sheets — staging 4002
+export SHEETS_BASE="http://127.0.0.1:4002"; export SHEETS_DB_URL=$(stg_db sheets)
+
+# Default: every converted app's spec. Override with explicit spec args.
+SPECS=${@:-specs/wiki.spec.ts specs/docs.spec.ts specs/sheets.spec.ts}
 exec ./node_modules/.bin/playwright test $SPECS --reporter=line

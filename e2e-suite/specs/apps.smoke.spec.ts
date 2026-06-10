@@ -15,8 +15,8 @@ interface AppTarget {
 
 const APPS: AppTarget[] = [
   { name: 'workspace', base: 'http://127.0.0.1:3000', home: '/', marker: /foundry/i },
-  { name: 'docs', base: 'http://127.0.0.1:3001', home: '/docs', marker: /docs|document/i },
-  { name: 'sheets', base: 'http://127.0.0.1:3002', home: '/sheets', marker: /sheet/i },
+  { name: 'docs', base: 'http://127.0.0.1:4101', home: '/docs', marker: /docs|document/i },
+  { name: 'sheets', base: 'http://127.0.0.1:4102', home: '/sheets', marker: /sheet/i },
   { name: 'mail', base: 'http://127.0.0.1:3004', home: '/mail', marker: /mail|inbox/i },
   { name: 'wiki', base: 'http://127.0.0.1:4105', home: '/wiki', marker: /wiki|page/i }, // Coolify container (cutover 2026-06-10)
   { name: 'charts', base: 'http://127.0.0.1:3006', home: '/' },
