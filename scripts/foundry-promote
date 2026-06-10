@@ -33,8 +33,8 @@ exec 9>/var/lock/foundry-promote.lock
 flock -n 9 || exit 0
 mkdir -p "$STATE_DIR"
 
-TARGET=$(as_foundry git -C "$REPO" ls-remote gitea-foundry refs/heads/staging 2>/dev/null | awk '{print $1}')
-MAIN=$(as_foundry git -C "$REPO" ls-remote gitea-foundry refs/heads/main 2>/dev/null | awk '{print $1}')
+TARGET=$(as_foundry git -C "$REPO" ls-remote gitea refs/heads/staging 2>/dev/null | awk '{print $1}')
+MAIN=$(as_foundry git -C "$REPO" ls-remote gitea refs/heads/main 2>/dev/null | awk '{print $1}')
 if [ -z "$TARGET" ] || [ -z "$MAIN" ]; then
   log "cannot read branch SHAs from gitea — skipping cycle"
   exit 1
@@ -85,12 +85,39 @@ fi
 # 3. Promote — fast-forward only
 if as_foundry git -C "$REPO" push gitea "$TARGET:refs/heads/main" >>"$LOG" 2>&1; then
   log "PROMOTED $TARGET to main — Coolify deploys production"
-  echo "promoted $TARGET $(date -u +%FT%TZ)" > "$STATE_DIR/status"
 else
   log "PROMOTION PUSH FAILED (non-fast-forward or auth) — inspect manually"
   echo "blocked $TARGET push-failed $(date -u +%FT%TZ)" > "$STATE_DIR/status"
   echo "$TARGET" > "$STATE_DIR/last-processed"
   exit 1
+fi
+
+# 4. Verify production actually reaches the commit. Coolify's gitea webhook
+# auto-deploys, but its clone can fail transiently (gitea SSH blips), leaving
+# production silently on the old build. Make that visible rather than silent.
+# Production app uuids are the staging uuids with -production naming; we read
+# them from the prod registry if present, else skip verification.
+PROD_APPS=/etc/foundry-promote/production-apps
+prod_deadline=$(( $(date +%s) + DEPLOY_WAIT_SECS ))
+prod_stuck=""
+if [ -f "$PROD_APPS" ]; then
+  while read -r uuid label; do
+    [ -z "$uuid" ] && continue
+    while :; do
+      img=$(docker ps --filter "name=$uuid" --format '{{.Image}}' | head -1)
+      [ "${img#*:}" = "$TARGET" ] && break
+      if [ "$(date +%s)" -ge "$prod_deadline" ]; then prod_stuck="$prod_stuck $label"; break; fi
+      sleep 15
+    done
+  done < "$PROD_APPS"
+fi
+
+if [ -n "$prod_stuck" ]; then
+  log "PROMOTED but PRODUCTION DID NOT DEPLOY:$prod_stuck — likely a transient Coolify clone failure. Re-trigger from the control box: coolify-api GET /deploy?uuid=<app>"
+  echo "needs-attention $TARGET prod-deploy-stuck:$prod_stuck $(date -u +%FT%TZ)" > "$STATE_DIR/status"
+else
+  log "production verified on $TARGET"
+  echo "promoted $TARGET $(date -u +%FT%TZ)" > "$STATE_DIR/status"
 fi
 
 echo "$TARGET" > "$STATE_DIR/last-processed"
