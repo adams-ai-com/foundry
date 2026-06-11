@@ -55,6 +55,18 @@ log "=== new staging commit $TARGET (main at ${MAIN:0:12}) ==="
 # 1. Wait until every converted staging app runs TARGET
 deadline=$(( $(date +%s) + DEPLOY_WAIT_SECS ))
 while :; do
+  # If staging moved to a newer commit while we were waiting (another push
+  # landed), abandon this cycle cleanly — containers are now rebuilding to the
+  # new HEAD and will never reach our captured TARGET. The next timer tick
+  # re-reads staging and processes the latest commit. No block, no
+  # last-processed write, so the new HEAD isn't skipped. Self-supersedes rapid
+  # pushes instead of stranding on an intermediate commit.
+  CURRENT=$(as_foundry git -C "$REPO" ls-remote gitea refs/heads/staging 2>/dev/null | awk '{print $1}')
+  if [ -n "$CURRENT" ] && [ "$CURRENT" != "$TARGET" ]; then
+    log "staging advanced ${TARGET:0:12} -> ${CURRENT:0:12} mid-wait — abandoning this cycle; next tick will process the new HEAD"
+    exit 0
+  fi
+
   pending=""
   while read -r uuid label; do
     [ -z "$uuid" ] && continue
