@@ -46,18 +46,36 @@ export async function sendInvite(
 }
 
 export async function sendEmailOTP(email: string, code: string) {
-  const display = `${code.slice(0, 3)} ${code.slice(3)}`
-  if (process.env.SMTP_HOST) {
-    const t = await makeTransport()
-    await t.sendMail({
-      from: FROM(), to: email,
-      subject: `${display} — Your Foundry sign-in code`,
-      text: `Your Foundry sign-in code is: ${display}\n\nThis code expires in 10 minutes. If you did not request this, ignore this email.`,
-      html: `<p style="font-family:sans-serif">Your Foundry sign-in code is:</p><p style="font-family:monospace;font-size:32px;letter-spacing:8px;font-weight:bold">${display}</p><p style="font-family:sans-serif;color:#666">This code expires in 10 minutes. If you did not request this, ignore this email.</p>`,
+  const guardianUrl = process.env.GUARDIAN_URL
+  const guardianSecret = process.env.GUARDIAN_FOUNDRY_SECRET
+
+  if (guardianUrl && guardianSecret) {
+    const { createHmac } = await import('crypto')
+    const body = JSON.stringify({
+      action: 'mailgun-send-foundry-otp',
+      params: { recipient: email, code },
     })
-  } else {
-    console.log(`\n[EMAIL OTP] ${email}\nCode: ${display}\n`)
+    const ts = Math.floor(Date.now() / 1000).toString()
+    const sig = createHmac('sha256', guardianSecret).update(`${ts}:${body}`).digest('hex')
+    const res = await fetch(`${guardianUrl}/execute`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Guardian-Signature': `${ts}:${sig}`,
+        'X-Guardian-Caller': 'foundry_srv',
+      },
+      body,
+    })
+    if (!res.ok) {
+      const err = await res.text().catch(() => res.statusText)
+      throw new Error(`Guardian OTP send failed: ${err}`)
+    }
+    return
   }
+
+  // Fallback: log to stdout when Guardian is not configured
+  const display = `${code.slice(0, 3)} ${code.slice(3)}`
+  console.log(`\n[EMAIL OTP] ${email}\nCode: ${display}\n`)
 }
 
 export async function sendSecurityAlert(to: string, subject: string, body: string) {
