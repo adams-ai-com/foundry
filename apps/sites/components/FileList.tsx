@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { SiteFile } from '@/lib/actions'
 
@@ -94,11 +95,31 @@ function formatDate(ts: string): string {
 
 export function FileList({ files }: { files: SiteFile[] }) {
   const router = useRouter()
+  const [openingPdf, setOpeningPdf] = useState<string | null>(null)
 
   async function handleDelete(id: string, name: string) {
     if (!confirm(`Delete "${name}"?`)) return
     await fetch(`/sites/api/file/${id}`, { method: 'DELETE' })
     router.refresh()
+  }
+
+  async function openInFoundryPdf(id: string, name: string) {
+    setOpeningPdf(id)
+    try {
+      const res = await fetch(`/sites/api/file/${id}`)
+      if (!res.ok) throw new Error('Could not fetch file')
+      const blob = await res.blob()
+      const form = new FormData()
+      form.append('file', new File([blob], name, { type: 'application/pdf' }))
+      const up = await fetch('/pdf/api/pdf/upload', { method: 'POST', body: form })
+      if (!up.ok) throw new Error('Upload failed')
+      const { jobId } = await up.json()
+      window.open(`/pdf/editor/${jobId}`, '_blank')
+    } catch (e) {
+      alert('Could not open PDF: ' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setOpeningPdf(null)
+    }
   }
 
   if (files.length === 0) return null
@@ -108,30 +129,56 @@ export function FileList({ files }: { files: SiteFile[] }) {
       <ul className="divide-y divide-border">
         {files.map(f => (
           <li key={f.id} className="group flex items-center">
-            <a
-              href={`/sites/api/file/${f.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 flex items-center gap-3.5 px-4 py-3 hover:bg-bg-hover transition-colors min-w-0"
-            >
-              <div className="w-8 h-8 rounded-lg bg-bg-surface border border-border flex-shrink-0
-                             flex items-center justify-center
-                             group-hover:bg-accent/10 group-hover:border-accent/20 transition-all">
-                <div className="w-4 h-4 text-accent/50 group-hover:text-accent transition-colors">
-                  <FileTypeIcon mimeType={f.mimeType} />
+            {f.mimeType === 'application/pdf' ? (
+              <button
+                onClick={() => openInFoundryPdf(f.id, f.name)}
+                disabled={openingPdf === f.id}
+                className="flex-1 flex items-center gap-3.5 px-4 py-3 hover:bg-bg-hover transition-colors min-w-0 text-left disabled:opacity-60"
+              >
+                <div className="w-8 h-8 rounded-lg bg-bg-surface border border-border flex-shrink-0
+                               flex items-center justify-center
+                               group-hover:bg-accent/10 group-hover:border-accent/20 transition-all">
+                  <div className="w-4 h-4 text-accent/50 group-hover:text-accent transition-colors">
+                    <FileTypeIcon mimeType={f.mimeType} />
+                  </div>
                 </div>
-              </div>
-              <span className="flex-1 text-sm font-medium text-fg-primary group-hover:text-accent
-                               transition-colors overflow-hidden text-ellipsis whitespace-nowrap">
-                {f.name}
-              </span>
-              <span className="text-xs text-fg-tertiary shrink-0 tabular-nums ml-4">
-                {formatSize(f.size)}
-              </span>
-              <span className="text-xs text-fg-tertiary shrink-0 tabular-nums ml-3">
-                {formatDate(f.createdAt)}
-              </span>
-            </a>
+                <span className="flex-1 text-sm font-medium text-fg-primary group-hover:text-accent
+                                 transition-colors overflow-hidden text-ellipsis whitespace-nowrap">
+                  {openingPdf === f.id ? 'Opening…' : f.name}
+                </span>
+                <span className="text-xs text-fg-tertiary shrink-0 tabular-nums ml-4">
+                  {formatSize(f.size)}
+                </span>
+                <span className="text-xs text-fg-tertiary shrink-0 tabular-nums ml-3">
+                  {formatDate(f.createdAt)}
+                </span>
+              </button>
+            ) : (
+              <a
+                href={`/sites/api/file/${f.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 flex items-center gap-3.5 px-4 py-3 hover:bg-bg-hover transition-colors min-w-0"
+              >
+                <div className="w-8 h-8 rounded-lg bg-bg-surface border border-border flex-shrink-0
+                               flex items-center justify-center
+                               group-hover:bg-accent/10 group-hover:border-accent/20 transition-all">
+                  <div className="w-4 h-4 text-accent/50 group-hover:text-accent transition-colors">
+                    <FileTypeIcon mimeType={f.mimeType} />
+                  </div>
+                </div>
+                <span className="flex-1 text-sm font-medium text-fg-primary group-hover:text-accent
+                                 transition-colors overflow-hidden text-ellipsis whitespace-nowrap">
+                  {f.name}
+                </span>
+                <span className="text-xs text-fg-tertiary shrink-0 tabular-nums ml-4">
+                  {formatSize(f.size)}
+                </span>
+                <span className="text-xs text-fg-tertiary shrink-0 tabular-nums ml-3">
+                  {formatDate(f.createdAt)}
+                </span>
+              </a>
+            )}
             <button
               onClick={() => handleDelete(f.id, f.name)}
               className="opacity-0 group-hover:opacity-100 px-3 py-1 text-xs text-fg-tertiary

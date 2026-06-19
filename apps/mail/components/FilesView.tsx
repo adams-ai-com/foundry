@@ -28,8 +28,28 @@ export function FilesView() {
   const [search, setSearch] = useState('')
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  const [openingPdf, setOpeningPdf] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  async function openInFoundryPdf(id: string, filename: string) {
+    setOpeningPdf(id)
+    try {
+      const res = await fetch(downloadFileUrl(id))
+      if (!res.ok) throw new Error('Could not fetch file')
+      const blob = await res.blob()
+      const form = new FormData()
+      form.append('file', new File([blob], filename, { type: 'application/pdf' }))
+      const up = await fetch('/pdf/api/pdf/upload', { method: 'POST', body: form })
+      if (!up.ok) throw new Error('Upload failed')
+      const { jobId } = await up.json()
+      window.open(`/pdf/editor/${jobId}`, '_blank')
+    } catch (e) {
+      alert('Could not open PDF: ' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setOpeningPdf(null)
+    }
+  }
 
   const load = useCallback(async (q?: string) => {
     setLoading(true)
@@ -156,13 +176,23 @@ export function FilesView() {
                     <div className="flex items-center gap-2">
                       <span className="text-base flex-shrink-0">{fileIcon(file.contentType)}</span>
                       <div className="min-w-0">
-                        <a
-                          href={downloadFileUrl(file.id)}
-                          download={file.filename}
-                          className="text-sm text-gray-200 hover:text-blue-300 truncate block max-w-xs"
-                        >
-                          {file.filename}
-                        </a>
+                        {file.contentType === 'application/pdf' ? (
+                          <button
+                            onClick={() => openInFoundryPdf(file.id, file.filename)}
+                            disabled={openingPdf === file.id}
+                            className="text-sm text-gray-200 hover:text-blue-300 truncate block max-w-xs text-left disabled:opacity-50"
+                          >
+                            {openingPdf === file.id ? 'Opening…' : file.filename}
+                          </button>
+                        ) : (
+                          <a
+                            href={downloadFileUrl(file.id)}
+                            download={file.filename}
+                            className="text-sm text-gray-200 hover:text-blue-300 truncate block max-w-xs"
+                          >
+                            {file.filename}
+                          </a>
+                        )}
                         {file.messageId && (
                           <span className="text-xs text-gray-500">from email</span>
                         )}
