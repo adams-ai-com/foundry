@@ -92,12 +92,12 @@ export async function passwordLogin(formData: FormData) {
   // Password verified — issue an emailed OTP as second factor
   const { randomInt, randomBytes, createHash } = await import('crypto')
   const code = String(randomInt(0, 1000000)).padStart(6, '0')
-  const salt = randomBytes(16).toString('hex')
-  const codeHash = createHash('sha256').update(code + salt).digest('hex')
+  const otpSalt = randomBytes(16).toString('hex')
+  const codeHash = createHash('sha256').update(code + otpSalt).digest('hex')
 
   const challengeRows = await db`
     INSERT INTO email_otp_challenges (user_id, code_hash, salt)
-    VALUES (${user.id as string}, ${codeHash}, ${salt})
+    VALUES (${user.id as string}, ${codeHash}, ${otpSalt})
     RETURNING id
   `
   const challengeId = challengeRows[0].id as string
