@@ -84,6 +84,13 @@ while :; do
 done
 log "staging containers are on $TARGET"
 
+# Sync e2e test files from gitea/staging so spec files always match the deployed containers.
+# Without this, the local working tree (on the main branch) would run stale spec files
+# against containers built from a newer staging commit.
+as_foundry git -C "$REPO" fetch gitea >>"$LOG" 2>&1 || log "WARN: git fetch gitea failed — running with local spec files"
+as_foundry git -C "$REPO" checkout gitea/staging -- e2e-suite/ packages/e2e/ >>"$LOG" 2>&1 \
+  || log "WARN: could not sync e2e-suite from gitea/staging — running with local spec files"
+
 # 2. Staging test suite.
 # One-shot skip escape hatch: list spec basenames (e.g. mail.spec.ts) in
 # /etc/foundry-promote/skip-specs-once to EXCLUDE them from THIS gate run only.
