@@ -88,7 +88,7 @@ export default function BulkSendPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Failed to create bulk send')
-      router.push(`/pdf/envelopes/bulk-sends/${data.bulk_id}`)
+      router.push(`/envelopes/bulk-sends/${data.bulk_id}`)
     } catch (e: any) {
       setSubmitError(e.message)
       setSubmitting(false)
@@ -99,7 +99,7 @@ export default function BulkSendPage() {
     <div className="max-w-2xl mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-6">
-        <button onClick={() => router.push('/pdf/envelopes')}
+        <button onClick={() => router.push('/envelopes')}
           className="text-xs text-fg-tertiary hover:text-fg-secondary mb-1 flex items-center gap-1">
           ← Envelopes
         </button>
@@ -137,7 +137,7 @@ export default function BulkSendPage() {
               <p className="text-xs text-fg-tertiary">
                 Create an envelope and save it as a template first.
               </p>
-              <button onClick={() => router.push('/pdf/envelopes/templates')}
+              <button onClick={() => router.push('/envelopes/templates')}
                 className="mt-4 text-sm text-accent hover:underline">
                 Go to Templates →
               </button>

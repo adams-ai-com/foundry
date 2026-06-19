@@ -48,7 +48,7 @@ export default function TemplatesPage() {
       const res = await fetch(`/pdf/api/envelope-templates/${id}/use`, { method: 'POST' })
       const data = await res.json()
       if (!res.ok) { alert(data.error ?? 'Failed to use template'); return }
-      router.push(`/pdf/editor/${data.job_id}?template=${id}`)
+      router.push(`/editor/${data.job_id}?template=${id}`)
     } finally {
       setUsing(null)
     }
@@ -87,7 +87,7 @@ export default function TemplatesPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <button onClick={() => router.push('/pdf/envelopes')}
+          <button onClick={() => router.push('/envelopes')}
             className="text-xs text-fg-tertiary hover:text-fg-secondary mb-1 flex items-center gap-1">
             ← Envelopes
           </button>

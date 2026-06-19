@@ -159,7 +159,7 @@ export default function BulkSendDetailPage({ params }: { params: Promise<{ id: s
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
-          <button onClick={() => router.push('/pdf/envelopes')}
+          <button onClick={() => router.push('/envelopes')}
             className="text-xs text-fg-tertiary hover:text-fg-secondary mb-1 flex items-center gap-1">
             ← Envelopes
           </button>
@@ -238,7 +238,7 @@ export default function BulkSendDetailPage({ params }: { params: Promise<{ id: s
               </span>
               {env.status !== 'draft' && (
                 <button
-                  onClick={() => router.push(`/pdf/envelopes/${env.id}`)}
+                  onClick={() => router.push(`/envelopes/${env.id}`)}
                   className="shrink-0 text-xs text-fg-tertiary hover:text-fg-secondary">
                   View →
                 </button>

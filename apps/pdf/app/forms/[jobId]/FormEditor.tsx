@@ -324,7 +324,7 @@ export function FormEditor({ jobId }: { jobId: string }) {
       {/* Toolbar */}
       <div className="h-11 bg-bg-raised border-b border-border flex items-center px-3 gap-2 shrink-0 overflow-x-auto">
         <button
-          onClick={() => router.push('/pdf')}
+          onClick={() => router.push('/')}
           className="text-xs text-fg-tertiary hover:text-fg-primary flex items-center gap-1 mr-1 shrink-0"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}

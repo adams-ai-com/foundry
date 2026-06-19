@@ -72,7 +72,7 @@ export default function PdfHome() {
       const res = await fetch('/pdf/api/pdf/upload', { method: 'POST', body: form })
       if (!res.ok) throw new Error(await res.text())
       const { jobId } = await res.json()
-      router.push(`/pdf/editor/${jobId}`)
+      router.push(`/editor/${jobId}`)
     } catch (e) { setError(e instanceof Error ? e.message : 'Upload failed'); setUploading(false) }
   }
 
@@ -83,7 +83,7 @@ export default function PdfHome() {
       const res = await fetch('/pdf/api/pdf/convert/import', { method: 'POST', body: form })
       if (!res.ok) { const err = await res.json().catch(() => ({ error: 'Import failed' })); throw new Error(err.error ?? 'Import failed') }
       const { jobId } = await res.json()
-      router.push(`/pdf/editor/${jobId}`)
+      router.push(`/editor/${jobId}`)
     } catch (e) { setError(e instanceof Error ? e.message : 'Import failed'); setImporting(false) }
   }
 

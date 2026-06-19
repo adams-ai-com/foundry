@@ -1009,7 +1009,7 @@ export function Editor({ jobId }: { jobId: string }) {
     setSaving(true)
     const d = await apiPost(`/pdf/api/pdf/${jobId}/split`, { start, end })
     setSplitDialog(false); setSaving(false)
-    if (d.jobId) { toast('Split created — opening…'); setTimeout(() => router.push(`/pdf/editor/${d.jobId}`), 1000) }
+    if (d.jobId) { toast('Split created — opening…'); setTimeout(() => router.push(`/editor/${d.jobId}`), 1000) }
   }
 
   async function exportAs(format: string, label: string) {
@@ -1045,7 +1045,7 @@ export function Editor({ jobId }: { jobId: string }) {
       })
       const d = await res.json()
       if (!res.ok) { toast(d.error ?? 'Redaction failed'); return }
-      if (d.jobId) { toast('Redacted — opening…'); setTimeout(() => router.push(`/pdf/editor/${d.jobId}`), 1200) }
+      if (d.jobId) { toast('Redacted — opening…'); setTimeout(() => router.push(`/editor/${d.jobId}`), 1200) }
     } catch { toast('Redaction failed') }
     finally { setRedacting(false) }
   }
@@ -1472,7 +1472,7 @@ export function Editor({ jobId }: { jobId: string }) {
 
       {/* ── App bar (row 1): navigation + output actions ──────────────────── */}
       <div className="h-10 bg-bg-raised border-b border-border flex items-center px-2 gap-0.5 shrink-0">
-        <button onClick={() => router.push('/pdf')}
+        <button onClick={() => router.push('/')}
           className="flex items-center gap-1 text-xs text-fg-tertiary hover:text-fg-primary mr-1 px-1.5 py-1.5 rounded hover:bg-bg-hover shrink-0">
           <Icon d={ICONS.back} size={14} />
           <span className="hidden sm:block">Files</span>

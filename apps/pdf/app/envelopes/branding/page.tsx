@@ -50,7 +50,7 @@ export default function BrandingPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
       <div className="mb-6">
-        <button onClick={() => router.push('/pdf/envelopes')}
+        <button onClick={() => router.push('/envelopes')}
           className="text-xs text-fg-tertiary hover:text-fg-secondary mb-1 flex items-center gap-1">
           ← Envelopes
         </button>

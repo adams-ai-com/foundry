@@ -74,7 +74,7 @@ export default function EnvelopesPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <button onClick={() => router.push('/pdf')}
+          <button onClick={() => router.push('/')}
             className="text-xs text-fg-tertiary hover:text-fg-secondary mb-1 flex items-center gap-1">
             ← Documents
           </button>
@@ -82,25 +82,25 @@ export default function EnvelopesPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => router.push('/pdf/envelopes/branding')}
+            onClick={() => router.push('/envelopes/branding')}
             className="text-sm text-fg-secondary border border-border px-3 py-2 rounded-lg hover:bg-bg-hover transition-colors"
           >
             Branding
           </button>
           <button
-            onClick={() => router.push('/pdf/envelopes/bulk-send')}
+            onClick={() => router.push('/envelopes/bulk-send')}
             className="text-sm text-fg-secondary border border-border px-3 py-2 rounded-lg hover:bg-bg-hover transition-colors"
           >
             Bulk send
           </button>
           <button
-            onClick={() => router.push('/pdf/envelopes/templates')}
+            onClick={() => router.push('/envelopes/templates')}
             className="text-sm text-fg-secondary border border-border px-3 py-2 rounded-lg hover:bg-bg-hover transition-colors"
           >
             Templates
           </button>
           <button
-            onClick={() => router.push('/pdf')}
+            onClick={() => router.push('/')}
             className="text-sm font-medium bg-accent text-white px-4 py-2 rounded-lg hover:opacity-90 transition-opacity"
           >
             New envelope
@@ -130,7 +130,7 @@ export default function EnvelopesPage() {
               return (
                 <button
                   key={env.id}
-                  onClick={() => router.push(`/pdf/envelopes/${env.id}`)}
+                  onClick={() => router.push(`/envelopes/${env.id}`)}
                   className="w-full text-left px-5 py-4 hover:bg-bg-hover transition-colors flex items-center gap-4"
                 >
                   {/* Icon */}

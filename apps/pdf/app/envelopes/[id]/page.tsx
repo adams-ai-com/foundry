@@ -135,7 +135,7 @@ export default function EnvelopePage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
       {/* Back */}
-      <button onClick={() => router.push('/pdf')}
+      <button onClick={() => router.push('/')}
         className="flex items-center gap-1.5 text-xs text-fg-tertiary hover:text-fg-secondary mb-6">
         ← Back to documents
       </button>
