@@ -7,7 +7,6 @@ interface Props {
 export default async function ViewerPage({ params }: Props) {
   const { jobId } = await params
 
-  // Fetch metadata from the proc to get the filename
   const procUrl = process.env.FOUNDRY_PDF_PROC_URL ?? 'http://127.0.0.1:3200'
   let filename = 'document.pdf'
   try {
@@ -23,16 +22,17 @@ export default async function ViewerPage({ params }: Props) {
     // proc unreachable — still render viewer
   }
 
-  const fileUrl = `/pdf/api/pdf/${jobId}/file`
+  const fileUrl  = `/pdf/api/pdf/${jobId}/file`
+  const editUrl  = `/pdf/editor/${jobId}`
   const downloadUrl = `/pdf/api/pdf/${jobId}/download`
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3rem)]">
+    <div className="flex flex-col h-screen">
       {/* Toolbar */}
       <div className="h-12 bg-bg-raised border-b border-border flex items-center px-4 gap-3 shrink-0">
         <Link
-          href="/pdf"
-          className="text-sm text-fg-tertiary hover:text-fg-primary transition-colors flex items-center gap-1"
+          href="/"
+          className="text-sm text-fg-tertiary hover:text-fg-primary transition-colors flex items-center gap-1.5"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
                strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
@@ -40,8 +40,12 @@ export default async function ViewerPage({ params }: Props) {
           </svg>
           All files
         </Link>
+
         <div className="w-px h-4 bg-border shrink-0" />
-        <span className="text-sm font-medium text-fg-primary truncate flex-1">{filename}</span>
+
+        <span className="text-sm font-medium text-fg-primary truncate flex-1 min-w-0">{filename}</span>
+
+        {/* Download */}
         <a
           href={downloadUrl}
           className="flex items-center gap-1.5 text-sm text-fg-secondary hover:text-fg-primary
@@ -55,9 +59,23 @@ export default async function ViewerPage({ params }: Props) {
           </svg>
           Download
         </a>
+
+        {/* Edit — primary action */}
+        <a
+          href={editUrl}
+          className="flex items-center gap-1.5 text-sm font-semibold text-white
+                     bg-blue-600 hover:bg-blue-500 rounded-lg px-4 py-1.5 transition-colors shrink-0"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+               strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+          Edit
+        </a>
       </div>
 
-      {/* PDF viewer — native browser rendering via iframe */}
+      {/* PDF viewer — native browser rendering */}
       <div className="flex-1 bg-bg-surface overflow-hidden">
         <iframe
           src={fileUrl}

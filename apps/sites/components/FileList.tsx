@@ -114,7 +114,7 @@ export function FileList({ files }: { files: SiteFile[] }) {
       const up = await fetch('/pdf/api/pdf/upload', { method: 'POST', body: form })
       if (!up.ok) throw new Error('Upload failed')
       const { jobId } = await up.json()
-      window.open(`/pdf/editor/${jobId}`, '_blank')
+      window.open(`/pdf/viewer/${jobId}`, '_blank')
     } catch (e) {
       alert('Could not open PDF: ' + (e instanceof Error ? e.message : String(e)))
     } finally {

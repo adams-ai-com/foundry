@@ -69,7 +69,7 @@ async function uploadAndOpen(url) {
     }
 
     const { jobId } = await res.json()
-    chrome.tabs.create({ url: `${FOUNDRY}/pdf/editor/${jobId}` })
+    chrome.tabs.create({ url: `${FOUNDRY}/pdf/viewer/${jobId}` })
     return { ok: true }
   } catch (e) {
     return { ok: false, error: e?.message ?? 'Network error' }

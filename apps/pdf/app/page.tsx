@@ -72,7 +72,7 @@ export default function PdfHome() {
       const res = await fetch('/pdf/api/pdf/upload', { method: 'POST', body: form })
       if (!res.ok) throw new Error(await res.text())
       const { jobId } = await res.json()
-      router.push(`/editor/${jobId}`)
+      router.push(`/viewer/${jobId}`)
     } catch (e) { setError(e instanceof Error ? e.message : 'Upload failed'); setUploading(false) }
   }
 
@@ -83,7 +83,7 @@ export default function PdfHome() {
       const res = await fetch('/pdf/api/pdf/convert/import', { method: 'POST', body: form })
       if (!res.ok) { const err = await res.json().catch(() => ({ error: 'Import failed' })); throw new Error(err.error ?? 'Import failed') }
       const { jobId } = await res.json()
-      router.push(`/editor/${jobId}`)
+      router.push(`/viewer/${jobId}`)
     } catch (e) { setError(e instanceof Error ? e.message : 'Import failed'); setImporting(false) }
   }
 
@@ -201,7 +201,7 @@ export default function PdfHome() {
                       return next
                     })
                   }} className="accent-accent shrink-0 cursor-pointer" />
-                  <a href={`/pdf/editor/${f.jobId}`} className="flex items-center gap-3 flex-1 min-w-0">
+                  <a href={`/pdf/viewer/${f.jobId}`} className="flex items-center gap-3 flex-1 min-w-0">
                     <div className="w-7 h-7 rounded-md bg-bg-surface border border-border flex items-center justify-center shrink-0">
                       <FileIcon size={4} />
                     </div>
