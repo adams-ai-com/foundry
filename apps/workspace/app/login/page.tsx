@@ -37,9 +37,7 @@ export default async function LoginPage({
   const urlError = sp.err ?? null
 
   const heading = org ? `Sign in to ${org.name}` : 'Sign in to Foundry'
-  const subheading = org
-    ? 'Use your Microsoft account or email and password.'
-    : 'Use your Microsoft account or email and password.'
+  const subheading = 'Enter your email address to continue.'
 
   return (
     <AuthShell>

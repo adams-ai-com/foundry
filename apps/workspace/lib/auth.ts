@@ -43,14 +43,12 @@ export async function getSession(): Promise<SessionUser | null> {
 export async function requireSession(): Promise<SessionUser> {
   const session = await getSession()
   if (!session) redirect('/login')
-  if (session.totpEnforced && !session.hasTotpSecret) redirect('/login/setup')
   return session
 }
 
 export async function requireAdmin(): Promise<SessionUser> {
   const session = await getSession()
   if (!session) redirect('/login')
-  if (session.totpEnforced && !session.hasTotpSecret) redirect('/login/setup')
   if (session.role !== 'owner' && session.role !== 'admin') redirect('/')
   return session
 }

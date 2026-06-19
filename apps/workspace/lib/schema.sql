@@ -107,3 +107,15 @@ DO $$ BEGIN
     CHECK (app IN ('docs','sheets','mail','wiki','channels','sites','pdf'));
 EXCEPTION WHEN others THEN NULL;
 END $$;
+
+-- Email OTP challenges (replaces TOTP as 2nd factor)
+CREATE TABLE IF NOT EXISTS email_otp_challenges (
+  id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash  TEXT NOT NULL,
+  salt       TEXT NOT NULL,
+  attempts   INTEGER NOT NULL DEFAULT 0,
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '10 minutes',
+  used_at    TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS email_otp_user ON email_otp_challenges(user_id);

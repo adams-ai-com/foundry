@@ -45,6 +45,21 @@ export async function sendInvite(
   }
 }
 
+export async function sendEmailOTP(email: string, code: string) {
+  const display = `${code.slice(0, 3)} ${code.slice(3)}`
+  if (process.env.SMTP_HOST) {
+    const t = await makeTransport()
+    await t.sendMail({
+      from: FROM(), to: email,
+      subject: `${display} — Your Foundry sign-in code`,
+      text: `Your Foundry sign-in code is: ${display}\n\nThis code expires in 10 minutes. If you did not request this, ignore this email.`,
+      html: `<p style="font-family:sans-serif">Your Foundry sign-in code is:</p><p style="font-family:monospace;font-size:32px;letter-spacing:8px;font-weight:bold">${display}</p><p style="font-family:sans-serif;color:#666">This code expires in 10 minutes. If you did not request this, ignore this email.</p>`,
+    })
+  } else {
+    console.log(`\n[EMAIL OTP] ${email}\nCode: ${display}\n`)
+  }
+}
+
 export async function sendSecurityAlert(to: string, subject: string, body: string) {
   if (process.env.SMTP_HOST) {
     const t = await makeTransport()

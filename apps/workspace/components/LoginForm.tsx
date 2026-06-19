@@ -3,19 +3,9 @@
 import { useState } from 'react'
 import { submitEmail } from '@/lib/actions'
 
-const MS_ERRORS: Record<string, string> = {
-  auth_failed: 'Microsoft sign-in failed. Please try again.',
-  domain_not_allowed: 'Your Microsoft account domain is not permitted.',
-  account_deactivated: 'This account has been deactivated. Contact your administrator.',
-  ms_not_configured: 'Microsoft sign-in is not configured.',
-  access_cancelled: 'Sign-in was cancelled.',
-}
-
 export function LoginForm({ urlError }: { urlError?: string | null }) {
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(
-    urlError ? (MS_ERRORS[urlError] ?? 'Sign-in failed. Please try again.') : null
-  )
+  const [error, setError] = useState<string | null>(urlError ?? null)
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -27,26 +17,6 @@ export function LoginForm({ urlError }: { urlError?: string | null }) {
 
   return (
     <div className="space-y-4">
-      {/* Microsoft SSO button */}
-      <a
-        href="/api/auth/microsoft/start"
-        className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-border bg-bg-surface hover:bg-bg-hover text-fg-primary text-sm font-semibold transition-all duration-150"
-      >
-        <svg viewBox="0 0 24 24" className="w-5 h-5 flex-shrink-0" fill="none">
-          <rect x="1" y="1" width="10" height="10" fill="#F25022"/>
-          <rect x="13" y="1" width="10" height="10" fill="#7FBA00"/>
-          <rect x="1" y="13" width="10" height="10" fill="#00A4EF"/>
-          <rect x="13" y="13" width="10" height="10" fill="#FFB900"/>
-        </svg>
-        Sign in with Microsoft
-      </a>
-
-      <div className="flex items-center gap-3 text-xs text-fg-tertiary">
-        <div className="flex-1 border-t border-border" />
-        <span>or use email</span>
-        <div className="flex-1 border-t border-border" />
-      </div>
-
       {/* Email + continue form */}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>

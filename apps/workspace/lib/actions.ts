@@ -4,24 +4,20 @@ import { redirect } from 'next/navigation'
 import { cookies, headers } from 'next/headers'
 import db from './db'
 import { createSession, setSessionCookie, destroySession, clearSessionCookie, getSession, requireAdmin } from './auth'
-import { generateSecret, verifyCode } from './totp'
-import { sendInvite, sendSecurityAlert } from './mailer'
+import { sendInvite, sendSecurityAlert, sendEmailOTP } from './mailer'
 import { writeAudit } from './audit'
 
 const ALLOWLIST = new Set(['john@adams-ai.com'])
-const MS_DOMAIN = 'adams-ai.com'
 const EMAIL_COOKIE = 'foundry_login_email'
-const PENDING_SECRET_COOKIE = 'foundry_totp_pending'
+const OTP_CHALLENGE_COOKIE = 'foundry_otp_challenge'
 const INVITE_TOKEN_COOKIE = 'foundry_invite'
+const OTP_MAX_ATTEMPTS = 5
 const COOKIE_OPTS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'lax' as const,
   path: '/',
 }
-
-const TOTP_LOCK_THRESHOLD = 5
-const TOTP_LOCK_MINUTES = 15
 
 async function getRequestMeta(): Promise<{ ip: string | null; ua: string | null }> {
   const hdrs = await headers()
@@ -36,12 +32,7 @@ export async function submitEmail(formData: FormData) {
   const email = (formData.get('email') as string ?? '').trim().toLowerCase()
   if (!email || !email.includes('@')) return { error: 'Valid email required' }
 
-  // @adams-ai.com users always go through Entra SSO
-  if (email.endsWith(`@${MS_DOMAIN}`)) {
-    redirect('/api/auth/microsoft/start')
-  }
-
-  // External users: must already have an account
+  // Must have an account with org membership, unless explicitly allowlisted
   if (!ALLOWLIST.has(email)) {
     const rows = await db`
       SELECT u.id FROM users u
@@ -69,7 +60,7 @@ export async function passwordLogin(formData: FormData) {
   if (!password) return { error: 'Password required' }
 
   const rows = await db`
-    SELECT id, password_hash, deactivated_at, totp_secret FROM users WHERE email = ${email}
+    SELECT id, password_hash, deactivated_at FROM users WHERE email = ${email}
   `
   if (!rows.length || !rows[0].password_hash) {
     await writeAudit({ orgId: null, actorEmail: email, action: 'auth.sign_in_failed', metadata: { reason: 'no_password' } })
@@ -98,161 +89,74 @@ export async function passwordLogin(formData: FormData) {
     return { error: 'Invalid credentials' }
   }
 
-  // Password verified. A user with TOTP configured must still present the
-  // second factor — the verify step owns session creation. EMAIL_COOKIE stays
-  // set because /login/verify requires it.
-  if (user.totp_secret) {
-    redirect('/login/verify')
-  }
+  // Password verified — issue an emailed OTP as second factor
+  const { randomInt, randomBytes, createHash } = await import('crypto')
+  const code = String(randomInt(0, 1000000)).padStart(6, '0')
+  const salt = randomBytes(16).toString('hex')
+  const codeHash = createHash('sha256').update(code + salt).digest('hex')
 
-  jar.delete(EMAIL_COOKIE)
-
-  const memberRows = await db`
-    SELECT org_id FROM org_members WHERE user_id = ${user.id} ORDER BY joined_at ASC LIMIT 1
+  const challengeRows = await db`
+    INSERT INTO email_otp_challenges (user_id, code_hash, salt)
+    VALUES (${user.id as string}, ${codeHash}, ${salt})
+    RETURNING id
   `
-  let orgId = (memberRows[0]?.org_id ?? null) as string | null
+  const challengeId = challengeRows[0].id as string
 
-  const inviteToken = jar.get(INVITE_TOKEN_COOKIE)?.value
-  if (inviteToken) {
-    orgId = await acceptInvite(user.id as string, inviteToken, jar) ?? orgId
-  }
+  await sendEmailOTP(email, code)
 
-  const { ip, ua } = await getRequestMeta()
-  const { sessionId, timeoutHours } = await createSession(user.id as string, orgId, { ip, ua })
-  await setSessionCookie(sessionId, timeoutHours)
-  await writeAudit({ orgId, actorId: user.id as string, actorEmail: email, action: 'auth.sign_in', metadata: { method: 'password' } })
-
-  const returnTo = jar.get('foundry_return_to')?.value
-  jar.delete('foundry_return_to')
-  redirect(returnTo && returnTo.startsWith('/') ? returnTo : '/')
+  jar.set(OTP_CHALLENGE_COOKIE, challengeId, { ...COOKIE_OPTS, maxAge: 10 * 60 })
+  redirect('/login/verify')
 }
 
-export async function verifyTotp(formData: FormData) {
+export async function verifyEmailCode(formData: FormData) {
   const jar = await cookies()
   const email = jar.get(EMAIL_COOKIE)?.value
-  if (!email) redirect('/login')
+  const challengeId = jar.get(OTP_CHALLENGE_COOKIE)?.value
+  if (!email || !challengeId) redirect('/login')
 
   const code = (formData.get('code') as string ?? '').replace(/\s/g, '')
   if (!code || code.length !== 6) return { error: 'Enter the 6-digit code' }
 
   const rows = await db`
-    SELECT id, email, totp_secret, deactivated_at, totp_failed_count, totp_locked_until
-    FROM users WHERE email = ${email}
+    SELECT id, user_id, code_hash, salt, attempts, expires_at, used_at
+    FROM email_otp_challenges
+    WHERE id = ${challengeId}
+    LIMIT 1
   `
-  if (!rows.length || !rows[0].totp_secret) redirect('/login/setup')
+  if (!rows.length) return { error: 'Code expired. Please sign in again.' }
+  const challenge = rows[0]
 
-  const user = rows[0]
+  if (challenge.used_at) return { error: 'Code already used. Please sign in again.' }
 
-  if (user.deactivated_at) {
-    const orgRows = await db`SELECT org_id FROM org_members WHERE user_id = ${user.id} LIMIT 1`
-    await writeAudit({ orgId: (orgRows[0]?.org_id ?? null) as string | null, actorId: user.id as string, actorEmail: email, action: 'auth.sign_in_failed', metadata: { reason: 'deactivated' } })
-    return { error: 'This account has been deactivated. Contact your administrator.' }
+  if (new Date(challenge.expires_at as string) < new Date()) {
+    await db`DELETE FROM email_otp_challenges WHERE id = ${challengeId}`
+    return { error: 'Code expired. Please sign in again.' }
   }
 
-  // Check rate-limit lock
-  if (user.totp_locked_until && new Date(user.totp_locked_until as string) > new Date()) {
-    const mins = Math.ceil((new Date(user.totp_locked_until as string).getTime() - Date.now()) / 60000)
-    return { error: `Too many failed attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.` }
+  if ((challenge.attempts as number) >= OTP_MAX_ATTEMPTS) {
+    await db`DELETE FROM email_otp_challenges WHERE id = ${challengeId}`
+    return { error: 'Too many attempts. Please sign in again.' }
   }
 
-  if (!verifyCode(user.totp_secret as string, code)) {
-    const orgRows = await db`SELECT org_id FROM org_members WHERE user_id = ${user.id} LIMIT 1`
-    const orgId = (orgRows[0]?.org_id ?? null) as string | null
+  const { createHash } = await import('crypto')
+  const expectedHash = createHash('sha256').update(code + (challenge.salt as string)).digest('hex')
 
-    const updated = await db`
-      UPDATE users SET
-        totp_failed_count = totp_failed_count + 1,
-        totp_locked_until = CASE
-          WHEN totp_failed_count + 1 >= ${TOTP_LOCK_THRESHOLD}
-          THEN NOW() + (${TOTP_LOCK_MINUTES} * INTERVAL '1 minute')
-          ELSE totp_locked_until
-        END
-      WHERE id = ${user.id}
-      RETURNING totp_failed_count
-    `
-    const newCount = updated[0].totp_failed_count as number
-    const isNowLocked = newCount >= TOTP_LOCK_THRESHOLD
-
-    await writeAudit({ orgId, actorId: user.id as string, actorEmail: email, action: 'auth.sign_in_failed', metadata: { reason: 'bad_totp', locked: isNowLocked } })
-
-    if (isNowLocked) {
-      void sendLockAlert(user.id as string, email, orgId).catch(() => {})
-      return { error: `Too many failed attempts. Account locked for ${TOTP_LOCK_MINUTES} minutes.` }
+  if (expectedHash !== challenge.code_hash) {
+    const newAttempts = (challenge.attempts as number) + 1
+    await db`UPDATE email_otp_challenges SET attempts = ${newAttempts} WHERE id = ${challengeId}`
+    const remaining = OTP_MAX_ATTEMPTS - newAttempts
+    if (remaining <= 0) {
+      await db`DELETE FROM email_otp_challenges WHERE id = ${challengeId}`
+      return { error: 'Too many attempts. Please sign in again.' }
     }
-
-    const remaining = TOTP_LOCK_THRESHOLD - newCount
-    return { error: `Invalid code — try again. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining before lockout.` }
+    return { error: `Invalid code — ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.` }
   }
 
-  // Success — reset failure counter
-  await db`UPDATE users SET totp_failed_count = 0, totp_locked_until = NULL WHERE id = ${user.id}`
-
+  await db`UPDATE email_otp_challenges SET used_at = NOW() WHERE id = ${challengeId}`
+  jar.delete(OTP_CHALLENGE_COOKIE)
   jar.delete(EMAIL_COOKIE)
 
-  const memberRows = await db`
-    SELECT org_id FROM org_members WHERE user_id = ${user.id} ORDER BY joined_at ASC LIMIT 1
-  `
-  let orgId = (memberRows[0]?.org_id ?? null) as string | null
-
-  const inviteToken = jar.get(INVITE_TOKEN_COOKIE)?.value
-  if (inviteToken) {
-    orgId = await acceptInvite(user.id as string, inviteToken, jar) ?? orgId
-  }
-
-  const { ip, ua } = await getRequestMeta()
-  const { sessionId, timeoutHours } = await createSession(user.id as string, orgId, { ip, ua })
-  await setSessionCookie(sessionId, timeoutHours)
-  await writeAudit({ orgId, actorId: user.id as string, actorEmail: user.email as string, action: 'auth.sign_in' })
-
-  const returnTo = jar.get('foundry_return_to')?.value
-  jar.delete('foundry_return_to')
-  redirect(returnTo && returnTo.startsWith('/') ? returnTo : '/')
-}
-
-async function sendLockAlert(userId: string, email: string, orgId: string | null) {
-  if (!orgId) return
-  const orgRows = await db`SELECT contact_email, name FROM orgs WHERE id = ${orgId}`
-  if (!orgRows.length || !orgRows[0].contact_email) return
-
-  const contactEmail = orgRows[0].contact_email as string
-  const orgName = orgRows[0].name as string
-
-  await sendSecurityAlert(
-    contactEmail,
-    `[Foundry] Account locked — ${email}`,
-    `A Foundry account has been locked due to ${TOTP_LOCK_THRESHOLD} consecutive failed TOTP attempts.\n\nAccount: ${email}\nOrganization: ${orgName}\nLocked for: ${TOTP_LOCK_MINUTES} minutes\n\nIf this was not the account owner, consider deactivating the account from your admin panel: https://foundry.adams-ai.com/admin/users`,
-  )
-}
-
-export async function startSetup(_formData: FormData) {
-  const jar = await cookies()
-  const email = jar.get(EMAIL_COOKIE)?.value
-  if (!email) redirect('/login')
-
-  const secret = generateSecret()
-  jar.set(PENDING_SECRET_COOKIE, secret, { ...COOKIE_OPTS, maxAge: 10 * 60 })
-  redirect('/login/setup')
-}
-
-export async function confirmTotpSetup(formData: FormData) {
-  const jar = await cookies()
-  const email = jar.get(EMAIL_COOKIE)?.value
-  const secret = jar.get(PENDING_SECRET_COOKIE)?.value
-  if (!email || !secret) redirect('/login')
-
-  const code = (formData.get('code') as string ?? '').replace(/\s/g, '')
-  if (!code || code.length !== 6) return { error: 'Enter the 6-digit code' }
-  if (!verifyCode(secret, code)) return { error: 'Code did not match — scan the QR code and retry' }
-
-  const userRows = await db`
-    INSERT INTO users (email, totp_secret) VALUES (${email}, ${secret})
-    ON CONFLICT (email) DO UPDATE SET totp_secret = ${secret}
-    RETURNING id
-  `
-  const userId = userRows[0].id as string
-  jar.delete(EMAIL_COOKIE)
-  jar.delete(PENDING_SECRET_COOKIE)
-
+  const userId = challenge.user_id as string
   const memberRows = await db`
     SELECT org_id FROM org_members WHERE user_id = ${userId} ORDER BY joined_at ASC LIMIT 1
   `
@@ -266,8 +170,11 @@ export async function confirmTotpSetup(formData: FormData) {
   const { ip, ua } = await getRequestMeta()
   const { sessionId, timeoutHours } = await createSession(userId, orgId, { ip, ua })
   await setSessionCookie(sessionId, timeoutHours)
-  await writeAudit({ orgId, actorId: userId, actorEmail: email, action: 'auth.totp_setup' })
-  redirect('/')
+  await writeAudit({ orgId, actorId: userId, actorEmail: email, action: 'auth.sign_in', metadata: { method: 'email_otp' } })
+
+  const returnTo = jar.get('foundry_return_to')?.value
+  jar.delete('foundry_return_to')
+  redirect(returnTo && returnTo.startsWith('/') ? returnTo : '/')
 }
 
 async function acceptInvite(
@@ -325,11 +232,7 @@ export async function beginInviteLogin(token: string): Promise<void> {
   jar.set(EMAIL_COOKIE, invite.email as string, { ...COOKIE_OPTS, maxAge: 60 * 60 })
   jar.set(INVITE_TOKEN_COOKIE, token, { ...COOKIE_OPTS, maxAge: 60 * 60 })
 
-  const userRows = await db`SELECT id, totp_secret FROM users WHERE email = ${invite.email}`
-  if (userRows.length && userRows[0].totp_secret) {
-    redirect('/login/verify')
-  }
-  redirect('/login/setup')
+  redirect('/login/password')
 }
 
 export async function createInvite(formData: FormData) {
