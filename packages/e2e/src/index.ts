@@ -2,16 +2,16 @@
 // Pattern established by apps/pdf/e2e (2026-06-10): direct-DB session minting,
 // [E2E]-prefixed artifacts, mocks for anything that would leave the box.
 import { readFileSync } from 'fs'
-import { randomBytes, randomUUID } from 'crypto'
+import { randomBytes, randomUUID, createHash } from 'crypto'
 import postgres from 'postgres'
-import { authenticator } from 'otplib'
 
 export const E2E_PREFIX = '[E2E]'
 export const E2E_USER_AGENT = 'foundry-e2e'
-export const E2E_TOTP_EMAIL = 'e2e-auth@test.local'
-export const E2E_TOTP_PASSWORD = 'E2E-login-flow-test-7491'
+export const E2E_TEST_EMAIL = 'e2e-auth@test.local'
+export const E2E_TEST_PASSWORD = 'E2E-login-flow-test-7491'
 
-export { authenticator }
+/** @deprecated use E2E_TEST_EMAIL */
+export const E2E_TOTP_EMAIL = E2E_TEST_EMAIL
 
 /** Load KEY=VALUE pairs from a .env file into process.env (existing env wins). */
 export function loadEnvFile(path: string) {
@@ -86,11 +86,6 @@ export function cookieHeader(sessionId: string) {
   return { cookie: `foundry_session=${sessionId}` }
 }
 
-/**
- * Dedicated TOTP login-test user. Never use a real account for lockout tests —
- * 5 failures lock the account for 15 minutes.
- * Idempotent: creates on first call, reuses (and unlocks) afterwards.
- */
 /** Same shape as workspace admin-actions: pbkdf2:100000:<salt>:<sha512-base64> */
 async function mintPasswordHash(password: string): Promise<string> {
   const { pbkdf2Sync } = await import('crypto')
@@ -99,23 +94,24 @@ async function mintPasswordHash(password: string): Promise<string> {
   return `pbkdf2:100000:${salt}:${hash}`
 }
 
-export async function ensureTotpTestUser(): Promise<{ userId: string; email: string; secret: string; password: string }> {
+/**
+ * Dedicated login-test user with a password. Idempotent.
+ * Never use a real account for lockout/failure tests.
+ */
+export async function ensureTestUser(): Promise<{ userId: string; email: string; password: string }> {
   const sql = wsDb()
-  const passwordHash = await mintPasswordHash(E2E_TOTP_PASSWORD)
-
-  const [existing] = await sql`SELECT id, totp_secret, password_hash FROM users WHERE email = ${E2E_TOTP_EMAIL}`
+  const passwordHash = await mintPasswordHash(E2E_TEST_PASSWORD)
+  const [existing] = await sql`SELECT id, password_hash FROM users WHERE email = ${E2E_TEST_EMAIL}`
   if (existing) {
-    await resetTotpLock(existing.id)
     if (!existing.password_hash) {
       await sql`UPDATE users SET password_hash = ${passwordHash} WHERE id = ${existing.id}`
     }
-    return { userId: existing.id, email: E2E_TOTP_EMAIL, secret: existing.totp_secret, password: E2E_TOTP_PASSWORD }
+    return { userId: existing.id, email: E2E_TEST_EMAIL, password: E2E_TEST_PASSWORD }
   }
   const id = randomUUID()
-  const secret = authenticator.generateSecret()
   await sql`
-    INSERT INTO users (id, email, name, totp_secret, password_hash)
-    VALUES (${id}, ${E2E_TOTP_EMAIL}, ${'E2E Auth Tester'}, ${secret}, ${passwordHash})`
+    INSERT INTO users (id, email, name, password_hash)
+    VALUES (${id}, ${E2E_TEST_EMAIL}, ${'E2E Auth Tester'}, ${passwordHash})`
   const { orgId } = await testUser()
   if (orgId) {
     await sql`
@@ -123,18 +119,20 @@ export async function ensureTotpTestUser(): Promise<{ userId: string; email: str
       VALUES (${id}, ${orgId}, 'member')
       ON CONFLICT DO NOTHING`
   }
-  return { userId: id, email: E2E_TOTP_EMAIL, secret, password: E2E_TOTP_PASSWORD }
+  return { userId: id, email: E2E_TEST_EMAIL, password: E2E_TEST_PASSWORD }
 }
+
+/** @deprecated use ensureTestUser */
+export const ensureTotpTestUser = ensureTestUser
 
 export const E2E_PW_EMAIL = 'e2e-pwonly@test.local'
 
-/** Password-only user (NO totp_secret) — pins the direct password login path. */
 export async function ensurePasswordOnlyTestUser(): Promise<{ userId: string; email: string; password: string }> {
   const sql = wsDb()
   const [existing] = await sql`SELECT id FROM users WHERE email = ${E2E_PW_EMAIL}`
-  if (existing) return { userId: existing.id, email: E2E_PW_EMAIL, password: E2E_TOTP_PASSWORD }
+  if (existing) return { userId: existing.id, email: E2E_PW_EMAIL, password: E2E_TEST_PASSWORD }
   const id = randomUUID()
-  const passwordHash = await mintPasswordHash(E2E_TOTP_PASSWORD)
+  const passwordHash = await mintPasswordHash(E2E_TEST_PASSWORD)
   await sql`
     INSERT INTO users (id, email, name, password_hash)
     VALUES (${id}, ${E2E_PW_EMAIL}, ${'E2E Password Tester'}, ${passwordHash})`
@@ -145,18 +143,25 @@ export async function ensurePasswordOnlyTestUser(): Promise<{ userId: string; em
       VALUES (${id}, ${orgId}, 'member')
       ON CONFLICT DO NOTHING`
   }
-  return { userId: id, email: E2E_PW_EMAIL, password: E2E_TOTP_PASSWORD }
+  return { userId: id, email: E2E_PW_EMAIL, password: E2E_TEST_PASSWORD }
 }
 
-export async function resetTotpLock(userId: string) {
+/**
+ * Insert a known OTP challenge into the DB so tests can submit a predetermined code
+ * without needing real email delivery. Returns the challenge ID for the cookie.
+ */
+export async function mintOtpChallenge(userId: string, code: string): Promise<string> {
+  const salt = randomBytes(16).toString('hex')
+  const codeHash = createHash('sha256').update(code + salt).digest('hex')
+  const id = randomUUID()
   await wsDb()`
-    UPDATE users SET totp_failed_count = 0, totp_locked_until = NULL WHERE id = ${userId}`
+    INSERT INTO email_otp_challenges (id, user_id, code_hash, salt, expires_at)
+    VALUES (${id}, ${userId}, ${codeHash}, ${salt}, now() + interval '10 minutes')`
+  return id
 }
 
-export async function totpLockState(userId: string) {
-  const [row] = await wsDb()`
-    SELECT totp_failed_count, totp_locked_until FROM users WHERE id = ${userId}`
-  return row as { totp_failed_count: number; totp_locked_until: Date | null }
+export async function cleanupOtpChallenges(userId: string) {
+  await wsDb()`DELETE FROM email_otp_challenges WHERE user_id = ${userId}`
 }
 
 /** Remove sessions this helper minted (any user). Call in global teardown. */

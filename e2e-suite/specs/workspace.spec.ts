@@ -1,31 +1,22 @@
 import { test, expect } from '@playwright/test'
 import {
+  E2E_TEST_EMAIL,
   E2E_TOTP_EMAIL,
-  authenticator,
   cookieHeader,
-  ensurePasswordOnlyTestUser,
-  ensureTotpTestUser,
+  ensureTestUser,
+  mintOtpChallenge,
   mintSession,
-  resetTotpLock,
-  totpLockState,
+  cleanupOtpChallenges,
   wsDb,
 } from '@foundry/e2e'
 
 const BASE = process.env.WORKSPACE_BASE ?? 'http://127.0.0.1:4100'
 
-/** Email step — sets the foundry_login_email cookie and lands on the password page. */
 async function submitEmailStep(page: import('@playwright/test').Page, email: string) {
   await page.goto(`${BASE}/login`)
   await page.fill('input[name="email"]', email)
   await page.click('button[type="submit"]')
   await page.waitForSelector('input[name="password"]', { timeout: 15_000 })
-}
-
-/** The TOTP verify page is reachable directly once the email cookie is set. */
-async function gotoVerifyStep(page: import('@playwright/test').Page, email: string) {
-  await submitEmailStep(page, email)
-  await page.goto(`${BASE}/login/verify`)
-  await page.waitForSelector('input[name="code"]', { timeout: 15_000 })
 }
 
 async function submitCode(page: import('@playwright/test').Page, code: string) {
@@ -38,95 +29,95 @@ async function sessionCount(userId: string) {
   return rows.length
 }
 
+async function pendingChallenges(userId: string) {
+  const rows = await wsDb()`
+    SELECT id FROM email_otp_challenges
+    WHERE user_id = ${userId} AND used_at IS NULL AND expires_at > now()`
+  return rows.length
+}
+
 test.describe.serial('workspace — login flows', () => {
-  let user: { userId: string; email: string; secret: string; password: string }
+  let user: { userId: string; email: string; password: string }
 
   test.beforeAll(async () => {
-    user = await ensureTotpTestUser()
+    user = await ensureTestUser()
   })
 
   test.afterEach(async () => {
-    await resetTotpLock(user.userId)
+    await cleanupOtpChallenges(user.userId)
     await wsDb()`DELETE FROM sessions WHERE user_id = ${user.userId}`
   })
 
-  test('password login with TOTP configured requires the code step', async ({ page }) => {
+  test('correct password issues an OTP challenge (no session yet)', async ({ page }) => {
     await submitEmailStep(page, user.email)
     await page.fill('input[name="password"]', user.password)
     await page.click('button[type="submit"]')
 
-    // must land on the verify step with NO session yet
     await page.waitForURL(/\/login\/verify/, { timeout: 15_000 })
     expect(await sessionCount(user.userId)).toBe(0)
-
-    // completing the code step establishes the session
-    await page.waitForSelector('input[name="code"]', { timeout: 15_000 })
-    await submitCode(page, authenticator.generate(user.secret))
-    await expect
-      .poll(() => sessionCount(user.userId), { timeout: 15_000 })
-      .toBeGreaterThan(0)
+    expect(await pendingChallenges(user.userId)).toBe(1)
   })
 
-  test('password-only user (no TOTP) logs in directly', async ({ page }) => {
-    const pwUser = await ensurePasswordOnlyTestUser()
-    await wsDb()`DELETE FROM sessions WHERE user_id = ${pwUser.userId}`
-    await submitEmailStep(page, pwUser.email)
-    await page.fill('input[name="password"]', pwUser.password)
-    await page.click('button[type="submit"]')
-
-    await expect
-      .poll(() => sessionCount(pwUser.userId), { timeout: 15_000 })
-      .toBeGreaterThan(0)
-    await wsDb()`DELETE FROM sessions WHERE user_id = ${pwUser.userId}`
-  })
-
-  test('wrong password does not create a session', async ({ page }) => {
+  test('wrong password does not create a session or OTP challenge', async ({ page }) => {
     await submitEmailStep(page, user.email)
     await page.fill('input[name="password"]', 'definitely-wrong-password')
     await page.click('button[type="submit"]')
     await page.waitForTimeout(2000)
     expect(await sessionCount(user.userId)).toBe(0)
+    expect(await pendingChallenges(user.userId)).toBe(0)
   })
 
-  test('TOTP verify: valid code establishes a session', async ({ page }) => {
-    await gotoVerifyStep(page, user.email)
-    await submitCode(page, authenticator.generate(user.secret))
-
+  test('OTP verify: valid code establishes a session', async ({ page, context }) => {
+    const code = '482917'
+    const challengeId = await mintOtpChallenge(user.userId, code)
+    await context.addCookies([
+      { name: 'foundry_login_email', value: user.email, url: BASE, path: '/' },
+      { name: 'foundry_otp_challenge', value: challengeId, url: BASE, path: '/' },
+    ])
+    await page.goto(`${BASE}/login/verify`)
+    await page.waitForSelector('input[name="code"]', { timeout: 15_000 })
+    await submitCode(page, code)
     await expect
       .poll(() => sessionCount(user.userId), { timeout: 15_000 })
       .toBeGreaterThan(0)
   })
 
-  test('TOTP verify: wrong code is rejected and counted', async ({ page }) => {
-    await gotoVerifyStep(page, user.email)
-    const valid = authenticator.generate(user.secret)
-    const wrong = valid === '999999' ? '000000' : '999999'
-    await submitCode(page, wrong)
-
+  test('OTP verify: wrong code is rejected and counted', async ({ page, context }) => {
+    const code = '482917'
+    const challengeId = await mintOtpChallenge(user.userId, code)
+    await context.addCookies([
+      { name: 'foundry_login_email', value: user.email, url: BASE, path: '/' },
+      { name: 'foundry_otp_challenge', value: challengeId, url: BASE, path: '/' },
+    ])
+    await page.goto(`${BASE}/login/verify`)
+    await page.waitForSelector('input[name="code"]', { timeout: 15_000 })
+    await submitCode(page, '000000')
     await expect(page.getByText(/invalid|attempts remaining|try again/i).first()).toBeVisible({
       timeout: 10_000,
     })
-    const state = await totpLockState(user.userId)
-    expect(Number(state.totp_failed_count)).toBeGreaterThan(0)
+    const [row] = await wsDb()`SELECT attempts FROM email_otp_challenges WHERE id = ${challengeId}`
+    expect(Number(row.attempts)).toBe(1)
     expect(await sessionCount(user.userId)).toBe(0)
   })
 
-  test('TOTP verify: five failures lock the account', async ({ page }) => {
-    await gotoVerifyStep(page, user.email)
-    const valid = authenticator.generate(user.secret)
-    const wrong = valid === '999999' ? '000000' : '999999'
+  test('OTP verify: five failures invalidate the challenge', async ({ page, context }) => {
+    const code = '482917'
+    const challengeId = await mintOtpChallenge(user.userId, code)
+    await context.addCookies([
+      { name: 'foundry_login_email', value: user.email, url: BASE, path: '/' },
+      { name: 'foundry_otp_challenge', value: challengeId, url: BASE, path: '/' },
+    ])
+    await page.goto(`${BASE}/login/verify`)
+    await page.waitForSelector('input[name="code"]', { timeout: 15_000 })
 
     for (let i = 0; i < 5; i++) {
-      await submitCode(page, wrong)
+      await submitCode(page, '000000')
       await page.waitForTimeout(300)
     }
 
-    const state = await totpLockState(user.userId)
-    expect(state.totp_locked_until).not.toBeNull()
-
-    // a VALID code must now be refused too
-    await submitCode(page, authenticator.generate(user.secret))
-    await page.waitForTimeout(1000)
+    // challenge row should be deleted after 5 failures
+    const rows = await wsDb()`SELECT id FROM email_otp_challenges WHERE id = ${challengeId}`
+    expect(rows.length).toBe(0)
     expect(await sessionCount(user.userId)).toBe(0)
   })
 })
