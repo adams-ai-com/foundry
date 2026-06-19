@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Fetch the PDF with timeout and size limit
-  let pdfBuf: Buffer
+  let pdfChunks: Uint8Array[]
   try {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     const reader = res.body?.getReader()
     if (!reader) return NextResponse.json({ error: 'Empty response' }, { status: 422 })
 
-    const chunks: Uint8Array[] = []
+    pdfChunks = []
     let total = 0
     while (true) {
       const { done, value } = await reader.read()
@@ -65,9 +65,8 @@ export async function POST(req: NextRequest) {
         reader.cancel()
         return NextResponse.json({ error: 'PDF exceeds 50 MB limit' }, { status: 422 })
       }
-      chunks.push(value)
+      pdfChunks.push(value)
     }
-    pdfBuf = Buffer.concat(chunks)
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
     return NextResponse.json({ error: `Could not fetch PDF: ${msg}` }, { status: 422 })
@@ -78,7 +77,7 @@ export async function POST(req: NextRequest) {
   const secret  = process.env.FOUNDRY_PDF_PROC_SECRET ?? ''
 
   const fileName = new URL(url).pathname.split('/').pop() || 'document.pdf'
-  const file = new File([pdfBuf], fileName, { type: 'application/pdf' })
+  const file = new File(pdfChunks, fileName, { type: 'application/pdf' })
 
   const upstream = new FormData()
   upstream.append('file', file)
