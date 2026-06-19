@@ -172,6 +172,11 @@ export async function verifyEmailCode(formData: FormData) {
   await setSessionCookie(sessionId, timeoutHours)
   await writeAudit({ orgId, actorId: userId, actorEmail: email, action: 'auth.sign_in', metadata: { method: 'email_otp' } })
 
+  const mustReset = await db`SELECT must_reset_password FROM users WHERE id = ${userId}`
+  if (mustReset[0]?.must_reset_password) {
+    redirect('/login/reset-password')
+  }
+
   const returnTo = jar.get('foundry_return_to')?.value
   jar.delete('foundry_return_to')
   redirect(returnTo && returnTo.startsWith('/') ? returnTo : '/')
@@ -307,6 +312,26 @@ export async function logout() {
   if (session) await destroySession(session.sessionId)
   await clearSessionCookie()
   redirect('/login')
+}
+
+export async function resetPassword(formData: FormData) {
+  const session = await getSession()
+  if (!session) redirect('/login')
+
+  const password = (formData.get('password') as string ?? '').trim()
+  if (!password || password.length < 8) return { error: 'Password must be at least 8 characters' }
+
+  const { pbkdf2Sync, randomBytes } = await import('crypto')
+  const salt = randomBytes(16).toString('hex')
+  const hash = pbkdf2Sync(password, salt, 100_000, 64, 'sha512').toString('base64')
+  const passwordHash = `pbkdf2:100000:${salt}:${hash}`
+
+  await db`
+    UPDATE users SET password_hash = ${passwordHash}, must_reset_password = false
+    WHERE id = ${session.userId}
+  `
+  await writeAudit({ orgId: session.orgId, actorId: session.userId, actorEmail: session.email, action: 'auth.password_reset', metadata: {} })
+  redirect('/')
 }
 
 export async function setTheme(theme: string) {

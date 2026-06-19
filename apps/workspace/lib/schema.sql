@@ -108,6 +108,9 @@ DO $$ BEGIN
 EXCEPTION WHEN others THEN NULL;
 END $$;
 
+-- Force password reset on next login
+ALTER TABLE users ADD COLUMN IF NOT EXISTS must_reset_password BOOLEAN NOT NULL DEFAULT false;
+
 -- Email OTP challenges (replaces TOTP as 2nd factor)
 CREATE TABLE IF NOT EXISTS email_otp_challenges (
   id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,

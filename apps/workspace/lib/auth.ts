@@ -16,6 +16,7 @@ export type SessionUser = {
   role: Role | null
   totpEnforced: boolean
   hasTotpSecret: boolean
+  mustResetPassword: boolean
 }
 
 export async function getSession(): Promise<SessionUser | null> {
@@ -28,7 +29,8 @@ export async function getSession(): Promise<SessionUser | null> {
            u.id as "userId", u.email, u.name,
            m.role,
            COALESCE(o.require_totp, false) as "totpEnforced",
-           (u.totp_secret IS NOT NULL) as "hasTotpSecret"
+           (u.totp_secret IS NOT NULL) as "hasTotpSecret",
+           COALESCE(u.must_reset_password, false) as "mustResetPassword"
     FROM sessions s
     JOIN users u ON u.id = s.user_id
     LEFT JOIN org_members m ON m.org_id = s.org_id AND m.user_id = s.user_id
@@ -43,6 +45,7 @@ export async function getSession(): Promise<SessionUser | null> {
 export async function requireSession(): Promise<SessionUser> {
   const session = await getSession()
   if (!session) redirect('/login')
+  if (session.mustResetPassword) redirect('/login/reset-password')
   return session
 }
 
