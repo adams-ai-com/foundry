@@ -287,19 +287,18 @@ function SheetContent({
 
     if (minRow === maxRow && minCol === maxCol) return // single cell, nothing to merge
 
-    // Clear content in covered cells (keep anchor)
-    const clearedCells: [string][] = []
+    // Keep anchor value; clear covered cells
+    const rows: string[][] = []
     for (let r = minRow; r <= maxRow; r++) {
+      const row: string[] = []
       for (let c = minCol; c <= maxCol; c++) {
-        if (r !== minRow || c !== minCol) clearedCells.push([''])
-        else clearedCells.push([getCellFormula({ sheet, row: r, col: c }) ?? String(getCellValue({ sheet, row: r, col: c }) ?? '')])
+        row.push(r === minRow && c === minCol
+          ? (getCellFormula({ sheet, row: r, col: c }) ?? String(getCellValue({ sheet, row: r, col: c }) ?? ''))
+          : '')
       }
+      rows.push(row)
     }
-    bulkSetCells({ sheet, row: minRow, col: minCol }, clearedCells.map((v, i) => {
-      const r = minRow + Math.floor(i / (maxCol - minCol + 1))
-      const c = minCol + (i % (maxCol - minCol + 1))
-      return r === minRow && c === minCol ? [v[0]] : ['']
-    }))
+    bulkSetCells({ sheet, row: minRow, col: minCol }, rows)
 
     const updated = [
       ...merges.filter(m => !(m.sheet === sheet && m.startRow === minRow && m.startCol === minCol && m.endRow === maxRow && m.endCol === maxCol)),

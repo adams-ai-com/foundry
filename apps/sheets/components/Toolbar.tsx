@@ -79,7 +79,6 @@ export function Toolbar({
   }
 
   // Determine merge button state
-  const cellKey = `${selected.row}:${selected.col}`
   const isMergeAnchor = merges.some(m => m.sheet === selected.sheet && m.startRow === selected.row && m.startCol === selected.col)
   const isCovered = merges.some(m => m.sheet === selected.sheet && selected.row >= m.startRow && selected.row <= m.endRow && selected.col >= m.startCol && selected.col <= m.endCol && (selected.row !== m.startRow || selected.col !== m.startCol))
   const isMerged = isMergeAnchor || isCovered
@@ -123,9 +122,6 @@ export function Toolbar({
     a.click()
     URL.revokeObjectURL(url)
   }
-
-  // suppress unused warning — cellKey used for readability above
-  void cellKey
 
   return (
     <div className="flex items-center gap-0.5 px-3 py-1.5 bg-bg-raised border-b border-border flex-wrap shrink-0">
