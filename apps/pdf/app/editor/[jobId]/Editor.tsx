@@ -51,6 +51,42 @@ interface TextSpan {
   color: [number, number, number]
 }
 
+interface SpanStyle {
+  family:   'sans' | 'serif' | 'mono'
+  size:     number
+  bold:     boolean
+  italic:   boolean
+  colorHex: string   // '#rrggbb'
+}
+
+function floatsToHex(c: [number, number, number]): string {
+  return '#' + c.map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('')
+}
+function hexToFloats(hex: string): [number, number, number] {
+  return [
+    parseInt(hex.slice(1, 3), 16) / 255,
+    parseInt(hex.slice(3, 5), 16) / 255,
+    parseInt(hex.slice(5, 7), 16) / 255,
+  ]
+}
+function styleToBase14(family: 'sans' | 'serif' | 'mono', bold: boolean): string {
+  if (family === 'mono')  return bold ? 'cobo' : 'cour'
+  if (family === 'serif') return bold ? 'tibo' : 'tiro'
+  return bold ? 'hebo' : 'helv'
+}
+function spanToStyle(span: TextSpan): SpanStyle {
+  const n = (span.font ?? '').toLowerCase()
+  const mono  = (span.flags & 8) > 0 || n.includes('cour') || n.includes('mono') || n.includes('typewriter')
+  const serif = (span.flags & 4) > 0 || n.includes('tiro') || n.includes('tibo') || n.includes('times') || n.includes('serif')
+  return {
+    family:   mono ? 'mono' : serif ? 'serif' : 'sans',
+    size:     Math.max(6, Math.round(span.size)),
+    bold:     (span.flags & 16) > 0,
+    italic:   (span.flags & 2)  > 0,
+    colorHex: floatsToHex(span.color),
+  }
+}
+
 interface CommentReply { id: string; text: string; author: string; timestamp: number }
 interface Comment {
   id: string; page: number
@@ -216,10 +252,94 @@ function DropItem({ icon, label, onClick, danger }: { icon?: string; label: stri
 
 // ── In-place text editor span ────────────────────────────────────────────────
 
-function EditSpanInput({ span, renderScale, onSave, onCancel }: {
-  span: TextSpan; renderScale: number
-  onSave: (text: string) => void
-  onCancel: () => void
+const TOOLBAR_COLORS = [
+  '#000000', '#374151', '#9ca3af',
+  '#dc2626', '#ea580c', '#ca8a04',
+  '#16a34a', '#2563eb', '#7c3aed',
+  '#ffffff',
+]
+
+function EditSpanToolbar({ style, pageW, spanLeft, spanTop, spanBottom, onChange }: {
+  style:       SpanStyle
+  pageW:       number
+  spanLeft:    number
+  spanTop:     number
+  spanBottom:  number
+  onChange:    (s: SpanStyle) => void
+}) {
+  const W = 340
+  const left = Math.min(Math.max(spanLeft, 0), Math.max(0, pageW - W))
+  const above = spanTop > 46
+  const top   = above ? spanTop - 46 : spanBottom + 4
+
+  const familyLabel: Record<SpanStyle['family'], string> = { sans: 'Sans', serif: 'Serif', mono: 'Mono' }
+  const cssFamily:   Record<SpanStyle['family'], string> = { sans: 'sans-serif', serif: 'serif', mono: 'monospace' }
+
+  return (
+    <div
+      onMouseDown={e => e.preventDefault()}
+      style={{ position: 'absolute', left, top, width: W, zIndex: 30 }}
+      className="flex items-center gap-1 bg-bg-raised border border-border rounded-xl shadow-card px-2 py-1.5 select-none"
+    >
+      {/* Font family */}
+      {(['sans', 'serif', 'mono'] as const).map(f => (
+        <button key={f}
+          onMouseDown={e => { e.preventDefault(); onChange({ ...style, family: f }) }}
+          style={{ fontFamily: cssFamily[f] }}
+          className={`px-1.5 py-0.5 text-xs rounded font-medium transition-colors
+            ${style.family === f ? 'bg-accent text-accent-fg' : 'text-fg-secondary hover:bg-bg-hover'}`}>
+          {familyLabel[f]}
+        </button>
+      ))}
+
+      <div className="w-px h-4 bg-border mx-0.5 shrink-0" />
+
+      {/* Size */}
+      <button onMouseDown={e => { e.preventDefault(); onChange({ ...style, size: Math.max(6, style.size - 1) }) }}
+        className="w-5 h-5 flex items-center justify-center text-fg-secondary hover:bg-bg-hover rounded text-sm leading-none shrink-0">−</button>
+      <span className="w-6 text-center text-xs text-fg-primary tabular-nums shrink-0">{style.size}</span>
+      <button onMouseDown={e => { e.preventDefault(); onChange({ ...style, size: Math.min(144, style.size + 1) }) }}
+        className="w-5 h-5 flex items-center justify-center text-fg-secondary hover:bg-bg-hover rounded text-sm leading-none shrink-0">+</button>
+
+      <div className="w-px h-4 bg-border mx-0.5 shrink-0" />
+
+      {/* Bold / Italic */}
+      <button onMouseDown={e => { e.preventDefault(); onChange({ ...style, bold: !style.bold }) }}
+        className={`w-6 h-6 flex items-center justify-center text-xs font-bold rounded transition-colors shrink-0
+          ${style.bold ? 'bg-accent text-accent-fg' : 'text-fg-secondary hover:bg-bg-hover'}`}>
+        B
+      </button>
+      <button onMouseDown={e => { e.preventDefault(); onChange({ ...style, italic: !style.italic }) }}
+        className={`w-6 h-6 flex items-center justify-center text-xs italic rounded transition-colors shrink-0
+          ${style.italic ? 'bg-accent text-accent-fg' : 'text-fg-secondary hover:bg-bg-hover'}`}>
+        I
+      </button>
+
+      <div className="w-px h-4 bg-border mx-0.5 shrink-0" />
+
+      {/* Color swatches */}
+      {TOOLBAR_COLORS.map(hex => (
+        <button key={hex}
+          onMouseDown={e => { e.preventDefault(); onChange({ ...style, colorHex: hex }) }}
+          title={hex}
+          style={{
+            background:  hex,
+            outline:     style.colorHex.toLowerCase() === hex ? '2px solid #3b82f6' : 'none',
+            outlineOffset: 1,
+            border:      hex === '#ffffff' ? '1px solid #d1d5db' : 'none',
+          }}
+          className="w-3.5 h-3.5 rounded-full shrink-0" />
+      ))}
+    </div>
+  )
+}
+
+function EditSpanInput({ span, renderScale, style, onSave, onCancel }: {
+  span:        TextSpan
+  renderScale: number
+  style:       SpanStyle
+  onSave:      (text: string) => void
+  onCancel:    () => void
 }) {
   const ref       = useRef<HTMLDivElement>(null)
   const committed = useRef(false)
@@ -238,16 +358,9 @@ function EditSpanInput({ span, renderScale, onSave, onCancel }: {
     } catch { /* ignore */ }
   }, [span.text])
 
-  const bold   = (span.flags & 16) > 0
-  const italic = (span.flags & 2)  > 0
-  const nameL  = (span.font ?? '').toLowerCase()
-  const mono   = (span.flags & 8) > 0 || nameL.includes('courier') || nameL.includes('mono')
-  const serif  = (span.flags & 4) > 0 || nameL.includes('times')   || nameL.includes('serif')
-  const family = mono ? 'monospace' : serif ? 'serif' : 'sans-serif'
-  const col    = `rgb(${Math.round(span.color[0]*255)},${Math.round(span.color[1]*255)},${Math.round(span.color[2]*255)})`
+  const cssFamily = style.family === 'mono' ? 'monospace' : style.family === 'serif' ? 'serif' : 'sans-serif'
 
   function getText() {
-    // contentEditable injects a trailing \n on blur in Chrome; strip it
     return (ref.current?.textContent ?? '').replace(/\n+$/, '')
   }
 
@@ -281,12 +394,12 @@ function EditSpanInput({ span, renderScale, onSave, onCancel }: {
         sel.addRange(range)
       }}
       style={{
-        position: 'absolute', inset: 0,
-        fontSize:   `${span.size * renderScale}px`,
-        fontFamily: family,
-        fontWeight: bold   ? 'bold'   : 'normal',
-        fontStyle:  italic ? 'italic' : 'normal',
-        color:      col,
+        position:   'absolute', inset: 0,
+        fontSize:   `${style.size * renderScale}px`,
+        fontFamily: cssFamily,
+        fontWeight: style.bold   ? 'bold'   : 'normal',
+        fontStyle:  style.italic ? 'italic' : 'normal',
+        color:      style.colorHex,
         background: 'rgba(255,255,255,0.97)',
         border:     '2px solid #3b82f6',
         borderRadius: 2,
@@ -518,9 +631,11 @@ export function Editor({ jobId }: { jobId: string }) {
   const [undoSteps, setUndoSteps]   = useState<{ index: number; ts: number }[]>([])
 
   // In-place text editing
-  const [textSpans, setTextSpans]         = useState<TextSpan[]>([])
-  const [loadingSpans, setLoadingSpans]   = useState(false)
-  const [editingSpanIdx, setEditingSpanIdx] = useState<number | null>(null)
+  const [textSpans, setTextSpans]             = useState<TextSpan[]>([])
+  const [loadingSpans, setLoadingSpans]       = useState(false)
+  const [editingSpanIdx, setEditingSpanIdx]   = useState<number | null>(null)
+  const [editSpanStyle, setEditSpanStyle]     = useState<SpanStyle | null>(null)
+  const [editSpanStyleDirty, setEditSpanStyleDirty] = useState(false)
 
   // Toolbar dropdowns (fix #1: grouped menus)
   const [pagesMenuOpen, setPagesMenuOpen]       = useState(false)
@@ -797,6 +912,13 @@ export function Editor({ jobId }: { jobId: string }) {
       .then(d => setTextWords(d.words ?? []))
       .catch(() => {})
   }, [isTextTool, currentPage, jobId, version])
+
+  // Initialize SpanStyle when a span is clicked for editing
+  useEffect(() => {
+    if (editingSpanIdx === null) { setEditSpanStyle(null); setEditSpanStyleDirty(false); return }
+    const span = textSpans[editingSpanIdx]
+    if (span) { setEditSpanStyle(spanToStyle(span)); setEditSpanStyleDirty(false) }
+  }, [editingSpanIdx, textSpans])
 
   // Load text spans when edit-text tool is active (reload on page/version change)
   useEffect(() => {
@@ -1388,30 +1510,30 @@ export function Editor({ jobId }: { jobId: string }) {
 
   async function saveTextEdit(spanIdx: number, newText: string) {
     setEditingSpanIdx(null)
-    const span = textSpans[spanIdx]
-    // Strip trailing newlines that contentEditable may inject on blur
+    const span  = textSpans[spanIdx]
+    const style = editSpanStyle   // capture before async gap
     const normalized = newText.replace(/\n+$/, '')
-    if (!span || normalized === span.text) return
+    if (!span) return
+    const textSame  = normalized === span.text
+    const styleDirty = editSpanStyleDirty
+    if (textSame && !styleDirty) return
     setSaving(true)
     try {
       const res = await fetch(`/pdf/api/pdf/${jobId}/edit-text`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          page:     currentPage,
-          bbox:     span.bbox,
-          origin:   span.origin,
-          new_text: normalized,
-          font:     span.font,
-          size:     span.size,
-          flags:    span.flags,
-          color:    span.color,
+          page:          currentPage,
+          bbox:          span.bbox,
+          origin:        span.origin,
+          new_text:      normalized,
+          resolved_font: style ? styleToBase14(style.family, style.bold) : undefined,
+          size:          style?.size  ?? span.size,
+          italic:        style?.italic ?? ((span.flags & 2) > 0),
+          color:         style ? hexToFloats(style.colorHex) : span.color,
         }),
       })
-      if (!res.ok) {
-        console.error('edit-text failed', res.status)
-        return
-      }
+      if (!res.ok) { console.error('edit-text failed', res.status); return }
       setVersion(v => v + 1)
     } finally {
       setSaving(false)
@@ -2206,10 +2328,14 @@ export function Editor({ jobId }: { jobId: string }) {
                   const [bx0, by0, bx1, by1] = span.bbox.map(v => v * renderScale)
                   const w = bx1 - bx0; const h = by1 - by0
                   if (w < 2 || h < 2) return null
-                  if (editingSpanIdx === sidx) {
+                  if (editingSpanIdx === sidx && editSpanStyle) {
                     return (
                       <div key={sidx} style={{ position: 'absolute', left: bx0, top: by0, width: w, height: h }}>
-                        <EditSpanInput span={span} renderScale={renderScale}
+                        <EditSpanToolbar
+                          style={editSpanStyle} pageW={dw2}
+                          spanLeft={bx0} spanTop={by0} spanBottom={by1}
+                          onChange={s => { setEditSpanStyle(s); setEditSpanStyleDirty(true) }} />
+                        <EditSpanInput span={span} renderScale={renderScale} style={editSpanStyle}
                           onSave={text => saveTextEdit(sidx, text)}
                           onCancel={() => setEditingSpanIdx(null)} />
                       </div>
@@ -2444,10 +2570,14 @@ export function Editor({ jobId }: { jobId: string }) {
                 const [bx0, by0, bx1, by1] = span.bbox.map(v => v * renderScale)
                 const w = bx1 - bx0; const h = by1 - by0
                 if (w < 2 || h < 2) return null
-                if (editingSpanIdx === idx) {
+                if (editingSpanIdx === idx && editSpanStyle) {
                   return (
                     <div key={idx} style={{ position: 'absolute', left: bx0, top: by0, width: w, height: h }}>
-                      <EditSpanInput span={span} renderScale={renderScale}
+                      <EditSpanToolbar
+                        style={editSpanStyle} pageW={dw}
+                        spanLeft={bx0} spanTop={by0} spanBottom={by1}
+                        onChange={s => { setEditSpanStyle(s); setEditSpanStyleDirty(true) }} />
+                      <EditSpanInput span={span} renderScale={renderScale} style={editSpanStyle}
                         onSave={text => saveTextEdit(idx, text)}
                         onCancel={() => setEditingSpanIdx(null)} />
                     </div>
