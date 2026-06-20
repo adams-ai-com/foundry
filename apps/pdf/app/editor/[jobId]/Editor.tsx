@@ -997,10 +997,23 @@ export function Editor({ jobId }: { jobId: string }) {
     if (tool !== 'edit-text') { setTextSpans([]); setEditingSpanIdx(null); setNewTextPos(null); return }
     let cancelled = false
     setLoadingSpans(true)
+    console.log('[PDF:edit] loading spans  page=%d job=%s version=%d', currentPage, jobId.slice(0,8), version)
     fetch(`/pdf/api/pdf/${jobId}/text-spans/${currentPage}`)
-      .then(r => r.json())
-      .then(d => { if (!cancelled) setTextSpans(d.spans ?? []) })
-      .catch(() => {})
+      .then(r => {
+        if (!r.ok) { console.warn('[PDF:edit] spans fetch failed  status=%d', r.status); return { spans: [] } }
+        return r.json()
+      })
+      .then(d => {
+        if (cancelled) return
+        const spans: TextSpan[] = d.spans ?? []
+        console.log('[PDF:edit] spans loaded  page=%d count=%d', currentPage, spans.length)
+        if (spans.length > 0) {
+          const sample = spans.slice(0, 3).map(s => `"${s.text.slice(0,20)}"`)
+          console.log('[PDF:edit] first spans:', sample.join(', '))
+        }
+        setTextSpans(spans)
+      })
+      .catch(err => console.error('[PDF:edit] spans fetch error', err))
       .finally(() => { if (!cancelled) setLoadingSpans(false) })
     return () => { cancelled = true }
   }, [tool, currentPage, jobId, version])
@@ -1586,27 +1599,39 @@ export function Editor({ jobId }: { jobId: string }) {
     const style = editSpanStyle   // capture before async gap
     const normalized = newText.replace(/\n+$/, '')
     if (!span) return
-    const textSame  = normalized === span.text
+    const textSame   = normalized === span.text
     const styleDirty = editSpanStyleDirty
-    if (textSame && !styleDirty) return
+    console.log('[PDF:edit] span save  idx=%d page=%d old=%s new=%s textSame=%s styleDirty=%s style=%o',
+      spanIdx, currentPage, JSON.stringify(span.text.slice(0,40)), JSON.stringify(normalized.slice(0,40)),
+      textSame, styleDirty, style)
+    if (textSame && !styleDirty) {
+      console.log('[PDF:edit] span save  → skipped (no changes)')
+      return
+    }
+    const payload = {
+      page:          currentPage,
+      bbox:          span.bbox,
+      origin:        span.origin,
+      new_text:      normalized,
+      resolved_font: style ? styleToBase14(style.family, style.bold) : undefined,
+      size:          style?.size  ?? span.size,
+      italic:        style?.italic ?? ((span.flags & 2) > 0),
+      color:         style ? hexToFloats(style.colorHex) : span.color,
+    }
+    console.log('[PDF:edit] span save  payload=%o', payload)
     setSaving(true)
     try {
       const res = await fetch(`/pdf/api/pdf/${jobId}/edit-text`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          page:          currentPage,
-          bbox:          span.bbox,
-          origin:        span.origin,
-          new_text:      normalized,
-          resolved_font: style ? styleToBase14(style.family, style.bold) : undefined,
-          size:          style?.size  ?? span.size,
-          italic:        style?.italic ?? ((span.flags & 2) > 0),
-          color:         style ? hexToFloats(style.colorHex) : span.color,
-        }),
+        body: JSON.stringify(payload),
       })
-      if (!res.ok) { console.error('edit-text failed', res.status); return }
+      const data = await res.json().catch(() => ({}))
+      console.log('[PDF:edit] span save  → status=%d ok=%s response=%o', res.status, res.ok, data)
+      if (!res.ok) { return }
       setVersion(v => v + 1)
+    } catch (err) {
+      console.error('[PDF:edit] span save  → fetch error', err)
     } finally {
       setSaving(false)
     }
@@ -1616,25 +1641,38 @@ export function Editor({ jobId }: { jobId: string }) {
     const pos   = newTextPos
     const style = editSpanStyle ?? { family: 'sans' as const, size: 12, bold: false, italic: false, colorHex: '#000000' }
     setNewTextPos(null)
-    if (!pos || !text.trim()) return
+    if (!pos || !text.trim()) {
+      console.log('[PDF:edit] insert cancel  text=%s pos=%o', JSON.stringify(text), pos)
+      return
+    }
+    const origin = [pos.pdfX, pos.pdfY + style.size * 0.75]
+    const payload = {
+      page:          currentPage,
+      origin,
+      new_text:      text.trim(),
+      resolved_font: styleToBase14(style.family, style.bold),
+      size:          style.size,
+      italic:        style.italic,
+      color:         hexToFloats(style.colorHex),
+    }
+    console.log('[PDF:edit] insert  page=%d click=(%d,%d) origin=(%s,%s) text=%s style=%o',
+      currentPage, pos.screenX.toFixed(0), pos.screenY.toFixed(0),
+      origin[0].toFixed(1), origin[1].toFixed(1),
+      JSON.stringify(text.trim().slice(0,40)), style)
+    console.log('[PDF:edit] insert  payload=%o', payload)
     setSaving(true)
     try {
       const res = await fetch(`/pdf/api/pdf/${jobId}/edit-text`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          page:          currentPage,
-          // no bbox — insert-only, nothing to redact
-          origin:        [pos.pdfX, pos.pdfY + style.size * 0.75],
-          new_text:      text.trim(),
-          resolved_font: styleToBase14(style.family, style.bold),
-          size:          style.size,
-          italic:        style.italic,
-          color:         hexToFloats(style.colorHex),
-        }),
+        body: JSON.stringify(payload),
       })
-      if (!res.ok) { console.error('insert-text failed', res.status); return }
+      const data = await res.json().catch(() => ({}))
+      console.log('[PDF:edit] insert  → status=%d ok=%s response=%o', res.status, res.ok, data)
+      if (!res.ok) { return }
       setVersion(v => v + 1)
+    } catch (err) {
+      console.error('[PDF:edit] insert  → fetch error', err)
     } finally {
       setSaving(false)
     }
@@ -2433,6 +2471,8 @@ export function Editor({ jobId }: { jobId: string }) {
                       const defaultStyle: SpanStyle = { family: 'sans', size: 12, bold: false, italic: false, colorHex: '#000000' }
                       if (!editSpanStyle) setEditSpanStyle(defaultStyle)
                       setEditSpanStyleDirty(false)
+                      console.log('[PDF:edit] blank click  page=%d screen=(%d,%d) pdf=(%s,%s)',
+                        currentPage, sx.toFixed(0), sy.toFixed(0), (sx/renderScale).toFixed(1), (sy/renderScale).toFixed(1))
                       setNewTextPos({ screenX: sx, screenY: sy, pdfX: sx / renderScale, pdfY: sy / renderScale })
                     }} />
                 )}
@@ -2475,7 +2515,11 @@ export function Editor({ jobId }: { jobId: string }) {
                   }
                   const editing = editingSpanIdx !== null || newTextPos !== null
                   return (
-                    <div key={sidx} onClick={editing ? undefined : () => setEditingSpanIdx(sidx)}
+                    <div key={sidx} onClick={editing ? undefined : () => {
+                      console.log('[PDF:edit] span click  idx=%d page=%d text=%s bbox=%o font=%s size=%s flags=%d',
+                        sidx, currentPage, JSON.stringify(span.text.slice(0,40)), span.bbox, span.font, span.size, span.flags)
+                      setEditingSpanIdx(sidx)
+                    }}
                       style={{ position: 'absolute', left: bx0, top: by0, width: w, height: h,
                         cursor: editing ? 'default' : 'text',
                         border: '1px solid transparent', borderRadius: 1, zIndex: 10,
@@ -2707,6 +2751,8 @@ export function Editor({ jobId }: { jobId: string }) {
                     const defaultStyle: SpanStyle = { family: 'sans', size: 12, bold: false, italic: false, colorHex: '#000000' }
                     if (!editSpanStyle) setEditSpanStyle(defaultStyle)
                     setEditSpanStyleDirty(false)
+                    console.log('[PDF:edit] blank click  page=%d screen=(%d,%d) pdf=(%s,%s)',
+                      currentPage, sx.toFixed(0), sy.toFixed(0), (sx/renderScale).toFixed(1), (sy/renderScale).toFixed(1))
                     setNewTextPos({ screenX: sx, screenY: sy, pdfX: sx / renderScale, pdfY: sy / renderScale })
                   }} />
               )}
@@ -2749,7 +2795,11 @@ export function Editor({ jobId }: { jobId: string }) {
                 }
                 const editing = editingSpanIdx !== null || newTextPos !== null
                 return (
-                  <div key={idx} onClick={editing ? undefined : () => setEditingSpanIdx(idx)}
+                  <div key={idx} onClick={editing ? undefined : () => {
+                    console.log('[PDF:edit] span click  idx=%d page=%d text=%s bbox=%o font=%s size=%s flags=%d',
+                      idx, currentPage, JSON.stringify(span.text.slice(0,40)), span.bbox, span.font, span.size, span.flags)
+                    setEditingSpanIdx(idx)
+                  }}
                     style={{ position: 'absolute', left: bx0, top: by0, width: w, height: h,
                       cursor: editing ? 'default' : 'text',
                       border: '1px solid transparent', borderRadius: 1, zIndex: 10,
