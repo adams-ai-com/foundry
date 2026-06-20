@@ -3,9 +3,9 @@
 #
 # Runs from a systemd timer (every minute). Flow per new commit on the gitea
 # `staging` branch:
-#   1. wait until every converted app's STAGING container runs that commit
-#      (Coolify tags container images with the commit SHA)
-#   2. run the staging test suite (e2e-suite/run-staging-tests.sh)
+#   1. wait until affected apps' STAGING containers run that commit
+#      (Coolify tags container images with the commit SHA; unaffected apps skip)
+#   2. run the staging test suite for affected apps only
 #   3. GREEN  -> fast-forward push the commit to `main` (Coolify then
 #               auto-deploys production via its webhook)
 #      RED    -> production does not move; status file records the block
@@ -52,7 +52,56 @@ fi
 
 log "=== new staging commit $TARGET (main at ${MAIN:0:12}) ==="
 
-# 1. Wait until every converted staging app runs TARGET
+# Fetch gitea early so we can compute the diff and determine affected apps.
+as_foundry git -C "$REPO" fetch gitea >>"$LOG" 2>&1 || log "WARN: git fetch gitea failed — treating all apps as affected"
+
+# Files changed between main and this staging commit.
+CHANGED=$(as_foundry git -C "$REPO" diff --name-only "gitea/main" "gitea/staging" 2>/dev/null || true)
+
+# Per-app watch paths: label -> colon-separated directory prefixes.
+# An app is "affected" if any changed file starts with one of its prefixes,
+# OR if its packages/ prefix is changed (shared libs), OR if CHANGED is empty
+# (fallback: can't determine diff → treat all as affected).
+declare -A WATCH_PATHS
+WATCH_PATHS["pdf-staging"]="apps/pdf:packages:services/pdf-proc"
+WATCH_PATHS["sheets-staging"]="apps/sheets:packages"
+WATCH_PATHS["wiki-staging"]="apps/wiki:packages"
+WATCH_PATHS["docs-staging"]="apps/docs:packages"
+WATCH_PATHS["mail-staging"]="apps/mail:packages:services/mailserver"
+WATCH_PATHS["channels-staging"]="apps/channels:packages"
+WATCH_PATHS["sites-staging"]="apps/sites:packages"
+WATCH_PATHS["workspace-staging"]="apps/workspace:packages"
+
+# e2e spec file for each staging app (empty = no gate spec; build success is enough)
+declare -A SPEC_FOR
+SPEC_FOR["wiki-staging"]="specs/wiki.spec.ts"
+SPEC_FOR["docs-staging"]="specs/docs.spec.ts"
+SPEC_FOR["sheets-staging"]="specs/sheets.spec.ts"
+SPEC_FOR["mail-staging"]="specs/mail.spec.ts"
+SPEC_FOR["channels-staging"]="specs/channels.spec.ts"
+SPEC_FOR["sites-staging"]="specs/sites.spec.ts"
+SPEC_FOR["workspace-staging"]="specs/workspace.spec.ts"
+# pdf-staging has no gate spec (deep suite lives in apps/pdf/e2e/)
+
+is_affected() {
+  local label="$1"
+  # Normalize: strip -staging or -production suffix to look up WATCH_PATHS
+  local base="${label%-staging}"; base="${base%-production}"
+  local paths="${WATCH_PATHS[${base}-staging]:-}"
+  # Unknown label or no watch config → always affected (safe fallback)
+  [ -z "$paths" ] && return 0
+  # Can't get diff → treat all as affected
+  [ -z "$CHANGED" ] && return 0
+  local IFS=':'
+  for prefix in $paths; do
+    if echo "$CHANGED" | grep -q "^${prefix}"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# 1. Wait until affected staging apps run TARGET (unaffected apps are skipped)
 deadline=$(( $(date +%s) + DEPLOY_WAIT_SECS ))
 while :; do
   # If staging moved to a newer commit while we were waiting (another push
@@ -70,6 +119,9 @@ while :; do
   pending=""
   while read -r uuid label; do
     [ -z "$uuid" ] && continue
+    if ! is_affected "$label"; then
+      continue   # watch_paths didn't match — Coolify skipped this app
+    fi
     img=$(docker ps --filter "name=$uuid" --format '{{.Image}}' | head -1)
     [ "${img#*:}" = "$TARGET" ] || pending="$pending $label"
   done < "$APPS_FILE"
@@ -82,7 +134,7 @@ while :; do
   fi
   sleep 15
 done
-log "staging containers are on $TARGET"
+log "staging containers ready for $TARGET"
 
 # Sync e2e test files from gitea/staging so spec files always match the deployed containers.
 # Without this, the local working tree (on the main branch) would run stale spec files
@@ -108,10 +160,26 @@ if [ -s "$SKIP_FILE" ]; then
     [ "$skip" = 0 ] && SPEC_ARGS="$SPEC_ARGS specs/$b"
   done
   rm -f "$SKIP_FILE"
+else
+  # Run only the specs for affected apps (reduces gate time for single-app changes).
+  # When packages/ changes, all apps are affected so all specs run.
+  while read -r uuid label; do
+    [ -z "$uuid" ] && continue
+    is_affected "$label" || continue
+    spec="${SPEC_FOR[$label]:-}"
+    [ -n "$spec" ] && SPEC_ARGS="$SPEC_ARGS $spec"
+  done < "$APPS_FILE"
+  if [ -n "$SPEC_ARGS" ]; then
+    log "affected specs:$SPEC_ARGS"
+  else
+    log "no gate specs for affected apps (build success is sufficient)"
+  fi
 fi
 
-if as_foundry "$REPO/e2e-suite/run-staging-tests.sh" $SPEC_ARGS >>"$LOG" 2>&1; then
-  log "staging tests GREEN${SPEC_ARGS:+ (skip-once subset applied)}"
+if [ -z "$SPEC_ARGS" ]; then
+  log "staging tests GREEN (no specs to run)"
+elif as_foundry "$REPO/e2e-suite/run-staging-tests.sh" $SPEC_ARGS >>"$LOG" 2>&1; then
+  log "staging tests GREEN${SPEC_ARGS:+ (affected-only subset)}"
 else
   log "staging tests RED — production NOT moved. Inspect $REPO/e2e-suite/test-results/ and $LOG"
   echo "blocked $TARGET tests-failed $(date -u +%FT%TZ)" > "$STATE_DIR/status"
@@ -129,17 +197,16 @@ else
   exit 1
 fi
 
-# 4. Verify production actually reaches the commit. Coolify's gitea webhook
-# auto-deploys, but its clone can fail transiently (gitea SSH blips), leaving
-# production silently on the old build. Make that visible rather than silent.
-# Production app uuids are the staging uuids with -production naming; we read
-# them from the prod registry if present, else skip verification.
+# 4. Verify production actually reaches the commit (affected apps only).
+# Coolify's gitea webhook auto-deploys, but its clone can fail transiently
+# (gitea SSH blips), leaving production silently on the old build.
 PROD_APPS=/etc/foundry-promote/production-apps
 prod_deadline=$(( $(date +%s) + DEPLOY_WAIT_SECS ))
 prod_stuck=""
 if [ -f "$PROD_APPS" ]; then
   while read -r uuid label; do
     [ -z "$uuid" ] && continue
+    is_affected "$label" || continue
     while :; do
       img=$(docker ps --filter "name=$uuid" --format '{{.Image}}' | head -1)
       [ "${img#*:}" = "$TARGET" ] && break
