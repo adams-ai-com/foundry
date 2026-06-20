@@ -16,13 +16,13 @@ interface ToolbarProps {
   chartOpen: boolean
 }
 
-export function Toolbar({ selected, selectionEnd: _selectionEnd, onTogglePython, onToggleChart, pythonOpen, chartOpen }: ToolbarProps) {
-  const { getCellFormat, setCellFormat, getSerializedData, getSheetNames, loadAll } = useHyperFormulaContext()
+export function Toolbar({ selected, selectionEnd, onTogglePython, onToggleChart, pythonOpen, chartOpen }: ToolbarProps) {
+  const { getCellFormat, setRangeFormat, getSerializedData, getSheetNames, loadAll, undo, redo, canUndo, canRedo } = useHyperFormulaContext()
   const fmt = getCellFormat(selected)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   function toggleFormat(key: keyof Pick<CellFormat, 'bold' | 'italic' | 'underline'>) {
-    setCellFormat(selected, { [key]: !fmt[key] })
+    setRangeFormat(selected, selectionEnd, { [key]: !fmt[key] })
   }
 
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
@@ -67,6 +67,21 @@ export function Toolbar({ selected, selectionEnd: _selectionEnd, onTogglePython,
 
   return (
     <div className="flex items-center gap-0.5 px-3 py-1.5 bg-bg-raised border-b border-border flex-wrap shrink-0">
+      <IconButton data-testid="btn-undo" label="Undo (Ctrl+Z)" active={false} onClick={undo} disabled={!canUndo()}>
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a8 8 0 010 16H3" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 10l4-4m-4 4l4 4" />
+        </svg>
+      </IconButton>
+      <IconButton data-testid="btn-redo" label="Redo (Ctrl+Y)" active={false} onClick={redo} disabled={!canRedo()}>
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 10H11a8 8 0 000 16h10" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 10l-4-4m4 4l-4 4" />
+        </svg>
+      </IconButton>
+
+      <Separator />
+
       <IconButton data-testid="btn-bold" label="Bold (Ctrl+B)" active={!!fmt.bold} onClick={() => toggleFormat('bold')}>
         <strong>B</strong>
       </IconButton>
@@ -83,7 +98,7 @@ export function Toolbar({ selected, selectionEnd: _selectionEnd, onTogglePython,
         data-testid="select-numformat"
         className="text-xs border border-border rounded px-1 py-0.5 bg-bg-surface text-fg-primary focus:outline-none focus:ring-1 focus:ring-accent"
         value={fmt.numFormat ?? 'general'}
-        onChange={(e) => setCellFormat(selected, { numFormat: e.target.value as CellFormat['numFormat'] })}
+        onChange={(e) => setRangeFormat(selected, null, { numFormat: e.target.value as CellFormat['numFormat'] })}
       >
         <option value="general">General</option>
         <option value="number">Number</option>

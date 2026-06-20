@@ -108,5 +108,38 @@ export function useHyperFormula(initialData?: SheetData, onChange?: (data: Sheet
     })
   }, [])
 
-  return { getCellValue, getCellFormula, setCellValue, getSerializedData, getSheetNames, addSheet, loadSheets }
+  const undo = useCallback(() => {
+    if (!hfRef.current || !hfRef.current.isThereSomethingToUndo()) return
+    hfRef.current.undo()
+    setTick(t => t + 1)
+    if (onChangeRef.current) onChangeRef.current(serializeHF(hfRef.current))
+  }, [])
+
+  const redo = useCallback(() => {
+    if (!hfRef.current || !hfRef.current.isThereSomethingToRedo()) return
+    hfRef.current.redo()
+    setTick(t => t + 1)
+    if (onChangeRef.current) onChangeRef.current(serializeHF(hfRef.current))
+  }, [])
+
+  const canUndo = useCallback((): boolean => {
+    return hfRef.current?.isThereSomethingToUndo() ?? false
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tick])
+
+  const canRedo = useCallback((): boolean => {
+    return hfRef.current?.isThereSomethingToRedo() ?? false
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tick])
+
+  const bulkSetCells = useCallback((addr: CellAddress, values: (string | number | null)[][]) => {
+    if (!hfRef.current) return
+    const sheetId = hfRef.current.getSheetId(addr.sheet)
+    if (sheetId === undefined) return
+    hfRef.current.setCellContents({ sheet: sheetId, row: addr.row, col: addr.col }, values)
+    setTick(t => t + 1)
+    if (onChangeRef.current) onChangeRef.current(serializeHF(hfRef.current))
+  }, [])
+
+  return { getCellValue, getCellFormula, setCellValue, getSerializedData, getSheetNames, addSheet, loadSheets, undo, redo, canUndo, canRedo, bulkSetCells }
 }

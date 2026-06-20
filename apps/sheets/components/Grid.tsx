@@ -32,19 +32,90 @@ interface GridProps {
 }
 
 export function Grid({ selected, selectionEnd, onSelect, onSelectionEnd }: GridProps) {
-  const { getCellValue, setCellValue, getCellFormula, getCellFormat } = useHyperFormulaContext()
+  const { getCellValue, setCellValue, getCellFormula, getCellFormat, setRangeFormat, undo, redo, bulkSetCells } = useHyperFormulaContext()
 
   const commitValue = useCallback((addr: CellAddress, value: string) => {
     setCellValue(addr, value)
   }, [setCellValue])
 
   useEffect(() => {
+    const inCellInput = () =>
+      document.activeElement?.tagName === 'INPUT' &&
+      (document.activeElement as HTMLInputElement).classList.contains('cell-input')
+
+    const inExternalInput = () => {
+      const el = document.activeElement
+      if (!el || el.tagName !== 'INPUT') return false
+      return !((el as HTMLInputElement).classList.contains('cell-input'))
+    }
+
     const onKeyDown = (e: KeyboardEvent) => {
-      if (document.activeElement?.tagName === 'INPUT' && document.activeElement.classList.contains('cell-input')) {
+      if (inExternalInput()) return
+
+      const ctrl = e.ctrlKey || e.metaKey
+      const { row, col } = selected
+
+      // Ctrl shortcuts (skip when typing inside a cell-input, except undo/redo which apply globally)
+      if (ctrl) {
+        switch (e.key.toLowerCase()) {
+          case 'z':
+            e.preventDefault()
+            undo()
+            return
+          case 'y':
+            e.preventDefault()
+            redo()
+            return
+        }
+        if (!inCellInput()) {
+          switch (e.key.toLowerCase()) {
+            case 'b':
+              e.preventDefault()
+              setRangeFormat(selected, selectionEnd, { bold: !getCellFormat(selected).bold })
+              return
+            case 'i':
+              e.preventDefault()
+              setRangeFormat(selected, selectionEnd, { italic: !getCellFormat(selected).italic })
+              return
+            case 'u':
+              e.preventDefault()
+              setRangeFormat(selected, selectionEnd, { underline: !getCellFormat(selected).underline })
+              return
+            case 'a':
+              e.preventDefault()
+              onSelect({ ...selected, row: 0, col: 0 })
+              onSelectionEnd({ ...selected, row: ROWS - 1, col: COLS - 1 })
+              return
+            case 'c': {
+              e.preventDefault()
+              const end = selectionEnd ?? selected
+              const minRow = Math.min(selected.row, end.row)
+              const maxRow = Math.max(selected.row, end.row)
+              const minCol = Math.min(selected.col, end.col)
+              const maxCol = Math.max(selected.col, end.col)
+              const lines: string[] = []
+              for (let r = minRow; r <= maxRow; r++) {
+                const cells: string[] = []
+                for (let c = minCol; c <= maxCol; c++) {
+                  const addr: CellAddress = { sheet: selected.sheet, row: r, col: c }
+                  const formula = getCellFormula(addr)
+                  const val = getCellValue(addr)
+                  cells.push(formula ?? String(val ?? ''))
+                }
+                lines.push(cells.join('\t'))
+              }
+              navigator.clipboard.writeText(lines.join('\n')).catch(() => {})
+              return
+            }
+          }
+        }
+        return
+      }
+
+      if (inCellInput()) {
         if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return
       }
 
-      const { row, col } = selected
       const extend = e.shiftKey
 
       let newRow = row, newCol = col, moved = false
@@ -52,6 +123,7 @@ export function Grid({ selected, selectionEnd, onSelect, onSelectionEnd }: GridP
       else if (e.key === 'ArrowUp')    { newRow = Math.max(row - 1, 0); moved = true }
       else if (e.key === 'ArrowRight') { newCol = Math.min(col + 1, COLS - 1); moved = true }
       else if (e.key === 'ArrowLeft')  { newCol = Math.max(col - 1, 0); moved = true }
+      else if (e.key === 'Home')       { newCol = 0; moved = true }
       else if (e.key === 'Delete' || e.key === 'Backspace') { commitValue(selected, ''); return }
 
       if (!moved) return
@@ -65,9 +137,27 @@ export function Grid({ selected, selectionEnd, onSelect, onSelectionEnd }: GridP
         onSelectionEnd(null)
       }
     }
+
+    const onPaste = (e: ClipboardEvent) => {
+      const target = e.target as Element | null
+      if (!target) return
+      if (target.tagName === 'INPUT' && !(target as HTMLElement).classList.contains('cell-input')) return
+
+      const text = e.clipboardData?.getData('text/plain')
+      if (!text) return
+      e.preventDefault()
+
+      const rows = text.split('\n').map(line => line.split('\t'))
+      bulkSetCells(selected, rows)
+    }
+
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [selected, onSelect, onSelectionEnd, commitValue])
+    window.addEventListener('paste', onPaste)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('paste', onPaste)
+    }
+  }, [selected, selectionEnd, onSelect, onSelectionEnd, commitValue, getCellFormat, getCellFormula, getCellValue, setRangeFormat, undo, redo, bulkSetCells])
 
   return (
     <div className="flex-1 overflow-auto focus:outline-none" tabIndex={0}>
@@ -144,7 +234,12 @@ export function Grid({ selected, selectionEnd, onSelect, onSelectionEnd }: GridP
                         }
                         if (e.key === 'Tab') {
                           commitValue(addr, e.currentTarget.value)
-                          onSelect({ ...addr, col: col + 1 })
+                          const nextCol = col + 1
+                          if (nextCol >= COLS) {
+                            onSelect({ ...addr, row: row + 1, col: 0 })
+                          } else {
+                            onSelect({ ...addr, col: nextCol })
+                          }
                           onSelectionEnd(null)
                           e.preventDefault()
                         }

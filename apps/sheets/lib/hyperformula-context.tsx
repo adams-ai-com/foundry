@@ -8,6 +8,7 @@ import type { CellAddress } from '@foundry/shared'
 type HFContextValue = ReturnType<typeof useHyperFormula> & {
   getCellFormat: (addr: CellAddress) => CellFormat
   setCellFormat: (addr: CellAddress, patch: Partial<CellFormat>) => void
+  setRangeFormat: (start: CellAddress, end: CellAddress | null, patch: Partial<CellFormat>) => void
   loadAll: (data: SheetData, formats?: CellFormats) => void
 }
 
@@ -49,6 +50,32 @@ export function HyperFormulaProvider({
     onFormatsChangeRef.current?.(formatsRef.current)
   }, [])
 
+  const setRangeFormat = useCallback((start: CellAddress, end: CellAddress | null, patch: Partial<CellFormat>) => {
+    if (!end || (start.row === end.row && start.col === end.col)) {
+      const key = `${start.row}:${start.col}`
+      const sheetFmts = formatsRef.current[start.sheet] ?? {}
+      formatsRef.current = {
+        ...formatsRef.current,
+        [start.sheet]: { ...sheetFmts, [key]: { ...(sheetFmts[key] ?? {}), ...patch } },
+      }
+    } else {
+      const minRow = Math.min(start.row, end.row)
+      const maxRow = Math.max(start.row, end.row)
+      const minCol = Math.min(start.col, end.col)
+      const maxCol = Math.max(start.col, end.col)
+      const sheetFmts = { ...(formatsRef.current[start.sheet] ?? {}) }
+      for (let r = minRow; r <= maxRow; r++) {
+        for (let c = minCol; c <= maxCol; c++) {
+          const key = `${r}:${c}`
+          sheetFmts[key] = { ...(sheetFmts[key] ?? {}), ...patch }
+        }
+      }
+      formatsRef.current = { ...formatsRef.current, [start.sheet]: sheetFmts }
+    }
+    setFormatTick(t => t + 1)
+    onFormatsChangeRef.current?.(formatsRef.current)
+  }, [])
+
   const loadAll = useCallback((data: SheetData, formats: CellFormats = {}) => {
     hf.loadSheets(data)
     formatsRef.current = formats
@@ -57,7 +84,7 @@ export function HyperFormulaProvider({
   }, [hf])
 
   return (
-    <HyperFormulaContext.Provider value={{ ...hf, getCellFormat, setCellFormat, loadAll }}>
+    <HyperFormulaContext.Provider value={{ ...hf, getCellFormat, setCellFormat, setRangeFormat, loadAll }}>
       {children}
     </HyperFormulaContext.Provider>
   )
