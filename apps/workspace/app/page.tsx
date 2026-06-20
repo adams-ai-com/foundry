@@ -58,13 +58,13 @@ function AIIcon() {
 }
 
 const APPS = [
+  { id: 'pdf',      path: '/pdf',      label: 'PDF',      desc: 'Edit, annotate, sign, and redact PDFs. An open-source Acrobat Pro.',           Icon: PDFIcon,      ic: 'text-orange-500',  bg: 'bg-orange-500/10' },
   { id: 'docs',     path: '/docs',     label: 'Docs',     desc: 'Rich text editing with comments, version history, and collaborative blocks.',  Icon: DocsIcon,     ic: 'text-blue-500',    bg: 'bg-blue-500/10' },
   { id: 'sheets',   path: '/sheets',   label: 'Sheets',   desc: 'Spreadsheets with formulas, charts, pivot tables, and Python scripting.',      Icon: SheetsIcon,   ic: 'text-emerald-500', bg: 'bg-emerald-500/10' },
   { id: 'mail',     path: '/mail',     label: 'Mail',     desc: 'Email client backed by our own SMTP server. Own your inbox entirely.',          Icon: MailIcon,     ic: 'text-violet-500',  bg: 'bg-violet-500/10' },
   { id: 'channels', path: '/channels', label: 'Channels', desc: 'Real-time team chat with threads, video calls, and AI conversation memory.',   Icon: ChannelsIcon, ic: 'text-sky-500',     bg: 'bg-sky-500/10' },
   { id: 'wiki',     path: '/wiki',     label: 'Wiki',     desc: 'Structured knowledge base with nested pages and workspace-wide search.',       Icon: WikiIcon,     ic: 'text-amber-500',   bg: 'bg-amber-500/10' },
   { id: 'sites',    path: '/sites',    label: 'Sites',    desc: 'Internal sites, file management, and team portals — all in one place.',        Icon: SitesIcon,    ic: 'text-rose-500',    bg: 'bg-rose-500/10' },
-  { id: 'pdf',      path: '/pdf',      label: 'PDF',      desc: 'Edit, annotate, sign, and redact PDFs. An open-source Acrobat Pro.',           Icon: PDFIcon,      ic: 'text-orange-500',  bg: 'bg-orange-500/10' },
 ]
 
 const SELF_HOST_FEATURES = [
@@ -131,6 +131,17 @@ export default async function RootPage() {
               <span className="text-border hidden sm:block text-lg leading-none">·</span>
               <span className="text-fg-tertiary text-sm truncate hidden sm:block max-w-[200px]">{org.name}</span>
             </div>
+            <nav className="flex items-center gap-0.5">
+              {allowedApps.map(({ id, path, label }) => (
+                <a
+                  key={id}
+                  href={path}
+                  className="px-3 py-1.5 rounded-md text-sm font-medium text-fg-secondary hover:text-fg-primary hover:bg-bg-hover transition-colors"
+                >
+                  {label}
+                </a>
+              ))}
+            </nav>
             <div className="flex-1" />
             {(session.role === 'owner' || session.role === 'admin') && (
               <a href="/admin" className="text-xs font-medium text-fg-tertiary hover:text-fg-primary transition-colors px-2 py-1 rounded hover:bg-bg-hover">

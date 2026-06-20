@@ -2,13 +2,13 @@ import type { SessionUser } from '@foundry/auth'
 import { ThemeSwitcher } from './ThemeSwitcher'
 
 const APPS = [
+  { id: 'pdf',      label: 'PDF',      href: '/pdf' },
   { id: 'docs',     label: 'Docs',     href: '/docs' },
   { id: 'sheets',   label: 'Sheets',   href: '/sheets' },
   { id: 'mail',     label: 'Mail',     href: '/mail' },
   { id: 'channels', label: 'Channels', href: '/channels' },
   { id: 'wiki',     label: 'Wiki',     href: '/wiki' },
   { id: 'sites',    label: 'Sites',    href: '/sites' },
-  { id: 'pdf',      label: 'PDF',      href: '/pdf' },
 ] as const
 
 type AppId = typeof APPS[number]['id']
