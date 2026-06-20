@@ -6,6 +6,7 @@ import type { CellAddress } from '@foundry/shared'
 import { useHyperFormulaContext } from '@/lib/hyperformula-context'
 import { applyNumFormat } from '@/lib/format-utils'
 import { ROWS, COLS, COL_WIDTH, ROW_HEIGHT, HEADER_WIDTH } from '@/lib/sheet-constants'
+import type { MergedRange } from '@/lib/actions'
 
 function inRange(row: number, col: number, start: CellAddress, end: CellAddress | null): boolean {
   if (!end) return false
@@ -23,37 +24,31 @@ function getCellAtPoint(x: number, y: number): { row: number; col: number } | nu
   return m ? { row: parseInt(m[1]), col: parseInt(m[2]) } : null
 }
 
-function computeFillValue(
-  formula: string | null,
-  value: string | number | boolean | null,
-  delta: number,
-): string {
+function computeFillValue(formula: string | null, value: string | number | boolean | null, delta: number): string {
   if (typeof value === 'number' && !formula) return String(value + delta)
   if (formula) return formula
   return String(value ?? '')
 }
 
-// Jump to the boundary of the data region in one axis direction
 function ctrlMove(current: number, dir: 1 | -1, max: number, getVal: (i: number) => unknown): number {
   const next = current + dir
   if (next < 0 || next >= max) return current
-  const curEmpty = (v: unknown) => v === null || v === '' || v === undefined
-  if (!curEmpty(getVal(current)) && !curEmpty(getVal(next))) {
+  const empty = (v: unknown) => v === null || v === '' || v === undefined
+  if (!empty(getVal(current)) && !empty(getVal(next))) {
     let i = next
     for (;;) {
       const after = i + dir
-      if (after < 0 || after >= max || curEmpty(getVal(after))) return i
+      if (after < 0 || after >= max || empty(getVal(after))) return i
       i = after
     }
   } else {
     let i = next
-    while (i >= 0 && i < max) {
-      if (!curEmpty(getVal(i))) return i
-      i += dir
-    }
+    while (i >= 0 && i < max) { if (!empty(getVal(i))) return i; i += dir }
     return Math.max(0, Math.min(max - 1, i - dir))
   }
 }
+
+function isUrl(s: string) { return /^https?:\/\//i.test(s) }
 
 interface GridProps {
   selected: CellAddress
@@ -64,6 +59,8 @@ interface GridProps {
   findMatchIndex?: number
   frozenRows?: number
   frozenCols?: number
+  zoom?: number
+  merges?: MergedRange[]
   onContextMenu?: (type: 'row' | 'col', index: number, x: number, y: number) => void
 }
 
@@ -71,6 +68,8 @@ export function Grid({
   selected, selectionEnd, onSelect, onSelectionEnd,
   findMatches, findMatchIndex,
   frozenRows = 0, frozenCols = 0,
+  zoom = 100,
+  merges = [],
   onContextMenu,
 }: GridProps) {
   const { getCellValue, setCellValue, getCellFormula, getCellFormat, setRangeFormat, undo, redo, bulkSetCells } = useHyperFormulaContext()
@@ -82,83 +81,71 @@ export function Grid({
     setCellValue(addr, value)
   }, [setCellValue])
 
+  // Prefix sums for absolute positioning of merges and overlays
+  const colPrefix = [0]
+  for (let i = 0; i < COLS; i++) colPrefix.push(colPrefix[i] + colWidths[i])
+  const rowPrefix = [0]
+  for (let i = 0; i < ROWS; i++) rowPrefix.push(rowPrefix[i] + rowHeights[i])
+
+  // Merge lookup maps for current sheet
+  const sheetMerges = merges.filter(m => m.sheet === selected.sheet)
+  const mergeAnchorMap = new Map<string, MergedRange>()  // "row:col" → merge
+  const mergeCoveredMap = new Map<string, MergedRange>()
+  for (const m of sheetMerges) {
+    mergeAnchorMap.set(`${m.startRow}:${m.startCol}`, m)
+    for (let r = m.startRow; r <= m.endRow; r++) {
+      for (let c = m.startCol; c <= m.endCol; c++) {
+        if (r !== m.startRow || c !== m.startCol) mergeCoveredMap.set(`${r}:${c}`, m)
+      }
+    }
+  }
+
   function startColResize(e: React.MouseEvent, col: number) {
     e.preventDefault(); e.stopPropagation()
     const startX = e.clientX, startW = colWidths[col]
-    const onMove = (me: MouseEvent) => {
-      setColWidths(prev => { const next = [...prev]; next[col] = Math.max(40, startW + me.clientX - startX); return next })
-    }
+    const onMove = (me: MouseEvent) => setColWidths(prev => { const n = [...prev]; n[col] = Math.max(40, startW + me.clientX - startX); return n })
     const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
+    window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp)
   }
 
   function startRowResize(e: React.MouseEvent, row: number) {
     e.preventDefault(); e.stopPropagation()
     const startY = e.clientY, startH = rowHeights[row]
-    const onMove = (me: MouseEvent) => {
-      setRowHeights(prev => { const next = [...prev]; next[row] = Math.max(16, startH + me.clientY - startY); return next })
-    }
+    const onMove = (me: MouseEvent) => setRowHeights(prev => { const n = [...prev]; n[row] = Math.max(16, startH + me.clientY - startY); return n })
     const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
+    window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp)
   }
 
   function startFillDrag(e: React.MouseEvent) {
     e.preventDefault(); e.stopPropagation()
-    const onMove = (me: MouseEvent) => {
-      const cell = getCellAtPoint(me.clientX, me.clientY)
-      if (cell) setFillEnd(cell)
-    }
+    const onMove = (me: MouseEvent) => { const c = getCellAtPoint(me.clientX, me.clientY); if (c) setFillEnd(c) }
     const onUp = (me: MouseEvent) => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-      const cell = getCellAtPoint(me.clientX, me.clientY)
-      if (cell) applyFill(cell)
+      window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp)
+      const c = getCellAtPoint(me.clientX, me.clientY); if (c) applyFill(c)
       setFillEnd(null)
     }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
+    window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp)
   }
 
   function applyFill(end: { row: number; col: number }) {
     const { row: sr, col: sc } = selected
     const dRow = end.row - sr, dCol = end.col - sc
     if (dRow === 0 && dCol === 0) return
-    const rawValue = getCellValue(selected)
-    const formula = getCellFormula(selected)
-
+    const rawValue = getCellValue(selected), formula = getCellFormula(selected)
     if (Math.abs(dRow) >= Math.abs(dCol)) {
-      const dir = (dRow > 0 ? 1 : -1) as 1 | -1
-      const count = Math.abs(dRow)
+      const dir = (dRow > 0 ? 1 : -1) as 1 | -1, count = Math.abs(dRow)
       const minRow = dir === 1 ? sr + 1 : end.row
-      const values = Array.from({ length: count }, (_, i) => {
-        const step = dir === 1 ? i + 1 : count - i
-        return [computeFillValue(formula, rawValue, step * dir)]
-      })
-      bulkSetCells({ ...selected, row: minRow }, values)
+      bulkSetCells({ ...selected, row: minRow }, Array.from({ length: count }, (_, i) => [computeFillValue(formula, rawValue, (dir === 1 ? i + 1 : count - i) * dir)]))
     } else {
-      const dir = (dCol > 0 ? 1 : -1) as 1 | -1
-      const count = Math.abs(dCol)
+      const dir = (dCol > 0 ? 1 : -1) as 1 | -1, count = Math.abs(dCol)
       const minCol = dir === 1 ? sc + 1 : end.col
-      const values = [[...Array.from({ length: count }, (_, i) => {
-        const step = dir === 1 ? i + 1 : count - i
-        return computeFillValue(formula, rawValue, step * dir)
-      })]]
-      bulkSetCells({ ...selected, col: minCol }, values)
+      bulkSetCells({ ...selected, col: minCol }, [[...Array.from({ length: count }, (_, i) => computeFillValue(formula, rawValue, (dir === 1 ? i + 1 : count - i) * dir))]])
     }
   }
 
   useEffect(() => {
-    const inCellInput = () =>
-      document.activeElement?.tagName === 'INPUT' &&
-      (document.activeElement as HTMLInputElement).classList.contains('cell-input')
-
-    const inExternalInput = () => {
-      const el = document.activeElement
-      if (!el || el.tagName !== 'INPUT') return false
-      return !(el as HTMLInputElement).classList.contains('cell-input')
-    }
+    const inCellInput = () => document.activeElement?.tagName === 'INPUT' && (document.activeElement as HTMLInputElement).classList.contains('cell-input')
+    const inExternalInput = () => { const el = document.activeElement; if (!el || el.tagName !== 'INPUT') return false; return !(el as HTMLInputElement).classList.contains('cell-input') }
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (inExternalInput()) return
@@ -170,8 +157,6 @@ export function Grid({
           case 'z': e.preventDefault(); undo(); return
           case 'y': e.preventDefault(); redo(); return
         }
-
-        // Ctrl+Arrow: jump to data region boundary
         if (['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
           e.preventDefault()
           let newRow = row, newCol = col
@@ -184,7 +169,6 @@ export function Grid({
           if (e.shiftKey) { onSelectionEnd(newAddr) } else { onSelect(newAddr); onSelectionEnd(null) }
           return
         }
-
         if (!inCellInput()) {
           switch (e.key.toLowerCase()) {
             case 'b': e.preventDefault(); setRangeFormat(selected, selectionEnd, { bold: !getCellFormat(selected).bold }); return
@@ -198,12 +182,10 @@ export function Grid({
             case 'c': {
               e.preventDefault()
               const end = selectionEnd ?? selected
-              const minRow = Math.min(selected.row, end.row), maxRow = Math.max(selected.row, end.row)
-              const minCol = Math.min(selected.col, end.col), maxCol = Math.max(selected.col, end.col)
               const lines: string[] = []
-              for (let r = minRow; r <= maxRow; r++) {
+              for (let r = Math.min(selected.row, end.row); r <= Math.max(selected.row, end.row); r++) {
                 const cells: string[] = []
-                for (let c = minCol; c <= maxCol; c++) {
+                for (let c = Math.min(selected.col, end.col); c <= Math.max(selected.col, end.col); c++) {
                   const addr: CellAddress = { sheet: selected.sheet, row: r, col: c }
                   cells.push(getCellFormula(addr) ?? String(getCellValue(addr) ?? ''))
                 }
@@ -217,9 +199,7 @@ export function Grid({
         return
       }
 
-      if (inCellInput()) {
-        if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return
-      }
+      if (inCellInput() && !['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return
 
       const extend = e.shiftKey
       let newRow = row, newCol = col, moved = false
@@ -238,8 +218,7 @@ export function Grid({
 
     const onPaste = (e: ClipboardEvent) => {
       const target = e.target as Element | null
-      if (!target) return
-      if (target.tagName === 'INPUT' && !(target as HTMLElement).classList.contains('cell-input')) return
+      if (!target || (target.tagName === 'INPUT' && !(target as HTMLElement).classList.contains('cell-input'))) return
       const text = e.clipboardData?.getData('text/plain')
       if (!text) return
       e.preventDefault()
@@ -251,7 +230,7 @@ export function Grid({
     return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('paste', onPaste) }
   }, [selected, selectionEnd, onSelect, onSelectionEnd, commitValue, getCellFormat, getCellFormula, getCellValue, setRangeFormat, undo, redo, bulkSetCells])
 
-  // Fill preview cells during drag
+  // Fill preview
   const fillPreviewCells = new Set<string>()
   if (fillEnd) {
     const dRow = fillEnd.row - selected.row, dCol = fillEnd.col - selected.col
@@ -264,28 +243,123 @@ export function Grid({
     }
   }
 
-  const activeMatchKey = (findMatches && findMatchIndex !== undefined && findMatches[findMatchIndex])
-    ? `${findMatches[findMatchIndex].row}:${findMatches[findMatchIndex].col}` : null
+  const activeMatchKey = (findMatches && findMatchIndex !== undefined && findMatches[findMatchIndex]) ? `${findMatches[findMatchIndex].row}:${findMatches[findMatchIndex].col}` : null
   const findMatchSet = new Set(findMatches?.map(m => `${m.row}:${m.col}`) ?? [])
+  const totalWidth = HEADER_WIDTH + colPrefix[COLS]
 
-  const totalWidth = HEADER_WIDTH + colWidths.reduce((sum, w) => sum + w, 0)
-
-  // Cumulative frozen row heights for sticky top offsets
+  // Frozen row sticky offsets
   const frozenRowOffsets: number[] = []
-  let frozenTop = ROW_HEIGHT // start below col headers
-  for (let r = 0; r < frozenRows; r++) {
-    frozenRowOffsets[r] = frozenTop
-    frozenTop += rowHeights[r]
+  let frozenTop = ROW_HEIGHT
+  for (let r = 0; r < frozenRows; r++) { frozenRowOffsets[r] = frozenTop; frozenTop += rowHeights[r] }
+
+  function renderCell(row: number, col: number, opts: { asOverlay?: boolean; overrideWidth?: number; overrideHeight?: number } = {}) {
+    const addr: CellAddress = { sheet: selected.sheet, row, col }
+    const cellKey = `${row}:${col}`
+    const isSelected = selected.row === row && selected.col === col
+    const isInRange = inRange(row, col, selected, selectionEnd)
+    const rawValue = getCellValue(addr)
+    const fmt = getCellFormat(addr)
+    const displayValue = applyNumFormat(rawValue, fmt.numFormat)
+    const fontClasses = [
+      fmt.bold          ? 'font-bold'    : '',
+      fmt.italic        ? 'italic'       : '',
+      fmt.underline     ? 'underline'    : '',
+      fmt.strikethrough ? 'line-through' : '',
+    ].filter(Boolean).join(' ')
+    const textAlign = fmt.align ?? (typeof rawValue === 'number' ? 'right' : 'left')
+    const isFindMatch = !isSelected && findMatchSet.has(cellKey)
+    const isFindActive = !isSelected && cellKey === activeMatchKey
+    const isFillPreview = !isSelected && fillPreviewCells.has(cellKey)
+    const appliedFill = (isSelected || isInRange || isFindMatch || isFindActive || isFillPreview) ? undefined : fmt.fillColor
+
+    const w = opts.overrideWidth ?? colWidths[col]
+    const h = opts.overrideHeight ?? rowHeights[row]
+
+    const borderStyle: React.CSSProperties = {}
+    if (fmt.borders?.top)    borderStyle.borderTop    = `1.5px solid ${fmt.borders.top}`
+    if (fmt.borders?.right)  borderStyle.borderRight  = `1.5px solid ${fmt.borders.right}`
+    if (fmt.borders?.bottom) borderStyle.borderBottom = `1.5px solid ${fmt.borders.bottom}`
+    if (fmt.borders?.left)   borderStyle.borderLeft   = `1.5px solid ${fmt.borders.left}`
+
+    const cellStyle: React.CSSProperties = {
+      width: w, minWidth: w,
+      textAlign,
+      ...(fmt.wrapText ? { minHeight: h } : { height: h, lineHeight: `${h}px` }),
+      color: fmt.color,
+      backgroundColor: appliedFill,
+      fontSize: fmt.fontSize ? `${fmt.fontSize}px` : undefined,
+      ...borderStyle,
+      ...(opts.asOverlay ? { position: 'absolute', zIndex: 6 } : {}),
+    }
+
+    const displayContent = isUrl(String(displayValue)) ? (
+      <a
+        href={String(displayValue)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-accent underline"
+        onMouseDown={e => e.stopPropagation()}
+        onClick={e => e.stopPropagation()}
+      >
+        {displayValue}
+      </a>
+    ) : displayValue
+
+    return (
+      <div
+        key={opts.asOverlay ? `overlay-${row}-${col}` : col}
+        data-testid={`cell-${row}-${col}`}
+        className={[
+          'cell border-t border-l relative',
+          fmt.wrapText ? 'wrap-text' : '',
+          isSelected ? 'selected' : isInRange ? 'in-range' : '',
+          isFindActive ? 'find-match-active' : isFindMatch ? 'find-match' : '',
+          isFillPreview ? 'fill-preview' : '',
+          fontClasses,
+        ].filter(Boolean).join(' ')}
+        style={cellStyle}
+        onMouseDown={e => {
+          // Ctrl+click on URL opens it
+          if ((e.ctrlKey || e.metaKey) && isUrl(String(displayValue))) {
+            window.open(String(displayValue), '_blank')
+            return
+          }
+          if (e.shiftKey) { onSelectionEnd(addr) } else { onSelect(addr); onSelectionEnd(null) }
+        }}
+        onDoubleClick={() => document.getElementById(`cell-${row}-${col}`)?.focus()}
+      >
+        {isSelected ? (
+          <>
+            <input
+              autoFocus
+              onFocus={e => e.currentTarget.select()}
+              id={`cell-${row}-${col}`}
+              className={`cell-input absolute inset-0 w-full h-full px-1.5 text-sm bg-transparent outline-none ${fontClasses}`}
+              style={{ textAlign, color: fmt.color, fontSize: fmt.fontSize ? `${fmt.fontSize}px` : undefined }}
+              defaultValue={getCellFormula(addr) ?? String(rawValue ?? '')}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { commitValue(addr, e.currentTarget.value); onSelect({ ...addr, row: row + 1 }); onSelectionEnd(null); e.preventDefault() }
+                if (e.key === 'Tab') { commitValue(addr, e.currentTarget.value); onSelect(col + 1 >= COLS ? { ...addr, row: row + 1, col: 0 } : { ...addr, col: col + 1 }); onSelectionEnd(null); e.preventDefault() }
+                if (e.key === 'Escape') { e.currentTarget.value = displayValue; e.currentTarget.blur() }
+              }}
+              onBlur={e => commitValue(addr, e.target.value)}
+            />
+            <div
+              className="absolute bottom-0 right-0 w-2 h-2 bg-accent border border-bg-base cursor-crosshair z-20"
+              style={{ transform: 'translate(50%, 50%)' }}
+              onMouseDown={startFillDrag}
+            />
+          </>
+        ) : displayContent}
+      </div>
+    )
   }
 
   return (
     <div className="flex-1 overflow-auto focus:outline-none" tabIndex={0}>
-      <div style={{ width: totalWidth, position: 'relative' }}>
+      <div style={{ width: totalWidth, position: 'relative', zoom: zoom !== 100 ? zoom / 100 : undefined }}>
         {/* Corner */}
-        <div
-          className="cell header sticky top-0 left-0 z-20"
-          style={{ width: HEADER_WIDTH, height: ROW_HEIGHT }}
-        />
+        <div className="cell header sticky top-0 left-0 z-20" style={{ width: HEADER_WIDTH, height: ROW_HEIGHT }} />
 
         {/* Column headers */}
         <div className="flex sticky top-0 z-10" style={{ marginLeft: HEADER_WIDTH }}>
@@ -297,10 +371,7 @@ export function Grid({
               onContextMenu={e => { e.preventDefault(); onContextMenu?.('col', col, e.clientX, e.clientY) }}
             >
               {colIndexToLetter(col)}
-              <div
-                className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize z-10 hover:bg-accent/30"
-                onMouseDown={e => startColResize(e, col)}
-              />
+              <div className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize z-10 hover:bg-accent/30" onMouseDown={e => startColResize(e, col)} />
             </div>
           ))}
         </div>
@@ -308,12 +379,8 @@ export function Grid({
         {/* Rows */}
         {Array.from({ length: ROWS }, (_, row) => {
           const isFrozenRow = row < frozenRows
-          const rowStyle: React.CSSProperties = {
-            ...(isFrozenRow ? { position: 'sticky', top: frozenRowOffsets[row], zIndex: 8 } : {}),
-          }
-
           return (
-            <div key={row} className="flex" style={rowStyle}>
+            <div key={row} className="flex" style={isFrozenRow ? { position: 'sticky', top: frozenRowOffsets[row], zIndex: 8 } : undefined}>
               {/* Row header */}
               <div
                 className={`cell header border-t sticky left-0 z-10 relative ${selected.row === row ? 'header-active' : ''}`}
@@ -321,109 +388,63 @@ export function Grid({
                 onContextMenu={e => { e.preventDefault(); onContextMenu?.('row', row, e.clientX, e.clientY) }}
               >
                 {row + 1}
-                {/* Row resize handle */}
-                <div
-                  className="absolute bottom-0 left-0 w-full h-1.5 cursor-row-resize hover:bg-accent/30 z-10"
-                  onMouseDown={e => startRowResize(e, row)}
-                />
+                <div className="absolute bottom-0 left-0 w-full h-1.5 cursor-row-resize hover:bg-accent/30 z-10" onMouseDown={e => startRowResize(e, row)} />
               </div>
 
               {/* Cells */}
               {Array.from({ length: COLS }, (_, col) => {
-                const addr: CellAddress = { sheet: selected.sheet, row, col }
-                const isSelected = selected.row === row && selected.col === col
-                const isInRange = inRange(row, col, selected, selectionEnd)
-                const rawValue = getCellValue(addr)
-                const fmt = getCellFormat(addr)
-                const displayValue = applyNumFormat(rawValue, fmt.numFormat)
-                const fontClasses = [
-                  fmt.bold          ? 'font-bold'    : '',
-                  fmt.italic        ? 'italic'       : '',
-                  fmt.underline     ? 'underline'    : '',
-                  fmt.strikethrough ? 'line-through' : '',
-                ].filter(Boolean).join(' ')
-                const textAlign = fmt.align ?? (typeof rawValue === 'number' ? 'right' : 'left')
                 const cellKey = `${row}:${col}`
-                const isFindMatch = !isSelected && findMatchSet.has(cellKey)
-                const isFindActive = !isSelected && cellKey === activeMatchKey
-                const isFillPreview = !isSelected && fillPreviewCells.has(cellKey)
-                const appliedFill = (isSelected || isInRange || isFindMatch || isFindActive || isFillPreview)
-                  ? undefined : fmt.fillColor
-
                 const isFrozenCol = col < frozenCols
-                const cellStyle: React.CSSProperties = {
-                  width: colWidths[col], minWidth: colWidths[col],
-                  textAlign,
-                  // wrap text: use minHeight so the row expands; otherwise fixed height
-                  ...(fmt.wrapText
-                    ? { minHeight: rowHeights[row] }
-                    : { height: rowHeights[row], lineHeight: `${rowHeights[row]}px` }),
-                  color: fmt.color,
-                  backgroundColor: appliedFill,
-                  ...(isFrozenCol ? { position: 'sticky', left: HEADER_WIDTH, zIndex: isFrozenRow ? 11 : 9 } : {}),
+                const isCovered = mergeCoveredMap.has(cellKey)
+
+                if (isCovered) {
+                  // Invisible placeholder so layout stays correct; overlay renders on top
+                  return (
+                    <div
+                      key={col}
+                      style={{ width: colWidths[col], minWidth: colWidths[col], height: rowHeights[row], visibility: 'hidden', pointerEvents: 'none' }}
+                    />
+                  )
                 }
 
+                const isMergeAnchor = mergeAnchorMap.has(cellKey)
+                if (isMergeAnchor) {
+                  // Anchor renders as absolute overlay; placeholder here keeps layout
+                  return (
+                    <div
+                      key={col}
+                      style={{ width: colWidths[col], minWidth: colWidths[col], height: rowHeights[row], visibility: 'hidden', pointerEvents: 'none' }}
+                    />
+                  )
+                }
+
+                const baseCell = renderCell(row, col)
+                if (!isFrozenCol) return baseCell
+
+                // Frozen column: wrap with sticky left style
                 return (
                   <div
                     key={col}
-                    data-testid={`cell-${row}-${col}`}
-                    className={[
-                      'cell border-t border-l relative',
-                      fmt.wrapText ? 'wrap-text' : '',
-                      isSelected ? 'selected' : isInRange ? 'in-range' : '',
-                      isFindActive ? 'find-match-active' : isFindMatch ? 'find-match' : '',
-                      isFillPreview ? 'fill-preview' : '',
-                      fontClasses,
-                    ].filter(Boolean).join(' ')}
-                    style={cellStyle}
-                    onMouseDown={e => {
-                      if (e.shiftKey) { onSelectionEnd(addr) }
-                      else { onSelect(addr); onSelectionEnd(null) }
-                    }}
-                    onDoubleClick={() => document.getElementById(`cell-${row}-${col}`)?.focus()}
+                    style={{ position: 'sticky', left: HEADER_WIDTH, zIndex: isFrozenRow ? 11 : 9, width: colWidths[col], minWidth: colWidths[col] }}
                   >
-                    {isSelected ? (
-                      <>
-                        <input
-                          autoFocus
-                          onFocus={e => e.currentTarget.select()}
-                          id={`cell-${row}-${col}`}
-                          className={`cell-input absolute inset-0 w-full h-full px-1.5 text-sm bg-transparent outline-none ${fontClasses}`}
-                          style={{ textAlign, color: fmt.color }}
-                          defaultValue={getCellFormula(addr) ?? String(rawValue ?? '')}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') {
-                              commitValue(addr, e.currentTarget.value)
-                              onSelect({ ...addr, row: row + 1 })
-                              onSelectionEnd(null)
-                              e.preventDefault()
-                            }
-                            if (e.key === 'Tab') {
-                              commitValue(addr, e.currentTarget.value)
-                              onSelect(col + 1 >= COLS ? { ...addr, row: row + 1, col: 0 } : { ...addr, col: col + 1 })
-                              onSelectionEnd(null)
-                              e.preventDefault()
-                            }
-                            if (e.key === 'Escape') {
-                              e.currentTarget.value = displayValue
-                              e.currentTarget.blur()
-                            }
-                          }}
-                          onBlur={e => commitValue(addr, e.target.value)}
-                        />
-                        {/* Auto-fill handle */}
-                        <div
-                          className="absolute bottom-0 right-0 w-2 h-2 bg-accent border border-bg-base cursor-crosshair z-20"
-                          style={{ transform: 'translate(50%, 50%)' }}
-                          onMouseDown={startFillDrag}
-                        />
-                      </>
-                    ) : (
-                      displayValue
-                    )}
+                    {/* re-render with no width override (handled by wrapper) */}
+                    {renderCell(row, col)}
                   </div>
                 )
               })}
+            </div>
+          )
+        })}
+
+        {/* Merge cell overlays — absolutely positioned on top of hidden placeholders */}
+        {sheetMerges.map(m => {
+          const left = HEADER_WIDTH + colPrefix[m.startCol]
+          const top = ROW_HEIGHT + rowPrefix[m.startRow]
+          const width = colPrefix[m.endCol + 1] - colPrefix[m.startCol]
+          const height = rowPrefix[m.endRow + 1] - rowPrefix[m.startRow]
+          return (
+            <div key={`${m.startRow}:${m.startCol}`} style={{ position: 'absolute', left, top, width, height, zIndex: 6 }}>
+              {renderCell(m.startRow, m.startCol, { overrideWidth: width, overrideHeight: height })}
             </div>
           )
         })}

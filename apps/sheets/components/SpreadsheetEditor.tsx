@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { SpreadsheetShell } from './SpreadsheetShell'
 import { updateSpreadsheet, deleteSpreadsheet } from '@/lib/actions'
-import type { Spreadsheet, SheetData, CellFormats, ChartDef } from '@/lib/actions'
+import type { Spreadsheet, SheetData, CellFormats, ChartDef, MergedRange } from '@/lib/actions'
 
 const AUTOSAVE_MS = 1500
 
@@ -15,47 +15,53 @@ export function SpreadsheetEditor({ spreadsheet }: { spreadsheet: Spreadsheet })
   const dataRef = useRef<SheetData>(spreadsheet.data)
   const formatsRef = useRef<CellFormats>(spreadsheet.formats)
   const chartsRef = useRef<ChartDef[]>(spreadsheet.charts)
+  const mergesRef = useRef<MergedRange[]>(spreadsheet.merges)
 
-  const save = useCallback(async (t: string, d: SheetData, f: CellFormats, c: ChartDef[]) => {
+  const save = useCallback(async (t: string, d: SheetData, f: CellFormats, c: ChartDef[], m: MergedRange[]) => {
     setSaveState('saving')
-    await updateSpreadsheet(spreadsheet.id, t, d, f, c)
+    await updateSpreadsheet(spreadsheet.id, t, d, f, c, m)
     setSaveState('saved')
   }, [spreadsheet.id])
 
-  const scheduleSave = useCallback((t: string, d: SheetData, f: CellFormats, c: ChartDef[]) => {
+  const scheduleSave = useCallback((t: string, d: SheetData, f: CellFormats, c: ChartDef[], m: MergedRange[]) => {
     setSaveState('unsaved')
     if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => save(t, d, f, c), AUTOSAVE_MS)
+    saveTimer.current = setTimeout(() => save(t, d, f, c, m), AUTOSAVE_MS)
   }, [save])
 
   function handleTitleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const v = e.target.value
     setTitle(v)
     titleRef.current = v
-    scheduleSave(v, dataRef.current, formatsRef.current, chartsRef.current)
+    scheduleSave(v, dataRef.current, formatsRef.current, chartsRef.current, mergesRef.current)
   }
 
   function handleTitleBlur() {
     if (saveTimer.current) {
       clearTimeout(saveTimer.current)
       saveTimer.current = null
-      save(titleRef.current, dataRef.current, formatsRef.current, chartsRef.current)
+      save(titleRef.current, dataRef.current, formatsRef.current, chartsRef.current, mergesRef.current)
     }
   }
 
   function handleDataChange(data: SheetData) {
     dataRef.current = data
-    scheduleSave(titleRef.current, data, formatsRef.current, chartsRef.current)
+    scheduleSave(titleRef.current, data, formatsRef.current, chartsRef.current, mergesRef.current)
   }
 
   function handleFormatsChange(formats: CellFormats) {
     formatsRef.current = formats
-    scheduleSave(titleRef.current, dataRef.current, formats, chartsRef.current)
+    scheduleSave(titleRef.current, dataRef.current, formats, chartsRef.current, mergesRef.current)
   }
 
   function handleChartsChange(charts: ChartDef[]) {
     chartsRef.current = charts
-    scheduleSave(titleRef.current, dataRef.current, formatsRef.current, charts)
+    scheduleSave(titleRef.current, dataRef.current, formatsRef.current, charts, mergesRef.current)
+  }
+
+  function handleMergesChange(merges: MergedRange[]) {
+    mergesRef.current = merges
+    scheduleSave(titleRef.current, dataRef.current, formatsRef.current, chartsRef.current, merges)
   }
 
   async function handleBack() {
@@ -67,7 +73,7 @@ export function SpreadsheetEditor({ spreadsheet }: { spreadsheet: Spreadsheet })
     if (isEmpty) {
       await deleteSpreadsheet(spreadsheet.id)
     } else {
-      await save(titleRef.current, dataRef.current, formatsRef.current, chartsRef.current)
+      await save(titleRef.current, dataRef.current, formatsRef.current, chartsRef.current, mergesRef.current)
     }
     window.location.href = '/sheets'
   }
@@ -113,9 +119,11 @@ export function SpreadsheetEditor({ spreadsheet }: { spreadsheet: Spreadsheet })
         initialData={spreadsheet.data}
         initialFormats={spreadsheet.formats}
         initialCharts={spreadsheet.charts}
+        initialMerges={spreadsheet.merges}
         onChange={handleDataChange}
         onFormatsChange={handleFormatsChange}
         onChartsChange={handleChartsChange}
+        onMergesChange={handleMergesChange}
       />
     </>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Grid } from './Grid'
 import { FormulaBar } from './FormulaBar'
 import { FindBar } from './FindBar'
@@ -11,25 +11,29 @@ import { PythonPanel } from './PythonPanel'
 import { ChartPanel } from './ChartPanel'
 import { HyperFormulaProvider, useHyperFormulaContext } from '@/lib/hyperformula-context'
 import type { CellAddress } from '@foundry/shared'
-import type { SheetData, CellFormats, ChartDef } from '@/lib/actions'
+import type { SheetData, CellFormats, ChartDef, MergedRange } from '@/lib/actions'
 import { ROWS, COLS } from '@/lib/sheet-constants'
 
 interface SpreadsheetShellProps {
   initialData?: SheetData
   initialFormats?: CellFormats
   initialCharts?: ChartDef[]
+  initialMerges?: MergedRange[]
   onChange?: (data: SheetData) => void
   onFormatsChange?: (formats: CellFormats) => void
   onChartsChange?: (charts: ChartDef[]) => void
+  onMergesChange?: (merges: MergedRange[]) => void
 }
 
 export function SpreadsheetShell({
   initialData,
   initialFormats,
   initialCharts,
+  initialMerges,
   onChange,
   onFormatsChange,
   onChartsChange,
+  onMergesChange,
 }: SpreadsheetShellProps) {
   const firstSheet = Object.keys(initialData ?? {})[0] ?? 'Sheet1'
   const [activeSheet, setActiveSheet] = useState(firstSheet)
@@ -38,6 +42,7 @@ export function SpreadsheetShell({
   const [pythonOpen, setPythonOpen] = useState(false)
   const [chartOpen, setChartOpen] = useState(false)
   const [charts, setCharts] = useState<ChartDef[]>(initialCharts ?? [])
+  const [merges, setMerges] = useState<MergedRange[]>(initialMerges ?? [])
 
   function handleSelect(addr: CellAddress) {
     setSelected(addr)
@@ -55,6 +60,11 @@ export function SpreadsheetShell({
     onChartsChange?.(updated)
   }
 
+  function handleMergesChange(updated: MergedRange[]) {
+    setMerges(updated)
+    onMergesChange?.(updated)
+  }
+
   const selection = selectionEnd ? { start: selected, end: selectionEnd } : null
 
   return (
@@ -66,6 +76,7 @@ export function SpreadsheetShell({
         pythonOpen={pythonOpen}
         chartOpen={chartOpen}
         charts={charts}
+        merges={merges}
         selection={selection}
         onSelect={handleSelect}
         onSelectionEnd={setSelectionEnd}
@@ -73,6 +84,7 @@ export function SpreadsheetShell({
         onTogglePython={() => { setPythonOpen(v => !v); setChartOpen(false) }}
         onToggleChart={() => { setChartOpen(v => !v); setPythonOpen(false) }}
         onChartsChange={handleChartsChange}
+        onMergesChange={handleMergesChange}
       />
     </HyperFormulaProvider>
   )
@@ -85,6 +97,7 @@ interface SheetContentProps {
   pythonOpen: boolean
   chartOpen: boolean
   charts: ChartDef[]
+  merges: MergedRange[]
   selection: { start: CellAddress; end: CellAddress } | null
   onSelect: (addr: CellAddress) => void
   onSelectionEnd: (addr: CellAddress | null) => void
@@ -92,6 +105,7 @@ interface SheetContentProps {
   onTogglePython: () => void
   onToggleChart: () => void
   onChartsChange: (charts: ChartDef[]) => void
+  onMergesChange: (merges: MergedRange[]) => void
 }
 
 function SheetContent({
@@ -101,6 +115,7 @@ function SheetContent({
   pythonOpen,
   chartOpen,
   charts,
+  merges,
   selection,
   onSelect,
   onSelectionEnd,
@@ -108,12 +123,20 @@ function SheetContent({
   onTogglePython,
   onToggleChart,
   onChartsChange,
+  onMergesChange,
 }: SheetContentProps) {
-  const { getSheetNames, addSheet, getCellValue, getCellFormula, setCellValue, addRow, deleteRow, addColumn, deleteColumn, sortColumn } = useHyperFormulaContext()
+  const {
+    getSheetNames, addSheet, getCellValue, getCellFormula, setCellValue,
+    addRow, deleteRow, addColumn, deleteColumn, sortColumn,
+    renameSheetWithFormats, deleteSheetWithFormats, bulkSetCells,
+  } = useHyperFormulaContext()
 
   // Freeze panes
   const [frozenRows, setFrozenRows] = useState(0)
   const [frozenCols, setFrozenCols] = useState(0)
+
+  // Zoom
+  const [zoom, setZoom] = useState(100)
 
   // Context menu
   const [ctxMenu, setCtxMenu] = useState<{ type: 'row' | 'col'; index: number; x: number; y: number } | null>(null)
@@ -124,6 +147,18 @@ function SheetContent({
   const [replaceQuery, setReplaceQuery] = useState('')
   const [findMatches, setFindMatches] = useState<{ row: number; col: number }[]>([])
   const [findMatchIndex, setFindMatchIndex] = useState(0)
+
+  // Sheet rename
+  const [renamingSheet, setRenamingSheet] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const renameInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (renamingSheet && renameInputRef.current) {
+      renameInputRef.current.focus()
+      renameInputRef.current.select()
+    }
+  }, [renamingSheet])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -202,6 +237,77 @@ function SheetContent({
     onSheetSwitch(name)
   }
 
+  function commitRename() {
+    if (!renamingSheet) return
+    const newName = renameValue.trim()
+    if (newName && newName !== renamingSheet) {
+      renameSheetWithFormats(renamingSheet, newName)
+      // Update merges that referenced old sheet name
+      const updated = merges.map(m => m.sheet === renamingSheet ? { ...m, sheet: newName } : m)
+      onMergesChange(updated)
+      if (activeSheet === renamingSheet) onSheetSwitch(newName)
+    }
+    setRenamingSheet(null)
+  }
+
+  function handleDeleteSheet(name: string) {
+    const names = getSheetNames()
+    if (names.length <= 1) return // don't delete last sheet
+    // Remove merges from deleted sheet
+    const updated = merges.filter(m => m.sheet !== name)
+    onMergesChange(updated)
+    deleteSheetWithFormats(name)
+    if (activeSheet === name) {
+      const remaining = names.filter(n => n !== name)
+      onSheetSwitch(remaining[0] ?? 'Sheet1')
+    }
+  }
+
+  function handleToggleMerge() {
+    const end = selectionEnd ?? selected
+    const minRow = Math.min(selected.row, end.row)
+    const maxRow = Math.max(selected.row, end.row)
+    const minCol = Math.min(selected.col, end.col)
+    const maxCol = Math.max(selected.col, end.col)
+    const sheet = selected.sheet
+
+    // Check if selected cell is part of a merge
+    const existingMerge = merges.find(m =>
+      m.sheet === sheet &&
+      selected.row >= m.startRow && selected.row <= m.endRow &&
+      selected.col >= m.startCol && selected.col <= m.endCol
+    )
+
+    if (existingMerge) {
+      // Unmerge
+      const updated = merges.filter(m => m !== existingMerge)
+      onMergesChange(updated)
+      return
+    }
+
+    if (minRow === maxRow && minCol === maxCol) return // single cell, nothing to merge
+
+    // Clear content in covered cells (keep anchor)
+    const clearedCells: [string][] = []
+    for (let r = minRow; r <= maxRow; r++) {
+      for (let c = minCol; c <= maxCol; c++) {
+        if (r !== minRow || c !== minCol) clearedCells.push([''])
+        else clearedCells.push([getCellFormula({ sheet, row: r, col: c }) ?? String(getCellValue({ sheet, row: r, col: c }) ?? '')])
+      }
+    }
+    bulkSetCells({ sheet, row: minRow, col: minCol }, clearedCells.map((v, i) => {
+      const r = minRow + Math.floor(i / (maxCol - minCol + 1))
+      const c = minCol + (i % (maxCol - minCol + 1))
+      return r === minRow && c === minCol ? [v[0]] : ['']
+    }))
+
+    const updated = [
+      ...merges.filter(m => !(m.sheet === sheet && m.startRow === minRow && m.startCol === minCol && m.endRow === maxRow && m.endCol === maxCol)),
+      { sheet, startRow: minRow, startCol: minCol, endRow: maxRow, endCol: maxCol },
+    ]
+    onMergesChange(updated)
+  }
+
   const sheetNames = getSheetNames()
 
   return (
@@ -217,6 +323,8 @@ function SheetContent({
         frozenCols={frozenCols}
         onToggleFreezeRows={() => setFrozenRows(v => v > 0 ? 0 : 1)}
         onToggleFreezeCols={() => setFrozenCols(v => v > 0 ? 0 : 1)}
+        merges={merges}
+        onToggleMerge={handleToggleMerge}
       />
       <FormulaBar selected={selected} selectionEnd={selectionEnd} />
       {findOpen && (
@@ -269,6 +377,8 @@ function SheetContent({
           findMatchIndex={findOpen ? findMatchIndex : undefined}
           frozenRows={frozenRows}
           frozenCols={frozenCols}
+          zoom={zoom}
+          merges={merges}
           onContextMenu={(type, index, x, y) => setCtxMenu({ type, index, x, y })}
         />
 
@@ -286,26 +396,63 @@ function SheetContent({
       </div>
 
       {/* Sheet tabs */}
-      <div className="flex items-center border-t border-border bg-bg-surface px-2 h-8 gap-1 shrink-0">
+      <div className="flex items-center border-t border-border bg-bg-surface px-2 h-8 gap-0.5 shrink-0 overflow-x-auto">
         {sheetNames.map(name => (
-          <button
+          <div
             key={name}
-            onClick={() => onSheetSwitch(name)}
-            className={`text-xs px-3 py-0.5 rounded border font-medium transition-colors ${
-              name === activeSheet
-                ? 'bg-bg-raised border-border text-fg-primary shadow-sm'
-                : 'border-transparent text-fg-tertiary hover:text-fg-primary hover:bg-bg-raised hover:border-border'
+            className={`flex items-center gap-0.5 group shrink-0 ${
+              name === activeSheet ? 'bg-bg-raised border border-border rounded shadow-sm' : ''
             }`}
           >
-            {name}
-          </button>
+            {renamingSheet === name ? (
+              <input
+                ref={renameInputRef}
+                className="text-xs px-2 py-0.5 w-24 bg-transparent outline-none border-b border-accent text-fg-primary"
+                value={renameValue}
+                onChange={e => setRenameValue(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') commitRename()
+                  if (e.key === 'Escape') setRenamingSheet(null)
+                  e.stopPropagation()
+                }}
+              />
+            ) : (
+              <button
+                className={`text-xs px-2.5 py-0.5 font-medium transition-colors ${
+                  name === activeSheet ? 'text-fg-primary' : 'text-fg-tertiary hover:text-fg-primary'
+                }`}
+                onClick={() => onSheetSwitch(name)}
+                onDoubleClick={() => {
+                  setRenamingSheet(name)
+                  setRenameValue(name)
+                }}
+              >
+                {name}
+              </button>
+            )}
+            {sheetNames.length > 1 && (
+              <button
+                className="w-3.5 h-3.5 flex items-center justify-center text-fg-tertiary opacity-0 group-hover:opacity-100 hover:text-fg-primary hover:bg-bg-hover rounded transition-all text-xs leading-none"
+                onClick={e => { e.stopPropagation(); handleDeleteSheet(name) }}
+                title={`Delete ${name}`}
+              >
+                ×
+              </button>
+            )}
+          </div>
         ))}
-        <button onClick={handleAddSheet} className="text-xs px-2 py-0.5 text-fg-tertiary hover:text-fg-secondary transition-colors">
+        <button onClick={handleAddSheet} className="text-xs px-2 py-0.5 text-fg-tertiary hover:text-fg-secondary transition-colors shrink-0">
           + Add sheet
         </button>
       </div>
 
-      <StatusBar selected={selected} selectionEnd={selectionEnd} />
+      <StatusBar
+        selected={selected}
+        selectionEnd={selectionEnd}
+        zoom={zoom}
+        onZoomChange={setZoom}
+      />
     </div>
   )
 }

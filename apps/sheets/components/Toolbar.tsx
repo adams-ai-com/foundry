@@ -5,8 +5,12 @@ import { IconButton, Separator } from '@foundry/ui'
 import { useHyperFormulaContext } from '@/lib/hyperformula-context'
 import { importXlsx, exportXlsx, parseCSV, serializeCSV } from '@/lib/xlsx-io'
 import { ColorPicker } from './ColorPicker'
+import { BorderPicker } from './BorderPicker'
+import type { BorderPreset } from './BorderPicker'
 import type { CellAddress } from '@foundry/shared'
-import type { CellFormat } from '@/lib/actions'
+import type { CellFormat, MergedRange } from '@/lib/actions'
+
+const FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 72]
 
 interface ToolbarProps {
   selected: CellAddress
@@ -19,16 +23,66 @@ interface ToolbarProps {
   frozenCols: number
   onToggleFreezeRows: () => void
   onToggleFreezeCols: () => void
+  merges: MergedRange[]
+  onToggleMerge: () => void
 }
 
-export function Toolbar({ selected, selectionEnd, onTogglePython, onToggleChart, pythonOpen, chartOpen, frozenRows, frozenCols, onToggleFreezeRows, onToggleFreezeCols }: ToolbarProps) {
-  const { getCellFormat, setRangeFormat, getSerializedData, getSheetNames, loadAll, undo, redo, canUndo, canRedo } = useHyperFormulaContext()
+export function Toolbar({
+  selected, selectionEnd, onTogglePython, onToggleChart, pythonOpen, chartOpen,
+  frozenRows, frozenCols, onToggleFreezeRows, onToggleFreezeCols,
+  merges, onToggleMerge,
+}: ToolbarProps) {
+  const { getCellFormat, setCellFormat, setRangeFormat, getSerializedData, getSheetNames, loadAll, undo, redo, canUndo, canRedo } = useHyperFormulaContext()
   const fmt = getCellFormat(selected)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   function toggleFormat(key: keyof Pick<CellFormat, 'bold' | 'italic' | 'underline' | 'strikethrough'>) {
     setRangeFormat(selected, selectionEnd, { [key]: !fmt[key] })
   }
+
+  function applyBorderPreset(preset: BorderPreset, color: string) {
+    const end = selectionEnd ?? selected
+    const minRow = Math.min(selected.row, end.row)
+    const maxRow = Math.max(selected.row, end.row)
+    const minCol = Math.min(selected.col, end.col)
+    const maxCol = Math.max(selected.col, end.col)
+    const c = color
+
+    for (let r = minRow; r <= maxRow; r++) {
+      for (let col = minCol; col <= maxCol; col++) {
+        const addr: CellAddress = { sheet: selected.sheet, row: r, col }
+        const existing = getCellFormat(addr).borders ?? {}
+        let newBorders: CellFormat['borders']
+
+        if (preset === 'none') {
+          newBorders = {}
+        } else if (preset === 'all') {
+          newBorders = { top: c, right: c, bottom: c, left: c }
+        } else if (preset === 'outer') {
+          newBorders = {}
+          if (r === minRow) newBorders.top = c
+          if (r === maxRow) newBorders.bottom = c
+          if (col === minCol) newBorders.left = c
+          if (col === maxCol) newBorders.right = c
+        } else if (preset === 'bottom') {
+          newBorders = { ...existing, bottom: c }
+        } else if (preset === 'top') {
+          newBorders = { ...existing, top: c }
+        } else {
+          // top-bottom
+          newBorders = { ...existing, top: c, bottom: c }
+        }
+
+        setCellFormat(addr, { borders: newBorders })
+      }
+    }
+  }
+
+  // Determine merge button state
+  const cellKey = `${selected.row}:${selected.col}`
+  const isMergeAnchor = merges.some(m => m.sheet === selected.sheet && m.startRow === selected.row && m.startCol === selected.col)
+  const isCovered = merges.some(m => m.sheet === selected.sheet && selected.row >= m.startRow && selected.row <= m.endRow && selected.col >= m.startCol && selected.col <= m.endCol && (selected.row !== m.startRow || selected.col !== m.startCol))
+  const isMerged = isMergeAnchor || isCovered
 
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -70,6 +124,9 @@ export function Toolbar({ selected, selectionEnd, onTogglePython, onToggleChart,
     URL.revokeObjectURL(url)
   }
 
+  // suppress unused warning — cellKey used for readability above
+  void cellKey
+
   return (
     <div className="flex items-center gap-0.5 px-3 py-1.5 bg-bg-raised border-b border-border flex-wrap shrink-0">
       <IconButton data-testid="btn-undo" label="Undo (Ctrl+Z)" active={false} onClick={undo} disabled={!canUndo()}>
@@ -84,6 +141,21 @@ export function Toolbar({ selected, selectionEnd, onTogglePython, onToggleChart,
           <path strokeLinecap="round" strokeLinejoin="round" d="M21 10l-4-4m4 4l-4 4" />
         </svg>
       </IconButton>
+
+      <Separator />
+
+      {/* Font size */}
+      <select
+        data-testid="select-fontsize"
+        title="Font size"
+        className="text-xs border border-border rounded px-1 py-0.5 bg-bg-surface text-fg-primary focus:outline-none focus:ring-1 focus:ring-accent w-14"
+        value={fmt.fontSize ?? 12}
+        onChange={e => setRangeFormat(selected, selectionEnd, { fontSize: Number(e.target.value) })}
+      >
+        {FONT_SIZES.map(s => (
+          <option key={s} value={s}>{s}</option>
+        ))}
+      </select>
 
       <Separator />
 
@@ -144,6 +216,24 @@ export function Toolbar({ selected, selectionEnd, onTogglePython, onToggleChart,
           <path strokeLinecap="round" strokeLinejoin="round" d="M17 7l-7 7"/>
         </svg>
       </ColorPicker>
+
+      <BorderPicker onApply={applyBorderPreset} />
+
+      <Separator />
+
+      {/* Merge/Unmerge cells */}
+      <IconButton
+        data-testid="btn-merge"
+        label={isMerged ? 'Unmerge cells' : 'Merge cells'}
+        active={isMerged}
+        onClick={onToggleMerge}
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+          <rect x="3" y="5" width="8" height="14" rx="1" />
+          <rect x="13" y="5" width="8" height="14" rx="1" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M11 9l-2 3 2 3M13 9l2 3-2 3" />
+        </svg>
+      </IconButton>
 
       <Separator />
 

@@ -15,6 +15,8 @@ type HFContextValue = ReturnType<typeof useHyperFormula> & {
   addColumn: (sheetName: string, colIndex: number) => void
   deleteColumn: (sheetName: string, colIndex: number) => void
   sortColumn: (sheetName: string, colIndex: number, ascending: boolean) => void
+  renameSheetWithFormats: (oldName: string, newName: string) => void
+  deleteSheetWithFormats: (sheetName: string) => void
 }
 
 const HyperFormulaContext = createContext<HFContextValue | null>(null)
@@ -165,8 +167,27 @@ export function HyperFormulaProvider({
     hf.bulkSetCells({ sheet: sheetName, row: 0, col: 0 }, withKeys.map(({ row }) => row))
   }, [hf]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const renameSheetWithFormats = useCallback((oldName: string, newName: string) => {
+    const fmts = formatsRef.current
+    if (fmts[oldName]) {
+      const { [oldName]: old, ...rest } = fmts
+      formatsRef.current = { ...rest, [newName]: old }
+      setFormatTick(t => t + 1)
+      onFormatsChangeRef.current?.(formatsRef.current)
+    }
+    hf.renameSheet(oldName, newName)
+  }, [hf]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const deleteSheetWithFormats = useCallback((sheetName: string) => {
+    const { [sheetName]: _, ...rest } = formatsRef.current
+    formatsRef.current = rest
+    setFormatTick(t => t + 1)
+    onFormatsChangeRef.current?.(formatsRef.current)
+    hf.removeSheet(sheetName)
+  }, [hf]) // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <HyperFormulaContext.Provider value={{ ...hf, getCellFormat, setCellFormat, setRangeFormat, loadAll, addRow, deleteRow, addColumn, deleteColumn, sortColumn }}>
+    <HyperFormulaContext.Provider value={{ ...hf, getCellFormat, setCellFormat, setRangeFormat, loadAll, addRow, deleteRow, addColumn, deleteColumn, sortColumn, renameSheetWithFormats, deleteSheetWithFormats }}>
       {children}
     </HyperFormulaContext.Provider>
   )

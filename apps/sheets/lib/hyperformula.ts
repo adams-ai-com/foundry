@@ -177,5 +177,23 @@ export function useHyperFormula(initialData?: SheetData, onChange?: (data: Sheet
     if (onChangeRef.current) onChangeRef.current(serializeHF(hfRef.current))
   }, [])
 
-  return { getCellValue, getCellFormula, setCellValue, getSerializedData, getSheetNames, addSheet, loadSheets, undo, redo, canUndo, canRedo, bulkSetCells, addRows, removeRows, addColumns, removeColumns }
+  const renameSheet = useCallback((sheetName: string, newName: string) => {
+    if (!hfRef.current) return
+    const sheetId = hfRef.current.getSheetId(sheetName)
+    if (sheetId === undefined) return
+    hfRef.current.renameSheet(sheetId, newName)
+    setTick(t => t + 1)
+    if (onChangeRef.current) onChangeRef.current(serializeHF(hfRef.current))
+  }, [])
+
+  const removeSheet = useCallback((sheetName: string) => {
+    if (!hfRef.current) return
+    const sheetId = hfRef.current.getSheetId(sheetName)
+    if (sheetId === undefined) return
+    hfRef.current.removeSheet(sheetId)
+    setTick(t => t + 1)
+    if (onChangeRef.current) onChangeRef.current(serializeHF(hfRef.current))
+  }, [])
+
+  return { getCellValue, getCellFormula, setCellValue, getSerializedData, getSheetNames, addSheet, loadSheets, undo, redo, canUndo, canRedo, bulkSetCells, addRows, removeRows, addColumns, removeColumns, renameSheet, removeSheet }
 }
