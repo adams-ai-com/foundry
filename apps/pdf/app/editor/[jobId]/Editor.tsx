@@ -12,6 +12,7 @@ type Tool =
   | 'highlight' | 'underline' | 'strikethrough'
   | 'comment' | 'redact'
   | 'rect' | 'circle' | 'line' | 'stamp' | 'image' | 'crop' | 'link' | 'field'
+  | 'edit-text'
 
 type FieldType = 'text' | 'checkbox' | 'dropdown' | 'signature'
 
@@ -39,6 +40,16 @@ interface RedactRegion {
 }
 
 interface TextWord { word: string; rect: [number, number, number, number] }
+
+interface TextSpan {
+  text: string
+  bbox: [number, number, number, number]
+  origin: [number, number]
+  font: string
+  size: number
+  flags: number
+  color: [number, number, number]
+}
 
 interface CommentReply { id: string; text: string; author: string; timestamp: number }
 interface Comment {
@@ -166,6 +177,7 @@ const ICONS: Record<string, string> = {
   fieldDrop:     'M4 6h16M4 12h16M4 18h7M15 15l4 4m0-4l-4 4',
   fieldSig:      'M3 17c3-3 4-5 6-5s3 2 5 2 4-4 6-4M3 21h18M17 3l4 4-9.5 9.5L8 18l1.5-3.5z',
   compare:       'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM9 13h6M9 17h6M9 9h1',
+  'edit-text':   'M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5m-1.414-9.414a2 2 0 1 1 2.828 2.828L11.828 15H9v-2.828l8.586-8.586z',
 }
 
 // ── Toolbar button ───────────────────────────────────────────────────────────
@@ -199,6 +211,82 @@ function DropItem({ icon, label, onClick, danger }: { icon?: string; label: stri
       {icon && <Icon d={ICONS[icon]} size={14} />}
       {label}
     </button>
+  )
+}
+
+// ── In-place text editor span ────────────────────────────────────────────────
+
+function EditSpanInput({ span, renderScale, onSave, onCancel }: {
+  span: TextSpan; renderScale: number
+  onSave: (text: string) => void
+  onCancel: () => void
+}) {
+  const ref       = useRef<HTMLDivElement>(null)
+  const committed = useRef(false)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.textContent = span.text
+    el.focus()
+    try {
+      const sel = window.getSelection()
+      const range = document.createRange()
+      range.selectNodeContents(el)
+      sel?.removeAllRanges()
+      sel?.addRange(range)
+    } catch { /* ignore */ }
+  }, [span.text])
+
+  const bold   = (span.flags & 16) > 0
+  const italic = (span.flags & 2)  > 0
+  const nameL  = (span.font ?? '').toLowerCase()
+  const mono   = (span.flags & 8) > 0 || nameL.includes('courier') || nameL.includes('mono')
+  const serif  = (span.flags & 4) > 0 || nameL.includes('times')   || nameL.includes('serif')
+  const family = mono ? 'monospace' : serif ? 'serif' : 'sans-serif'
+  const col    = `rgb(${Math.round(span.color[0]*255)},${Math.round(span.color[1]*255)},${Math.round(span.color[2]*255)})`
+
+  function commit() {
+    if (committed.current) return
+    committed.current = true
+    onSave(ref.current?.textContent ?? '')
+  }
+
+  return (
+    <div
+      ref={ref}
+      contentEditable
+      suppressContentEditableWarning
+      onKeyDown={e => {
+        if (e.key === 'Enter')  { e.preventDefault(); commit() }
+        if (e.key === 'Escape') { committed.current = true; onCancel() }
+      }}
+      onBlur={commit}
+      onPaste={e => {
+        e.preventDefault()
+        // eslint-disable-next-line @typescript-eslint/no-deprecated
+        document.execCommand('insertText', false, e.clipboardData.getData('text/plain'))
+      }}
+      style={{
+        position: 'absolute', inset: 0,
+        fontSize:   `${span.size * renderScale}px`,
+        fontFamily: family,
+        fontWeight: bold   ? 'bold'   : 'normal',
+        fontStyle:  italic ? 'italic' : 'normal',
+        color:      col,
+        background: 'rgba(255,255,255,0.97)',
+        border:     '2px solid #3b82f6',
+        borderRadius: 2,
+        outline:    'none',
+        padding:    '0 1px',
+        lineHeight: 'normal',
+        whiteSpace: 'nowrap',
+        overflow:   'visible',
+        boxShadow:  '0 0 0 3px rgba(59,130,246,0.15)',
+        zIndex:     20,
+        cursor:     'text',
+      }}
+    />
   )
 }
 
@@ -415,6 +503,11 @@ export function Editor({ jobId }: { jobId: string }) {
   // Undo history panel
   const [undoPanel, setUndoPanel]   = useState(false)
   const [undoSteps, setUndoSteps]   = useState<{ index: number; ts: number }[]>([])
+
+  // In-place text editing
+  const [textSpans, setTextSpans]         = useState<TextSpan[]>([])
+  const [loadingSpans, setLoadingSpans]   = useState(false)
+  const [editingSpanIdx, setEditingSpanIdx] = useState<number | null>(null)
 
   // Toolbar dropdowns (fix #1: grouped menus)
   const [pagesMenuOpen, setPagesMenuOpen]       = useState(false)
@@ -691,6 +784,19 @@ export function Editor({ jobId }: { jobId: string }) {
       .then(d => setTextWords(d.words ?? []))
       .catch(() => {})
   }, [isTextTool, currentPage, jobId, version])
+
+  // Load text spans when edit-text tool is active (reload on page/version change)
+  useEffect(() => {
+    if (tool !== 'edit-text') { setTextSpans([]); setEditingSpanIdx(null); return }
+    let cancelled = false
+    setLoadingSpans(true)
+    fetch(`/pdf/api/pdf/${jobId}/text-spans/${currentPage}`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setTextSpans(d.spans ?? []) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoadingSpans(false) })
+    return () => { cancelled = true }
+  }, [tool, currentPage, jobId, version])
 
   // Bookmarks — load on mount and after changes
   const loadBookmarks = useCallback(async () => {
@@ -1264,6 +1370,28 @@ export function Editor({ jobId }: { jobId: string }) {
     highlight: 'text', underline: 'text', strikethrough: 'text', comment: 'crosshair',
     rect: 'crosshair', circle: 'crosshair', line: 'crosshair',
     stamp: 'copy', image: 'crosshair', crop: 'crosshair', link: 'crosshair', field: 'crosshair',
+    'edit-text': 'text',
+  }
+
+  async function saveTextEdit(spanIdx: number, newText: string) {
+    setEditingSpanIdx(null)
+    const span = textSpans[spanIdx]
+    if (!span || newText === span.text) return
+    await fetch(`/pdf/api/pdf/${jobId}/edit-text`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        page:     currentPage,
+        bbox:     span.bbox,
+        origin:   span.origin,
+        new_text: newText,
+        font:     span.font,
+        size:     span.size,
+        flags:    span.flags,
+        color:    span.color,
+      }),
+    })
+    setVersion(v => v + 1)
   }
 
   function onSvgDown(e: React.MouseEvent<SVGSVGElement>) {
@@ -1593,6 +1721,26 @@ export function Editor({ jobId }: { jobId: string }) {
         <TBtn icon="search"  active={searchOpen}
           onClick={() => { setSearchOpen(o => !o); setTimeout(() => searchInputRef.current?.focus(), 50) }}
           title="Find in document (Ctrl+F)" />
+
+        <Sep />
+
+        {/* In-place text editing — primary editing tool */}
+        <button
+          onClick={() => { setTool('edit-text'); setDraw({ kind: 'idle' }); setEditingSpanIdx(null) }}
+          title="Edit existing text — click any text to edit it in place"
+          className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors shrink-0
+            ${tool === 'edit-text'
+              ? 'bg-accent text-accent-fg'
+              : 'text-accent border border-accent/40 hover:bg-accent/10'}`}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}
+               strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+            <path d={ICONS['edit-text']} />
+          </svg>
+          <span>Edit Text</span>
+          {loadingSpans && tool === 'edit-text' && (
+            <span className="ml-0.5 opacity-60 text-[10px]">…</span>
+          )}
+        </button>
 
         <Sep />
 
@@ -1997,7 +2145,7 @@ export function Editor({ jobId }: { jobId: string }) {
                   style={{ display: 'block', userSelect: 'none', width: dw2, height: dh2 }} draggable={false} />
                 <svg style={{ position: 'absolute', top: 0, left: 0, width: dw2, height: dh2,
                     cursor: isActive ? toolCursor[tool] : 'default',
-                    pointerEvents: isActive && tool !== 'select' ? 'all' : 'none' }}
+                    pointerEvents: isActive && tool !== 'select' && tool !== 'edit-text' ? 'all' : 'none' }}
                   onMouseDown={isActive ? onSvgDown : undefined}
                   onMouseMove={isActive ? onSvgMove : undefined}
                   onMouseUp={isActive ? onSvgUp : undefined}
@@ -2029,6 +2177,27 @@ export function Editor({ jobId }: { jobId: string }) {
                     </marker>
                   </defs>
                 </svg>
+                {/* Edit-text span overlay — continuous view (active page only) */}
+                {isActive && tool === 'edit-text' && textSpans.map((span, sidx) => {
+                  const [bx0, by0, bx1, by1] = span.bbox.map(v => v * renderScale)
+                  const w = bx1 - bx0; const h = by1 - by0
+                  if (w < 2 || h < 2) return null
+                  if (editingSpanIdx === sidx) {
+                    return (
+                      <div key={sidx} style={{ position: 'absolute', left: bx0, top: by0, width: w, height: h }}>
+                        <EditSpanInput span={span} renderScale={renderScale}
+                          onSave={text => saveTextEdit(sidx, text)}
+                          onCancel={() => setEditingSpanIdx(null)} />
+                      </div>
+                    )
+                  }
+                  return (
+                    <div key={sidx} onClick={() => setEditingSpanIdx(sidx)}
+                      style={{ position: 'absolute', left: bx0, top: by0, width: w, height: h,
+                        cursor: 'text', border: '1px solid transparent', borderRadius: 1, zIndex: 10 }}
+                      className="hover:border-blue-400/70 hover:bg-blue-50/30 transition-colors" />
+                  )
+                })}
                 <div className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[10px] text-fg-tertiary bg-bg-raised/70 px-1.5 rounded select-none">{i + 1}</div>
               </div>
             )
@@ -2044,7 +2213,7 @@ export function Editor({ jobId }: { jobId: string }) {
               <svg ref={svgRef} style={{
                   position: 'absolute', top: 0, left: 0, width: dw, height: dh,
                   cursor: draw.kind === 'annot-drag' ? 'grabbing' : toolCursor[tool],
-                  pointerEvents: 'all',
+                  pointerEvents: tool === 'edit-text' ? 'none' : 'all',
                 }}
                 onMouseDown={onSvgDown} onMouseMove={onSvgMove}
                 onMouseUp={onSvgUp} onMouseLeave={onSvgUp} onContextMenu={onSvgContextMenu}>
@@ -2242,6 +2411,28 @@ export function Editor({ jobId }: { jobId: string }) {
                   </div>
                 </div>
               )}
+
+              {/* Edit-text span overlay */}
+              {tool === 'edit-text' && textSpans.map((span, idx) => {
+                const [bx0, by0, bx1, by1] = span.bbox.map(v => v * renderScale)
+                const w = bx1 - bx0; const h = by1 - by0
+                if (w < 2 || h < 2) return null
+                if (editingSpanIdx === idx) {
+                  return (
+                    <div key={idx} style={{ position: 'absolute', left: bx0, top: by0, width: w, height: h }}>
+                      <EditSpanInput span={span} renderScale={renderScale}
+                        onSave={text => saveTextEdit(idx, text)}
+                        onCancel={() => setEditingSpanIdx(null)} />
+                    </div>
+                  )
+                }
+                return (
+                  <div key={idx} onClick={() => setEditingSpanIdx(idx)}
+                    style={{ position: 'absolute', left: bx0, top: by0, width: w, height: h,
+                      cursor: 'text', border: '1px solid transparent', borderRadius: 1, zIndex: 10 }}
+                    className="hover:border-blue-400/70 hover:bg-blue-50/30 transition-colors" />
+                )
+              })}
             </div>
           ) : viewMode === 'single' ? (
             <div className="text-fg-tertiary text-sm">No pages</div>
