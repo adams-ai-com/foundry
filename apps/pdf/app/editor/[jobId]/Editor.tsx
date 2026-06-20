@@ -418,9 +418,12 @@ function EditSpanInput({ span, renderScale, style, onSave, onCancel }: {
 
 // ── New text insertion input ──────────────────────────────────────────────────
 
-function NewTextInput({ renderScale, style, onSave, onCancel }: {
+const DRAG_HANDLE_H = 14
+
+function NewTextInput({ renderScale, style, onMove, onSave, onCancel }: {
   renderScale: number
   style:       SpanStyle
+  onMove:      (dx: number, dy: number) => void
   onSave:      (text: string) => void
   onCancel:    () => void
 }) {
@@ -430,6 +433,7 @@ function NewTextInput({ renderScale, style, onSave, onCancel }: {
   useEffect(() => { ref.current?.focus() }, [])
 
   const cssFamily = style.family === 'mono' ? 'monospace' : style.family === 'serif' ? 'serif' : 'sans-serif'
+  const lineH     = style.size * renderScale
 
   function getText() { return (ref.current?.textContent ?? '').replace(/\n+$/, '') }
 
@@ -441,48 +445,83 @@ function NewTextInput({ renderScale, style, onSave, onCancel }: {
     onSave(text)
   }
 
+  function startDrag(e: React.MouseEvent) {
+    e.preventDefault()
+    let lx = e.clientX, ly = e.clientY
+    function mm(me: MouseEvent) {
+      onMove(me.clientX - lx, me.clientY - ly)
+      lx = me.clientX; ly = me.clientY
+    }
+    function mu() {
+      document.removeEventListener('mousemove', mm)
+      document.removeEventListener('mouseup', mu)
+      ref.current?.focus()
+    }
+    document.addEventListener('mousemove', mm)
+    document.addEventListener('mouseup', mu)
+  }
+
   return (
-    <div
-      ref={ref}
-      contentEditable
-      suppressContentEditableWarning
-      onKeyDown={e => {
-        if (e.key === 'Enter')  { e.preventDefault(); commit() }
-        if (e.key === 'Escape') { committed.current = true; onCancel() }
-      }}
-      onBlur={commit}
-      onPaste={e => {
-        e.preventDefault()
-        const text = e.clipboardData.getData('text/plain')
-        const sel = window.getSelection()
-        if (!sel?.rangeCount) return
-        const range = sel.getRangeAt(0)
-        range.deleteContents()
-        range.insertNode(document.createTextNode(text))
-        range.collapse(false)
-        sel.removeAllRanges()
-        sel.addRange(range)
-      }}
-      style={{
-        position:   'absolute', top: 0, left: 0,
-        minWidth:   Math.max(120, style.size * renderScale * 4),
-        fontSize:   `${style.size * renderScale}px`,
-        fontFamily: cssFamily,
-        fontWeight: style.bold   ? 'bold'   : 'normal',
-        fontStyle:  style.italic ? 'italic' : 'normal',
-        color:      style.colorHex,
-        background: 'rgba(255,255,255,0.95)',
-        border:     '2px solid #3b82f6',
-        borderRadius: 2,
-        outline:    'none',
-        padding:    '0 3px',
-        lineHeight: 'normal',
-        whiteSpace: 'nowrap',
-        boxShadow:  '0 0 0 3px rgba(59,130,246,0.15)',
-        zIndex:     20,
-        cursor:     'text',
-      }}
-    />
+    <div style={{ position: 'relative', display: 'inline-block' }}>
+      {/* Drag handle — sits above the input, does not affect input layout */}
+      <div
+        onMouseDown={startDrag}
+        style={{
+          position: 'absolute', bottom: '100%', left: 0, right: 0, height: DRAG_HANDLE_H,
+          background: '#3b82f6', cursor: 'move',
+          borderRadius: '3px 3px 0 0',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
+          userSelect: 'none',
+        }}
+      >
+        {[0,1,2].map(i => (
+          <div key={i} style={{ width: 3, height: 3, borderRadius: '50%', background: 'rgba(255,255,255,0.8)' }} />
+        ))}
+      </div>
+
+      {/* Text input */}
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        onKeyDown={e => {
+          if (e.key === 'Enter')  { e.preventDefault(); commit() }
+          if (e.key === 'Escape') { committed.current = true; onCancel() }
+        }}
+        onBlur={commit}
+        onPaste={e => {
+          e.preventDefault()
+          const text = e.clipboardData.getData('text/plain')
+          const sel = window.getSelection()
+          if (!sel?.rangeCount) return
+          const range = sel.getRangeAt(0)
+          range.deleteContents()
+          range.insertNode(document.createTextNode(text))
+          range.collapse(false)
+          sel.removeAllRanges()
+          sel.addRange(range)
+        }}
+        style={{
+          display:    'block',
+          minWidth:   Math.max(120, lineH * 4),
+          height:     lineH,
+          fontSize:   `${lineH}px`,
+          fontFamily: cssFamily,
+          fontWeight: style.bold   ? 'bold'   : 'normal',
+          fontStyle:  style.italic ? 'italic' : 'normal',
+          color:      style.colorHex,
+          background: 'rgba(255,255,255,0.95)',
+          border:     '2px solid #3b82f6',
+          borderTop:  'none',
+          outline:    'none',
+          padding:    '0 3px',
+          lineHeight: `${lineH}px`,
+          whiteSpace: 'nowrap',
+          boxShadow:  '0 2px 8px rgba(59,130,246,0.2)',
+          cursor:     'text',
+        }}
+      />
+    </div>
   )
 }
 
@@ -708,6 +747,7 @@ export function Editor({ jobId }: { jobId: string }) {
   const [editSpanStyleDirty, setEditSpanStyleDirty] = useState(false)
   // Phase 3: click-to-insert new text on blank space
   const [newTextPos, setNewTextPos] = useState<{ screenX: number; screenY: number; pdfX: number; pdfY: number } | null>(null)
+  const [hoverPos,   setHoverPos]   = useState<{ x: number; y: number } | null>(null)
 
   // Toolbar dropdowns (fix #1: grouped menus)
   const [pagesMenuOpen, setPagesMenuOpen]       = useState(false)
@@ -994,7 +1034,7 @@ export function Editor({ jobId }: { jobId: string }) {
 
   // Load text spans when edit-text tool is active (reload on page/version change)
   useEffect(() => {
-    if (tool !== 'edit-text') { setTextSpans([]); setEditingSpanIdx(null); setNewTextPos(null); return }
+    if (tool !== 'edit-text') { setTextSpans([]); setEditingSpanIdx(null); setNewTextPos(null); setHoverPos(null); return }
     let cancelled = false
     setLoadingSpans(true)
     console.log('[PDF:edit] loading spans  page=%d job=%s version=%d', currentPage, jobId.slice(0,8), version)
@@ -1645,7 +1685,7 @@ export function Editor({ jobId }: { jobId: string }) {
       console.log('[PDF:edit] insert cancel  text=%s pos=%o', JSON.stringify(text), pos)
       return
     }
-    const origin = [pos.pdfX, pos.pdfY + style.size * 0.75]
+    const origin = [pos.pdfX, pos.pdfY]   // click = baseline; no offset
     const payload = {
       page:          currentPage,
       origin,
@@ -2463,7 +2503,12 @@ export function Editor({ jobId }: { jobId: string }) {
                 </svg>
                 {/* Click catcher — blank page area (continuous view) */}
                 {isActive && tool === 'edit-text' && editingSpanIdx === null && newTextPos === null && (
-                  <div style={{ position: 'absolute', inset: 0, zIndex: 1, cursor: 'text' }}
+                  <div style={{ position: 'absolute', inset: 0, zIndex: 1, cursor: 'none' }}
+                    onMouseMove={e => {
+                      const rect = e.currentTarget.getBoundingClientRect()
+                      setHoverPos({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+                    }}
+                    onMouseLeave={() => setHoverPos(null)}
                     onClick={e => {
                       const rect = e.currentTarget.getBoundingClientRect()
                       const sx = e.clientX - rect.left
@@ -2471,11 +2516,23 @@ export function Editor({ jobId }: { jobId: string }) {
                       const defaultStyle: SpanStyle = { family: 'sans', size: 12, bold: false, italic: false, colorHex: '#000000' }
                       if (!editSpanStyle) setEditSpanStyle(defaultStyle)
                       setEditSpanStyleDirty(false)
+                      setHoverPos(null)
                       console.log('[PDF:edit] blank click  page=%d screen=(%d,%d) pdf=(%s,%s)',
                         currentPage, sx.toFixed(0), sy.toFixed(0), (sx/renderScale).toFixed(1), (sy/renderScale).toFixed(1))
                       setNewTextPos({ screenX: sx, screenY: sy, pdfX: sx / renderScale, pdfY: sy / renderScale })
                     }} />
                 )}
+
+                {/* Hover cursor — shows exact text baseline before click */}
+                {isActive && tool === 'edit-text' && editingSpanIdx === null && newTextPos === null && hoverPos && (() => {
+                  const sz = (editSpanStyle?.size ?? 12) * renderScale
+                  return (
+                    <div style={{ position: 'absolute', left: hoverPos.x, top: hoverPos.y - sz,
+                      width: 2, height: sz, background: '#3b82f6', opacity: 0.75,
+                      pointerEvents: 'none', zIndex: 5, borderRadius: 1,
+                      boxShadow: '0 0 3px rgba(59,130,246,0.4)' }} />
+                  )
+                })()}
 
                 {/* New text insertion (continuous view) */}
                 {isActive && tool === 'edit-text' && newTextPos && (() => {
@@ -2485,10 +2542,14 @@ export function Editor({ jobId }: { jobId: string }) {
                     <div style={{ position: 'absolute', left: newTextPos.screenX, top: newTextPos.screenY - lineH, zIndex: 15 }}>
                       <EditSpanToolbar
                         style={style} pageW={dw2}
-                        spanLeft={newTextPos.screenX} spanTop={newTextPos.screenY - lineH}
+                        spanLeft={newTextPos.screenX} spanTop={newTextPos.screenY - lineH - DRAG_HANDLE_H}
                         spanBottom={newTextPos.screenY}
                         onChange={s => setEditSpanStyle(s)} />
                       <NewTextInput renderScale={renderScale} style={style}
+                        onMove={(dx, dy) => setNewTextPos(p => p ? {
+                          screenX: p.screenX + dx, screenY: p.screenY + dy,
+                          pdfX: (p.screenX + dx) / renderScale, pdfY: (p.screenY + dy) / renderScale,
+                        } : null)}
                         onSave={saveNewText}
                         onCancel={() => setNewTextPos(null)} />
                     </div>
@@ -2743,7 +2804,12 @@ export function Editor({ jobId }: { jobId: string }) {
 
               {/* Click catcher — blank page area opens new text input */}
               {tool === 'edit-text' && editingSpanIdx === null && newTextPos === null && (
-                <div style={{ position: 'absolute', inset: 0, zIndex: 1, cursor: 'text' }}
+                <div style={{ position: 'absolute', inset: 0, zIndex: 1, cursor: 'none' }}
+                  onMouseMove={e => {
+                    const rect = e.currentTarget.getBoundingClientRect()
+                    setHoverPos({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+                  }}
+                  onMouseLeave={() => setHoverPos(null)}
                   onClick={e => {
                     const rect = e.currentTarget.getBoundingClientRect()
                     const sx = e.clientX - rect.left
@@ -2751,11 +2817,23 @@ export function Editor({ jobId }: { jobId: string }) {
                     const defaultStyle: SpanStyle = { family: 'sans', size: 12, bold: false, italic: false, colorHex: '#000000' }
                     if (!editSpanStyle) setEditSpanStyle(defaultStyle)
                     setEditSpanStyleDirty(false)
+                    setHoverPos(null)
                     console.log('[PDF:edit] blank click  page=%d screen=(%d,%d) pdf=(%s,%s)',
                       currentPage, sx.toFixed(0), sy.toFixed(0), (sx/renderScale).toFixed(1), (sy/renderScale).toFixed(1))
                     setNewTextPos({ screenX: sx, screenY: sy, pdfX: sx / renderScale, pdfY: sy / renderScale })
                   }} />
               )}
+
+              {/* Hover cursor — shows exact text baseline before click */}
+              {tool === 'edit-text' && editingSpanIdx === null && newTextPos === null && hoverPos && (() => {
+                const sz = (editSpanStyle?.size ?? 12) * renderScale
+                return (
+                  <div style={{ position: 'absolute', left: hoverPos.x, top: hoverPos.y - sz,
+                    width: 2, height: sz, background: '#3b82f6', opacity: 0.75,
+                    pointerEvents: 'none', zIndex: 5, borderRadius: 1,
+                    boxShadow: '0 0 3px rgba(59,130,246,0.4)' }} />
+                )
+              })()}
 
               {/* New text insertion */}
               {tool === 'edit-text' && newTextPos && (() => {
@@ -2765,10 +2843,14 @@ export function Editor({ jobId }: { jobId: string }) {
                   <div style={{ position: 'absolute', left: newTextPos.screenX, top: newTextPos.screenY - lineH, zIndex: 15 }}>
                     <EditSpanToolbar
                       style={style} pageW={dw}
-                      spanLeft={newTextPos.screenX} spanTop={newTextPos.screenY - lineH}
+                      spanLeft={newTextPos.screenX} spanTop={newTextPos.screenY - lineH - DRAG_HANDLE_H}
                       spanBottom={newTextPos.screenY}
                       onChange={s => setEditSpanStyle(s)} />
                     <NewTextInput renderScale={renderScale} style={style}
+                      onMove={(dx, dy) => setNewTextPos(p => p ? {
+                        screenX: p.screenX + dx, screenY: p.screenY + dy,
+                        pdfX: (p.screenX + dx) / renderScale, pdfY: (p.screenY + dy) / renderScale,
+                      } : null)}
                       onSave={saveNewText}
                       onCancel={() => setNewTextPos(null)} />
                   </div>
