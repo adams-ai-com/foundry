@@ -50,12 +50,12 @@ export function FindBar({ editor, onClose }: Props) {
 
   useEffect(() => { recompute(query) }, [query, recompute])
 
-  // Recompute when editor content changes
+  // Recompute when editor content changes; clean up listener on unmount/re-run
   useEffect(() => {
-    if (!editor) return
-    const handler = () => recompute(query)
+    if (!editor) return undefined
+    const handler = () => { recompute(query) }
     editor.on('update', handler)
-    return () => editor.off('update', handler)
+    return () => { editor.off('update', handler) }
   }, [editor, query, recompute])
 
   function jumpTo(index: number) {
