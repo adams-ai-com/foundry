@@ -4,6 +4,7 @@ import { useRef } from 'react'
 import { IconButton, Separator } from '@foundry/ui'
 import { useHyperFormulaContext } from '@/lib/hyperformula-context'
 import { importXlsx, exportXlsx, parseCSV, serializeCSV } from '@/lib/xlsx-io'
+import { ColorPicker } from './ColorPicker'
 import type { CellAddress } from '@foundry/shared'
 import type { CellFormat } from '@/lib/actions'
 
@@ -109,6 +110,27 @@ export function Toolbar({ selected, selectionEnd, onTogglePython, onToggleChart,
           <path strokeLinecap="round" d="M3 6h18M11 10h10M3 14h18M11 18h10"/>
         </svg>
       </IconButton>
+
+      <Separator />
+
+      <ColorPicker
+        value={fmt.color}
+        onChange={(color) => setRangeFormat(selected, selectionEnd, { color })}
+        label="Font color"
+      >
+        <span className="text-xs font-bold leading-none" style={{ color: fmt.color ?? 'rgb(var(--fg-primary))' }}>A</span>
+      </ColorPicker>
+
+      <ColorPicker
+        value={fmt.fillColor}
+        onChange={(fillColor) => setRangeFormat(selected, selectionEnd, { fillColor })}
+        label="Fill color"
+      >
+        <svg className="w-3.5 h-3.5 text-fg-secondary" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v1h3l4 4-7 7H7z"/>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M17 7l-7 7"/>
+        </svg>
+      </ColorPicker>
 
       <Separator />
 

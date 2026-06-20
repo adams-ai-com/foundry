@@ -10,6 +10,8 @@ export type CellFormat = {
   italic?: boolean
   underline?: boolean
   align?: 'left' | 'center' | 'right'
+  color?: string
+  fillColor?: string
   numFormat?: 'general' | 'number' | 'currency' | 'percent' | 'date'
 }
 // keyed: sheetName → "row:col" → CellFormat (sparse — only formatted cells present)

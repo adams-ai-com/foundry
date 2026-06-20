@@ -228,6 +228,8 @@ export function Grid({ selected, selectionEnd, onSelect, onSelectionEnd, findMat
               const cellKey = `${row}:${col}`
               const isFindMatch = !isSelected && findMatchSet.has(cellKey)
               const isFindActive = !isSelected && cellKey === activeMatchKey
+              // Fill color only shows on normal cells; selection/range/find states take priority
+              const appliedFill = (isSelected || isInRange || isFindMatch || isFindActive) ? undefined : fmt.fillColor
 
               return (
                 <div
@@ -239,7 +241,7 @@ export function Grid({ selected, selectionEnd, onSelect, onSelectionEnd, findMat
                     isFindActive ? 'find-match-active' : isFindMatch ? 'find-match' : '',
                     fontClasses,
                   ].filter(Boolean).join(' ')}
-                  style={{ width: colWidths[col], minWidth: colWidths[col], textAlign }}
+                  style={{ width: colWidths[col], minWidth: colWidths[col], textAlign, color: fmt.color, backgroundColor: appliedFill }}
                   onMouseDown={(e) => {
                     if (e.shiftKey) {
                       onSelectionEnd(addr)
@@ -258,7 +260,7 @@ export function Grid({ selected, selectionEnd, onSelect, onSelectionEnd, findMat
                       onFocus={(e) => { e.currentTarget.select() }}
                       id={`cell-${row}-${col}`}
                       className={`cell-input absolute inset-0 w-full h-full px-1.5 text-sm bg-transparent outline-none ${fontClasses}`}
-                      style={{ textAlign }}
+                      style={{ textAlign, color: fmt.color }}
                       defaultValue={getCellFormula(addr) ?? String(rawValue ?? '')}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
