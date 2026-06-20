@@ -5,6 +5,8 @@ import { Grid } from './Grid'
 import { FormulaBar } from './FormulaBar'
 import { FindBar } from './FindBar'
 import { Toolbar } from './Toolbar'
+import { StatusBar } from './StatusBar'
+import { ContextMenu } from './ContextMenu'
 import { PythonPanel } from './PythonPanel'
 import { ChartPanel } from './ChartPanel'
 import { HyperFormulaProvider, useHyperFormulaContext } from '@/lib/hyperformula-context'
@@ -107,7 +109,14 @@ function SheetContent({
   onToggleChart,
   onChartsChange,
 }: SheetContentProps) {
-  const { getSheetNames, addSheet, getCellValue, getCellFormula, setCellValue } = useHyperFormulaContext()
+  const { getSheetNames, addSheet, getCellValue, getCellFormula, setCellValue, addRow, deleteRow, addColumn, deleteColumn, sortColumn } = useHyperFormulaContext()
+
+  // Freeze panes
+  const [frozenRows, setFrozenRows] = useState(0)
+  const [frozenCols, setFrozenCols] = useState(0)
+
+  // Context menu
+  const [ctxMenu, setCtxMenu] = useState<{ type: 'row' | 'col'; index: number; x: number; y: number } | null>(null)
 
   // Find & Replace
   const [findOpen, setFindOpen] = useState(false)
@@ -204,6 +213,10 @@ function SheetContent({
         onToggleChart={onToggleChart}
         pythonOpen={pythonOpen}
         chartOpen={chartOpen}
+        frozenRows={frozenRows}
+        frozenCols={frozenCols}
+        onToggleFreezeRows={() => setFrozenRows(v => v > 0 ? 0 : 1)}
+        onToggleFreezeCols={() => setFrozenCols(v => v > 0 ? 0 : 1)}
       />
       <FormulaBar selected={selected} selectionEnd={selectionEnd} />
       {findOpen && (
@@ -222,6 +235,30 @@ function SheetContent({
         />
       )}
 
+      {ctxMenu && (
+        <ContextMenu
+          type={ctxMenu.type}
+          index={ctxMenu.index}
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          onClose={() => setCtxMenu(null)}
+          onInsertBefore={() => {
+            if (ctxMenu.type === 'row') addRow(activeSheet, ctxMenu.index)
+            else addColumn(activeSheet, ctxMenu.index)
+          }}
+          onInsertAfter={() => {
+            if (ctxMenu.type === 'row') addRow(activeSheet, ctxMenu.index + 1)
+            else addColumn(activeSheet, ctxMenu.index + 1)
+          }}
+          onDelete={() => {
+            if (ctxMenu.type === 'row') deleteRow(activeSheet, ctxMenu.index)
+            else deleteColumn(activeSheet, ctxMenu.index)
+          }}
+          onSortAsc={ctxMenu.type === 'col' ? () => sortColumn(activeSheet, ctxMenu.index, true) : undefined}
+          onSortDesc={ctxMenu.type === 'col' ? () => sortColumn(activeSheet, ctxMenu.index, false) : undefined}
+        />
+      )}
+
       <div className="flex flex-1 overflow-hidden">
         <Grid
           selected={selected}
@@ -230,6 +267,9 @@ function SheetContent({
           onSelectionEnd={onSelectionEnd}
           findMatches={findOpen ? findMatches : undefined}
           findMatchIndex={findOpen ? findMatchIndex : undefined}
+          frozenRows={frozenRows}
+          frozenCols={frozenCols}
+          onContextMenu={(type, index, x, y) => setCtxMenu({ type, index, x, y })}
         />
 
         {chartOpen && (
@@ -264,6 +304,8 @@ function SheetContent({
           + Add sheet
         </button>
       </div>
+
+      <StatusBar selected={selected} selectionEnd={selectionEnd} />
     </div>
   )
 }

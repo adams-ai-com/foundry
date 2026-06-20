@@ -10,6 +10,11 @@ type HFContextValue = ReturnType<typeof useHyperFormula> & {
   setCellFormat: (addr: CellAddress, patch: Partial<CellFormat>) => void
   setRangeFormat: (start: CellAddress, end: CellAddress | null, patch: Partial<CellFormat>) => void
   loadAll: (data: SheetData, formats?: CellFormats) => void
+  addRow: (sheetName: string, rowIndex: number) => void
+  deleteRow: (sheetName: string, rowIndex: number) => void
+  addColumn: (sheetName: string, colIndex: number) => void
+  deleteColumn: (sheetName: string, colIndex: number) => void
+  sortColumn: (sheetName: string, colIndex: number, ascending: boolean) => void
 }
 
 const HyperFormulaContext = createContext<HFContextValue | null>(null)
@@ -83,8 +88,85 @@ export function HyperFormulaProvider({
     onFormatsChangeRef.current?.(formats)
   }, [hf])
 
+  // Shift format keys when rows/cols are inserted or deleted
+  function shiftFormats(sheetName: string, axis: 'row' | 'col', index: number, delta: number) {
+    const fmts = { ...(formatsRef.current[sheetName] ?? {}) }
+    const shifted: Record<string, CellFormat> = {}
+    for (const [key, fmt] of Object.entries(fmts)) {
+      const [r, c] = key.split(':').map(Number)
+      const idx = axis === 'row' ? r : c
+      if (delta > 0) {
+        // insert: shift indices >= index up by delta
+        if (idx < index) shifted[key] = fmt
+        else shifted[axis === 'row' ? `${r + delta}:${c}` : `${r}:${c + delta}`] = fmt
+      } else {
+        // delete: discard deleted index; shift above it down
+        if (idx < index) shifted[key] = fmt
+        else if (idx === index) { /* drop */ }
+        else shifted[axis === 'row' ? `${r + delta}:${c}` : `${r}:${c + delta}`] = fmt
+      }
+    }
+    formatsRef.current = { ...formatsRef.current, [sheetName]: shifted }
+    setFormatTick(t => t + 1)
+    onFormatsChangeRef.current?.(formatsRef.current)
+  }
+
+  const addRow = useCallback((sheetName: string, rowIndex: number) => {
+    shiftFormats(sheetName, 'row', rowIndex, 1)
+    hf.addRows(sheetName, rowIndex, 1)
+  }, [hf]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const deleteRow = useCallback((sheetName: string, rowIndex: number) => {
+    shiftFormats(sheetName, 'row', rowIndex, -1)
+    hf.removeRows(sheetName, rowIndex, 1)
+  }, [hf]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const addColumn = useCallback((sheetName: string, colIndex: number) => {
+    shiftFormats(sheetName, 'col', colIndex, 1)
+    hf.addColumns(sheetName, colIndex, 1)
+  }, [hf]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const deleteColumn = useCallback((sheetName: string, colIndex: number) => {
+    shiftFormats(sheetName, 'col', colIndex, -1)
+    hf.removeColumns(sheetName, colIndex, 1)
+  }, [hf]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const sortColumn = useCallback((sheetName: string, colIndex: number, ascending: boolean) => {
+    const data = hf.getSerializedData()
+    const rows = (data[sheetName] ?? []) as (string | number | null)[][]
+    if (rows.length === 0) return
+
+    // Compute sort keys from displayed (computed) values
+    const withKeys = rows.map((row, i) => ({
+      row,
+      key: hf.getCellValue({ sheet: sheetName, row: i, col: colIndex }),
+    }))
+    withKeys.sort((a, b) => {
+      const av = a.key ?? '', bv = b.key ?? ''
+      if (typeof av === 'number' && typeof bv === 'number') return ascending ? av - bv : bv - av
+      return ascending ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av))
+    })
+
+    // Rearrange formats to follow rows
+    const sheetFmts = formatsRef.current[sheetName] ?? {}
+    const maxCols = Math.max(...rows.map(r => r.length), 1)
+    const newFmts: Record<string, CellFormat> = {}
+    withKeys.forEach(({ row: origRow }, newRow) => {
+      const origIdx = rows.indexOf(origRow)
+      for (let c = 0; c < maxCols; c++) {
+        const orig = sheetFmts[`${origIdx}:${c}`]
+        if (orig) newFmts[`${newRow}:${c}`] = orig
+      }
+    })
+    formatsRef.current = { ...formatsRef.current, [sheetName]: newFmts }
+    setFormatTick(t => t + 1)
+    onFormatsChangeRef.current?.(formatsRef.current)
+
+    hf.bulkSetCells({ sheet: sheetName, row: 0, col: 0 }, withKeys.map(({ row }) => row))
+  }, [hf]) // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <HyperFormulaContext.Provider value={{ ...hf, getCellFormat, setCellFormat, setRangeFormat, loadAll }}>
+    <HyperFormulaContext.Provider value={{ ...hf, getCellFormat, setCellFormat, setRangeFormat, loadAll, addRow, deleteRow, addColumn, deleteColumn, sortColumn }}>
       {children}
     </HyperFormulaContext.Provider>
   )

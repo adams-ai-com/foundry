@@ -141,5 +141,41 @@ export function useHyperFormula(initialData?: SheetData, onChange?: (data: Sheet
     if (onChangeRef.current) onChangeRef.current(serializeHF(hfRef.current))
   }, [])
 
-  return { getCellValue, getCellFormula, setCellValue, getSerializedData, getSheetNames, addSheet, loadSheets, undo, redo, canUndo, canRedo, bulkSetCells }
+  const addRows = useCallback((sheetName: string, rowIndex: number, count = 1) => {
+    if (!hfRef.current) return
+    const sheetId = hfRef.current.getSheetId(sheetName)
+    if (sheetId === undefined) return
+    hfRef.current.addRows(sheetId, [rowIndex, count])
+    setTick(t => t + 1)
+    if (onChangeRef.current) onChangeRef.current(serializeHF(hfRef.current))
+  }, [])
+
+  const removeRows = useCallback((sheetName: string, rowIndex: number, count = 1) => {
+    if (!hfRef.current) return
+    const sheetId = hfRef.current.getSheetId(sheetName)
+    if (sheetId === undefined) return
+    hfRef.current.removeRows(sheetId, [rowIndex, count])
+    setTick(t => t + 1)
+    if (onChangeRef.current) onChangeRef.current(serializeHF(hfRef.current))
+  }, [])
+
+  const addColumns = useCallback((sheetName: string, colIndex: number, count = 1) => {
+    if (!hfRef.current) return
+    const sheetId = hfRef.current.getSheetId(sheetName)
+    if (sheetId === undefined) return
+    hfRef.current.addColumns(sheetId, [colIndex, count])
+    setTick(t => t + 1)
+    if (onChangeRef.current) onChangeRef.current(serializeHF(hfRef.current))
+  }, [])
+
+  const removeColumns = useCallback((sheetName: string, colIndex: number, count = 1) => {
+    if (!hfRef.current) return
+    const sheetId = hfRef.current.getSheetId(sheetName)
+    if (sheetId === undefined) return
+    hfRef.current.removeColumns(sheetId, [colIndex, count])
+    setTick(t => t + 1)
+    if (onChangeRef.current) onChangeRef.current(serializeHF(hfRef.current))
+  }, [])
+
+  return { getCellValue, getCellFormula, setCellValue, getSerializedData, getSheetNames, addSheet, loadSheets, undo, redo, canUndo, canRedo, bulkSetCells, addRows, removeRows, addColumns, removeColumns }
 }

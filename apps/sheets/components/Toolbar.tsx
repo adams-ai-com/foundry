@@ -15,14 +15,18 @@ interface ToolbarProps {
   onToggleChart: () => void
   pythonOpen: boolean
   chartOpen: boolean
+  frozenRows: number
+  frozenCols: number
+  onToggleFreezeRows: () => void
+  onToggleFreezeCols: () => void
 }
 
-export function Toolbar({ selected, selectionEnd, onTogglePython, onToggleChart, pythonOpen, chartOpen }: ToolbarProps) {
+export function Toolbar({ selected, selectionEnd, onTogglePython, onToggleChart, pythonOpen, chartOpen, frozenRows, frozenCols, onToggleFreezeRows, onToggleFreezeCols }: ToolbarProps) {
   const { getCellFormat, setRangeFormat, getSerializedData, getSheetNames, loadAll, undo, redo, canUndo, canRedo } = useHyperFormulaContext()
   const fmt = getCellFormat(selected)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  function toggleFormat(key: keyof Pick<CellFormat, 'bold' | 'italic' | 'underline'>) {
+  function toggleFormat(key: keyof Pick<CellFormat, 'bold' | 'italic' | 'underline' | 'strikethrough'>) {
     setRangeFormat(selected, selectionEnd, { [key]: !fmt[key] })
   }
 
@@ -92,6 +96,9 @@ export function Toolbar({ selected, selectionEnd, onTogglePython, onToggleChart,
       <IconButton data-testid="btn-underline" label="Underline (Ctrl+U)" active={!!fmt.underline} onClick={() => toggleFormat('underline')}>
         <span className="underline">U</span>
       </IconButton>
+      <IconButton data-testid="btn-strikethrough" label="Strikethrough" active={!!fmt.strikethrough} onClick={() => toggleFormat('strikethrough')}>
+        <span className="line-through">S</span>
+      </IconButton>
 
       <Separator />
 
@@ -131,6 +138,23 @@ export function Toolbar({ selected, selectionEnd, onTogglePython, onToggleChart,
           <path strokeLinecap="round" strokeLinejoin="round" d="M17 7l-7 7"/>
         </svg>
       </ColorPicker>
+
+      <Separator />
+
+      {/* Freeze row 1 */}
+      <IconButton data-testid="btn-freeze-rows" label={frozenRows ? 'Unfreeze row' : 'Freeze row 1'} active={frozenRows > 0} onClick={onToggleFreezeRows}>
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 6v12M20 6v12"/>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 10h16" strokeWidth={1.5} strokeDasharray="2 2"/>
+        </svg>
+      </IconButton>
+      {/* Freeze col A */}
+      <IconButton data-testid="btn-freeze-cols" label={frozenCols ? 'Unfreeze column' : 'Freeze column A'} active={frozenCols > 0} onClick={onToggleFreezeCols}>
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 4v16M6 4h12M6 20h12"/>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M10 4v16" strokeWidth={1.5} strokeDasharray="2 2"/>
+        </svg>
+      </IconButton>
 
       <Separator />
 
