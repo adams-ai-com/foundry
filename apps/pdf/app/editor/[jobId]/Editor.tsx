@@ -416,6 +416,76 @@ function EditSpanInput({ span, renderScale, style, onSave, onCancel }: {
   )
 }
 
+// ── New text insertion input ──────────────────────────────────────────────────
+
+function NewTextInput({ renderScale, style, onSave, onCancel }: {
+  renderScale: number
+  style:       SpanStyle
+  onSave:      (text: string) => void
+  onCancel:    () => void
+}) {
+  const ref       = useRef<HTMLDivElement>(null)
+  const committed = useRef(false)
+
+  useEffect(() => { ref.current?.focus() }, [])
+
+  const cssFamily = style.family === 'mono' ? 'monospace' : style.family === 'serif' ? 'serif' : 'sans-serif'
+
+  function getText() { return (ref.current?.textContent ?? '').replace(/\n+$/, '') }
+
+  function commit() {
+    if (committed.current) return
+    committed.current = true
+    const text = getText()
+    if (!text) { onCancel(); return }
+    onSave(text)
+  }
+
+  return (
+    <div
+      ref={ref}
+      contentEditable
+      suppressContentEditableWarning
+      onKeyDown={e => {
+        if (e.key === 'Enter')  { e.preventDefault(); commit() }
+        if (e.key === 'Escape') { committed.current = true; onCancel() }
+      }}
+      onBlur={commit}
+      onPaste={e => {
+        e.preventDefault()
+        const text = e.clipboardData.getData('text/plain')
+        const sel = window.getSelection()
+        if (!sel?.rangeCount) return
+        const range = sel.getRangeAt(0)
+        range.deleteContents()
+        range.insertNode(document.createTextNode(text))
+        range.collapse(false)
+        sel.removeAllRanges()
+        sel.addRange(range)
+      }}
+      style={{
+        position:   'absolute', top: 0, left: 0,
+        minWidth:   Math.max(120, style.size * renderScale * 4),
+        fontSize:   `${style.size * renderScale}px`,
+        fontFamily: cssFamily,
+        fontWeight: style.bold   ? 'bold'   : 'normal',
+        fontStyle:  style.italic ? 'italic' : 'normal',
+        color:      style.colorHex,
+        background: 'rgba(255,255,255,0.95)',
+        border:     '2px solid #3b82f6',
+        borderRadius: 2,
+        outline:    'none',
+        padding:    '0 3px',
+        lineHeight: 'normal',
+        whiteSpace: 'nowrap',
+        boxShadow:  '0 0 0 3px rgba(59,130,246,0.15)',
+        zIndex:     20,
+        cursor:     'text',
+      }}
+    />
+  )
+}
+
 // ── Lazy thumbnail ────────────────────────────────────────────────────────────
 
 function LazyThumb({ src, alt, pw, ph }: { src: string; alt: string; pw: number; ph: number }) {
@@ -636,6 +706,8 @@ export function Editor({ jobId }: { jobId: string }) {
   const [editingSpanIdx, setEditingSpanIdx]   = useState<number | null>(null)
   const [editSpanStyle, setEditSpanStyle]     = useState<SpanStyle | null>(null)
   const [editSpanStyleDirty, setEditSpanStyleDirty] = useState(false)
+  // Phase 3: click-to-insert new text on blank space
+  const [newTextPos, setNewTextPos] = useState<{ screenX: number; screenY: number; pdfX: number; pdfY: number } | null>(null)
 
   // Toolbar dropdowns (fix #1: grouped menus)
   const [pagesMenuOpen, setPagesMenuOpen]       = useState(false)
@@ -922,7 +994,7 @@ export function Editor({ jobId }: { jobId: string }) {
 
   // Load text spans when edit-text tool is active (reload on page/version change)
   useEffect(() => {
-    if (tool !== 'edit-text') { setTextSpans([]); setEditingSpanIdx(null); return }
+    if (tool !== 'edit-text') { setTextSpans([]); setEditingSpanIdx(null); setNewTextPos(null); return }
     let cancelled = false
     setLoadingSpans(true)
     fetch(`/pdf/api/pdf/${jobId}/text-spans/${currentPage}`)
@@ -1534,6 +1606,34 @@ export function Editor({ jobId }: { jobId: string }) {
         }),
       })
       if (!res.ok) { console.error('edit-text failed', res.status); return }
+      setVersion(v => v + 1)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function saveNewText(text: string) {
+    const pos   = newTextPos
+    const style = editSpanStyle ?? { family: 'sans' as const, size: 12, bold: false, italic: false, colorHex: '#000000' }
+    setNewTextPos(null)
+    if (!pos || !text.trim()) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/pdf/api/pdf/${jobId}/edit-text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          page:          currentPage,
+          // no bbox — insert-only, nothing to redact
+          origin:        [pos.pdfX, pos.pdfY + style.size * 0.75],
+          new_text:      text.trim(),
+          resolved_font: styleToBase14(style.family, style.bold),
+          size:          style.size,
+          italic:        style.italic,
+          color:         hexToFloats(style.colorHex),
+        }),
+      })
+      if (!res.ok) { console.error('insert-text failed', res.status); return }
       setVersion(v => v + 1)
     } finally {
       setSaving(false)
@@ -2323,6 +2423,38 @@ export function Editor({ jobId }: { jobId: string }) {
                     </marker>
                   </defs>
                 </svg>
+                {/* Click catcher — blank page area (continuous view) */}
+                {isActive && tool === 'edit-text' && editingSpanIdx === null && newTextPos === null && (
+                  <div style={{ position: 'absolute', inset: 0, zIndex: 1, cursor: 'text' }}
+                    onClick={e => {
+                      const rect = e.currentTarget.getBoundingClientRect()
+                      const sx = e.clientX - rect.left
+                      const sy = e.clientY - rect.top
+                      const defaultStyle: SpanStyle = { family: 'sans', size: 12, bold: false, italic: false, colorHex: '#000000' }
+                      if (!editSpanStyle) setEditSpanStyle(defaultStyle)
+                      setEditSpanStyleDirty(false)
+                      setNewTextPos({ screenX: sx, screenY: sy, pdfX: sx / renderScale, pdfY: sy / renderScale })
+                    }} />
+                )}
+
+                {/* New text insertion (continuous view) */}
+                {isActive && tool === 'edit-text' && newTextPos && (() => {
+                  const style = editSpanStyle ?? { family: 'sans' as const, size: 12, bold: false, italic: false, colorHex: '#000000' }
+                  const lineH = style.size * renderScale
+                  return (
+                    <div style={{ position: 'absolute', left: newTextPos.screenX, top: newTextPos.screenY - lineH, zIndex: 15 }}>
+                      <EditSpanToolbar
+                        style={style} pageW={dw2}
+                        spanLeft={newTextPos.screenX} spanTop={newTextPos.screenY - lineH}
+                        spanBottom={newTextPos.screenY}
+                        onChange={s => setEditSpanStyle(s)} />
+                      <NewTextInput renderScale={renderScale} style={style}
+                        onSave={saveNewText}
+                        onCancel={() => setNewTextPos(null)} />
+                    </div>
+                  )
+                })()}
+
                 {/* Edit-text span overlay — continuous view (active page only) */}
                 {isActive && tool === 'edit-text' && textSpans.map((span, sidx) => {
                   const [bx0, by0, bx1, by1] = span.bbox.map(v => v * renderScale)
@@ -2341,7 +2473,7 @@ export function Editor({ jobId }: { jobId: string }) {
                       </div>
                     )
                   }
-                  const editing = editingSpanIdx !== null
+                  const editing = editingSpanIdx !== null || newTextPos !== null
                   return (
                     <div key={sidx} onClick={editing ? undefined : () => setEditingSpanIdx(sidx)}
                       style={{ position: 'absolute', left: bx0, top: by0, width: w, height: h,
@@ -2565,6 +2697,38 @@ export function Editor({ jobId }: { jobId: string }) {
                 </div>
               )}
 
+              {/* Click catcher — blank page area opens new text input */}
+              {tool === 'edit-text' && editingSpanIdx === null && newTextPos === null && (
+                <div style={{ position: 'absolute', inset: 0, zIndex: 1, cursor: 'text' }}
+                  onClick={e => {
+                    const rect = e.currentTarget.getBoundingClientRect()
+                    const sx = e.clientX - rect.left
+                    const sy = e.clientY - rect.top
+                    const defaultStyle: SpanStyle = { family: 'sans', size: 12, bold: false, italic: false, colorHex: '#000000' }
+                    if (!editSpanStyle) setEditSpanStyle(defaultStyle)
+                    setEditSpanStyleDirty(false)
+                    setNewTextPos({ screenX: sx, screenY: sy, pdfX: sx / renderScale, pdfY: sy / renderScale })
+                  }} />
+              )}
+
+              {/* New text insertion */}
+              {tool === 'edit-text' && newTextPos && (() => {
+                const style = editSpanStyle ?? { family: 'sans' as const, size: 12, bold: false, italic: false, colorHex: '#000000' }
+                const lineH = style.size * renderScale
+                return (
+                  <div style={{ position: 'absolute', left: newTextPos.screenX, top: newTextPos.screenY - lineH, zIndex: 15 }}>
+                    <EditSpanToolbar
+                      style={style} pageW={dw}
+                      spanLeft={newTextPos.screenX} spanTop={newTextPos.screenY - lineH}
+                      spanBottom={newTextPos.screenY}
+                      onChange={s => setEditSpanStyle(s)} />
+                    <NewTextInput renderScale={renderScale} style={style}
+                      onSave={saveNewText}
+                      onCancel={() => setNewTextPos(null)} />
+                  </div>
+                )
+              })()}
+
               {/* Edit-text span overlay */}
               {tool === 'edit-text' && textSpans.map((span, idx) => {
                 const [bx0, by0, bx1, by1] = span.bbox.map(v => v * renderScale)
@@ -2583,7 +2747,7 @@ export function Editor({ jobId }: { jobId: string }) {
                     </div>
                   )
                 }
-                const editing = editingSpanIdx !== null
+                const editing = editingSpanIdx !== null || newTextPos !== null
                 return (
                   <div key={idx} onClick={editing ? undefined : () => setEditingSpanIdx(idx)}
                     style={{ position: 'absolute', left: bx0, top: by0, width: w, height: h,
