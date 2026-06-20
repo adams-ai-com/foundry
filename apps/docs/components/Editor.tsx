@@ -16,8 +16,14 @@ import Placeholder from '@tiptap/extension-placeholder'
 import { Toolbar } from './Toolbar'
 import { VersionHistory } from './VersionHistory'
 import { Comments } from './Comments'
+import { FindBar } from './FindBar'
 import { updateDocument, deleteDocument } from '@/lib/actions'
 import type { Document } from '@/lib/actions'
+
+function countWords(text: string): number {
+  const trimmed = text.trim()
+  return trimmed ? trimmed.split(/\s+/).length : 0
+}
 
 type JSONContent = Record<string, unknown>
 const AUTOSAVE_MS = 1500
@@ -38,6 +44,8 @@ export function Editor({ doc }: { doc: Document }) {
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'unsaved'>('saved')
   const [showHistory, setShowHistory] = useState(false)
   const [showComments, setShowComments] = useState(false)
+  const [showFind, setShowFind] = useState(false)
+  const [wordCount, setWordCount] = useState(0)
   const [importing, setImporting] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const titleRef = useRef(doc.title)
@@ -71,6 +79,7 @@ export function Editor({ doc }: { doc: Document }) {
     },
     onUpdate({ editor }) {
       scheduleSave(titleRef.current, editor.getJSON())
+      setWordCount(countWords(editor.getText()))
     },
   })
 
@@ -131,6 +140,23 @@ export function Editor({ doc }: { doc: Document }) {
     setImporting(false)
     if (importRef.current) importRef.current.value = ''
   }
+
+  // Initial word count
+  useEffect(() => {
+    if (editor) setWordCount(countWords(editor.getText()))
+  }, [editor])
+
+  // Cmd+F → open find bar; Escape → close find bar
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault()
+        setShowFind(v => !v)
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   useEffect(() => {
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current) }
@@ -203,10 +229,17 @@ export function Editor({ doc }: { doc: Document }) {
 
       <Toolbar editor={editor} />
 
+      {showFind && <FindBar editor={editor} onClose={() => setShowFind(false)} />}
+
       {/* Canvas */}
       <div className="flex-1 overflow-y-auto bg-bg-surface">
-        <div className="max-w-[816px] mx-auto my-8 mb-16 bg-bg-raised shadow-card border border-border rounded-sm min-h-[calc(100vh-180px)]">
+        <div className="max-w-[816px] mx-auto my-8 mb-4 bg-bg-raised shadow-card border border-border rounded-sm min-h-[calc(100vh-180px)]">
           <EditorContent editor={editor} className="h-full" />
+        </div>
+        <div className="flex justify-center pb-6">
+          <span className="text-xs text-fg-tertiary tabular-nums">
+            {wordCount} {wordCount === 1 ? 'word' : 'words'}
+          </span>
         </div>
       </div>
 
