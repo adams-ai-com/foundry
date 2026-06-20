@@ -101,7 +101,33 @@ is_affected() {
   return 1
 }
 
-# 1. Wait until affected staging apps run TARGET (unaffected apps are skipped)
+# Returns 0 if the staging container for an app is running code consistent with
+# TARGET. "Consistent" means either the container IS at TARGET, or the app's
+# watched paths have no changes between the container's SHA and TARGET (Coolify
+# skipped the rebuild because nothing relevant changed in the latest push).
+container_is_current() {
+  local uuid="$1" label="$2"
+  local img sha
+  img=$(docker ps --filter "name=$uuid" --format '{{.Image}}' | head -1)
+  sha="${img#*:}"
+  # At target — definitely current
+  [ "$sha" = "$TARGET" ] && return 0
+  # Not a known commit — must wait
+  as_foundry git -C "$REPO" cat-file -e "${sha}^{commit}" 2>/dev/null || return 1
+  # Check if any of this app's watched paths differ between sha and TARGET
+  local base="${label%-staging}"; base="${base%-production}"
+  local paths="${WATCH_PATHS[${base}-staging]:-}"
+  [ -z "$paths" ] && return 1  # no config → conservative: must wait
+  local IFS=':'
+  for prefix in $paths; do
+    as_foundry git -C "$REPO" diff --quiet "$sha" "$TARGET" -- "$prefix" 2>/dev/null || return 1
+  done
+  return 0  # no relevant file changes between container SHA and TARGET
+}
+
+# 1. Wait until staging app containers are consistent with TARGET.
+# Apps whose relevant paths didn't change since their last deploy are skipped
+# immediately — Coolify's watch_paths won't have triggered a rebuild for them.
 deadline=$(( $(date +%s) + DEPLOY_WAIT_SECS ))
 while :; do
   # If staging moved to a newer commit while we were waiting (another push
@@ -119,11 +145,7 @@ while :; do
   pending=""
   while read -r uuid label; do
     [ -z "$uuid" ] && continue
-    if ! is_affected "$label"; then
-      continue   # watch_paths didn't match — Coolify skipped this app
-    fi
-    img=$(docker ps --filter "name=$uuid" --format '{{.Image}}' | head -1)
-    [ "${img#*:}" = "$TARGET" ] || pending="$pending $label"
+    container_is_current "$uuid" "$label" || pending="$pending $label"
   done < "$APPS_FILE"
   [ -z "$pending" ] && break
   if [ "$(date +%s)" -ge "$deadline" ]; then
@@ -206,10 +228,8 @@ prod_stuck=""
 if [ -f "$PROD_APPS" ]; then
   while read -r uuid label; do
     [ -z "$uuid" ] && continue
-    is_affected "$label" || continue
     while :; do
-      img=$(docker ps --filter "name=$uuid" --format '{{.Image}}' | head -1)
-      [ "${img#*:}" = "$TARGET" ] && break
+      container_is_current "$uuid" "$label" && break
       if [ "$(date +%s)" -ge "$prod_deadline" ]; then prod_stuck="$prod_stuck $label"; break; fi
       sleep 15
     done
