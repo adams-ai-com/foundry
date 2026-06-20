@@ -246,10 +246,16 @@ function EditSpanInput({ span, renderScale, onSave, onCancel }: {
   const family = mono ? 'monospace' : serif ? 'serif' : 'sans-serif'
   const col    = `rgb(${Math.round(span.color[0]*255)},${Math.round(span.color[1]*255)},${Math.round(span.color[2]*255)})`
 
+  function getText() {
+    // contentEditable injects a trailing \n on blur in Chrome; strip it
+    return (ref.current?.textContent ?? '').replace(/\n+$/, '')
+  }
+
   function commit() {
     if (committed.current) return
     committed.current = true
-    onSave(ref.current?.textContent ?? '')
+    if (!ref.current) { onCancel(); return }
+    onSave(getText())
   }
 
   return (
@@ -264,8 +270,15 @@ function EditSpanInput({ span, renderScale, onSave, onCancel }: {
       onBlur={commit}
       onPaste={e => {
         e.preventDefault()
-        // eslint-disable-next-line @typescript-eslint/no-deprecated
-        document.execCommand('insertText', false, e.clipboardData.getData('text/plain'))
+        const text = e.clipboardData.getData('text/plain')
+        const sel = window.getSelection()
+        if (!sel?.rangeCount) return
+        const range = sel.getRangeAt(0)
+        range.deleteContents()
+        range.insertNode(document.createTextNode(text))
+        range.collapse(false)
+        sel.removeAllRanges()
+        sel.addRange(range)
       }}
       style={{
         position: 'absolute', inset: 0,
@@ -1376,22 +1389,33 @@ export function Editor({ jobId }: { jobId: string }) {
   async function saveTextEdit(spanIdx: number, newText: string) {
     setEditingSpanIdx(null)
     const span = textSpans[spanIdx]
-    if (!span || newText === span.text) return
-    await fetch(`/pdf/api/pdf/${jobId}/edit-text`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        page:     currentPage,
-        bbox:     span.bbox,
-        origin:   span.origin,
-        new_text: newText,
-        font:     span.font,
-        size:     span.size,
-        flags:    span.flags,
-        color:    span.color,
-      }),
-    })
-    setVersion(v => v + 1)
+    // Strip trailing newlines that contentEditable may inject on blur
+    const normalized = newText.replace(/\n+$/, '')
+    if (!span || normalized === span.text) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/pdf/api/pdf/${jobId}/edit-text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          page:     currentPage,
+          bbox:     span.bbox,
+          origin:   span.origin,
+          new_text: normalized,
+          font:     span.font,
+          size:     span.size,
+          flags:    span.flags,
+          color:    span.color,
+        }),
+      })
+      if (!res.ok) {
+        console.error('edit-text failed', res.status)
+        return
+      }
+      setVersion(v => v + 1)
+    } finally {
+      setSaving(false)
+    }
   }
 
   function onSvgDown(e: React.MouseEvent<SVGSVGElement>) {
@@ -2191,11 +2215,14 @@ export function Editor({ jobId }: { jobId: string }) {
                       </div>
                     )
                   }
+                  const editing = editingSpanIdx !== null
                   return (
-                    <div key={sidx} onClick={() => setEditingSpanIdx(sidx)}
+                    <div key={sidx} onClick={editing ? undefined : () => setEditingSpanIdx(sidx)}
                       style={{ position: 'absolute', left: bx0, top: by0, width: w, height: h,
-                        cursor: 'text', border: '1px solid transparent', borderRadius: 1, zIndex: 10 }}
-                      className="hover:border-blue-400/70 hover:bg-blue-50/30 transition-colors" />
+                        cursor: editing ? 'default' : 'text',
+                        border: '1px solid transparent', borderRadius: 1, zIndex: 10,
+                        pointerEvents: editing ? 'none' : 'auto' }}
+                      className={editing ? '' : 'hover:border-blue-400/70 hover:bg-blue-50/30 transition-colors'} />
                   )
                 })}
                 <div className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[10px] text-fg-tertiary bg-bg-raised/70 px-1.5 rounded select-none">{i + 1}</div>
@@ -2426,11 +2453,14 @@ export function Editor({ jobId }: { jobId: string }) {
                     </div>
                   )
                 }
+                const editing = editingSpanIdx !== null
                 return (
-                  <div key={idx} onClick={() => setEditingSpanIdx(idx)}
+                  <div key={idx} onClick={editing ? undefined : () => setEditingSpanIdx(idx)}
                     style={{ position: 'absolute', left: bx0, top: by0, width: w, height: h,
-                      cursor: 'text', border: '1px solid transparent', borderRadius: 1, zIndex: 10 }}
-                    className="hover:border-blue-400/70 hover:bg-blue-50/30 transition-colors" />
+                      cursor: editing ? 'default' : 'text',
+                      border: '1px solid transparent', borderRadius: 1, zIndex: 10,
+                      pointerEvents: editing ? 'none' : 'auto' }}
+                    className={editing ? '' : 'hover:border-blue-400/70 hover:bg-blue-50/30 transition-colors'} />
                 )
               })}
             </div>
