@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { cookies, headers } from 'next/headers'
 import db from './db'
 import { createSession, setSessionCookie, destroySession, clearSessionCookie, getSession, requireAdmin } from './auth'
-import { sendInvite, sendSecurityAlert, sendEmailOTP } from './mailer'
+import { sendInvite } from './mailer'
 import { writeAudit } from './audit'
 
 const ALLOWLIST = new Set(['john@adams-ai.com'])
@@ -89,23 +89,30 @@ export async function passwordLogin(formData: FormData) {
     return { error: 'Invalid credentials' }
   }
 
-  // Password verified — issue an emailed OTP as second factor
-  const { randomInt, randomBytes, createHash } = await import('crypto')
-  const code = String(randomInt(0, 1000000)).padStart(6, '0')
-  const otpSalt = randomBytes(16).toString('hex')
-  const codeHash = createHash('sha256').update(code + otpSalt).digest('hex')
+  // Password verified — create session directly (password-only auth)
+  const userId = user.id as string
+  const memberRows = await db`SELECT org_id FROM org_members WHERE user_id = ${userId} ORDER BY joined_at ASC LIMIT 1`
+  let orgId = (memberRows[0]?.org_id ?? null) as string | null
 
-  const challengeRows = await db`
-    INSERT INTO email_otp_challenges (user_id, code_hash, salt)
-    VALUES (${user.id as string}, ${codeHash}, ${otpSalt})
-    RETURNING id
-  `
-  const challengeId = challengeRows[0].id as string
+  const inviteToken = jar.get(INVITE_TOKEN_COOKIE)?.value
+  if (inviteToken) {
+    orgId = await acceptInvite(userId, inviteToken, jar) ?? orgId
+  }
 
-  await sendEmailOTP(email, code)
+  jar.delete(EMAIL_COOKIE)
+  const { ip, ua } = await getRequestMeta()
+  const { sessionId, timeoutHours } = await createSession(userId, orgId, { ip, ua })
+  await setSessionCookie(sessionId, timeoutHours)
+  await writeAudit({ orgId, actorId: userId, actorEmail: email, action: 'auth.sign_in', metadata: { method: 'password' } })
 
-  jar.set(OTP_CHALLENGE_COOKIE, challengeId, { ...COOKIE_OPTS, maxAge: 10 * 60 })
-  redirect('/login/verify')
+  const mustReset = await db`SELECT must_reset_password FROM users WHERE id = ${userId}`
+  if (mustReset[0]?.must_reset_password) {
+    redirect('/login/reset-password')
+  }
+
+  const returnTo = jar.get('foundry_return_to')?.value
+  jar.delete('foundry_return_to')
+  redirect(returnTo && returnTo.startsWith('/') ? returnTo : '/')
 }
 
 export async function verifyEmailCode(formData: FormData) {
