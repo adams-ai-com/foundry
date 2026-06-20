@@ -1,16 +1,11 @@
 'use client'
 
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { colIndexToLetter } from '@foundry/shared'
 import type { CellAddress } from '@foundry/shared'
 import { useHyperFormulaContext } from '@/lib/hyperformula-context'
 import { applyNumFormat } from '@/lib/format-utils'
-
-const ROWS = 100
-const COLS = 26
-const COL_WIDTH = 100
-const ROW_HEIGHT = 24
-const HEADER_WIDTH = 50
+import { ROWS, COLS, COL_WIDTH, ROW_HEIGHT, HEADER_WIDTH } from '@/lib/sheet-constants'
 
 function inRange(
   row: number, col: number,
@@ -29,14 +24,34 @@ interface GridProps {
   selectionEnd: CellAddress | null
   onSelect: (addr: CellAddress) => void
   onSelectionEnd: (addr: CellAddress | null) => void
+  findMatches?: { row: number; col: number }[]
+  findMatchIndex?: number
 }
 
-export function Grid({ selected, selectionEnd, onSelect, onSelectionEnd }: GridProps) {
+export function Grid({ selected, selectionEnd, onSelect, onSelectionEnd, findMatches, findMatchIndex }: GridProps) {
   const { getCellValue, setCellValue, getCellFormula, getCellFormat, setRangeFormat, undo, redo, bulkSetCells } = useHyperFormulaContext()
+  const [colWidths, setColWidths] = useState<number[]>(() => Array(COLS).fill(COL_WIDTH))
 
   const commitValue = useCallback((addr: CellAddress, value: string) => {
     setCellValue(addr, value)
   }, [setCellValue])
+
+  function startColResize(e: React.MouseEvent, col: number) {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const startWidth = colWidths[col]
+    const onMove = (me: MouseEvent) => {
+      const newWidth = Math.max(40, startWidth + me.clientX - startX)
+      setColWidths(prev => { const next = [...prev]; next[col] = newWidth; return next })
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
 
   useEffect(() => {
     const inCellInput = () =>
@@ -55,7 +70,6 @@ export function Grid({ selected, selectionEnd, onSelect, onSelectionEnd }: GridP
       const ctrl = e.ctrlKey || e.metaKey
       const { row, col } = selected
 
-      // Ctrl shortcuts (skip when typing inside a cell-input, except undo/redo which apply globally)
       if (ctrl) {
         switch (e.key.toLowerCase()) {
           case 'z':
@@ -159,21 +173,32 @@ export function Grid({ selected, selectionEnd, onSelect, onSelectionEnd }: GridP
     }
   }, [selected, selectionEnd, onSelect, onSelectionEnd, commitValue, getCellFormat, getCellFormula, getCellValue, setRangeFormat, undo, redo, bulkSetCells])
 
+  const totalWidth = HEADER_WIDTH + colWidths.reduce((sum, w) => sum + w, 0)
+
+  const activeMatchKey = (findMatches && findMatchIndex !== undefined && findMatches[findMatchIndex])
+    ? `${findMatches[findMatchIndex].row}:${findMatches[findMatchIndex].col}`
+    : null
+  const findMatchSet = new Set(findMatches?.map(m => `${m.row}:${m.col}`) ?? [])
+
   return (
     <div className="flex-1 overflow-auto focus:outline-none" tabIndex={0}>
-      <div style={{ width: HEADER_WIDTH + COLS * COL_WIDTH, position: 'relative' }}>
+      <div style={{ width: totalWidth, position: 'relative' }}>
         {/* Corner */}
-        <div className="cell header sticky top-0 left-0 z-20 bg-gray-50" style={{ width: HEADER_WIDTH, height: ROW_HEIGHT }} />
+        <div className="cell header sticky top-0 left-0 z-20" style={{ width: HEADER_WIDTH, height: ROW_HEIGHT }} />
 
         {/* Column headers */}
         <div className="flex sticky top-0 z-10" style={{ marginLeft: HEADER_WIDTH }}>
           {Array.from({ length: COLS }, (_, col) => (
             <div
               key={col}
-              className={`cell header border-l ${selected.col === col ? 'bg-blue-50 text-blue-700' : ''}`}
-              style={{ width: COL_WIDTH, minWidth: COL_WIDTH }}
+              className={`cell header border-l relative ${selected.col === col ? 'header-active' : ''}`}
+              style={{ width: colWidths[col], minWidth: colWidths[col] }}
             >
               {colIndexToLetter(col)}
+              <div
+                className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize z-10 hover:bg-accent/30"
+                onMouseDown={(e) => startColResize(e, col)}
+              />
             </div>
           ))}
         </div>
@@ -182,7 +207,7 @@ export function Grid({ selected, selectionEnd, onSelect, onSelectionEnd }: GridP
         {Array.from({ length: ROWS }, (_, row) => (
           <div key={row} className="flex">
             <div
-              className={`cell header border-t sticky left-0 z-10 ${selected.row === row ? 'bg-blue-50 text-blue-700' : ''}`}
+              className={`cell header border-t sticky left-0 z-10 ${selected.row === row ? 'header-active' : ''}`}
               style={{ width: HEADER_WIDTH, minWidth: HEADER_WIDTH }}
             >
               {row + 1}
@@ -199,13 +224,22 @@ export function Grid({ selected, selectionEnd, onSelect, onSelectionEnd }: GridP
                 fmt.italic    ? 'italic'     : '',
                 fmt.underline ? 'underline'  : '',
               ].filter(Boolean).join(' ')
+              const textAlign = fmt.align ?? (typeof rawValue === 'number' ? 'right' : 'left')
+              const cellKey = `${row}:${col}`
+              const isFindMatch = !isSelected && findMatchSet.has(cellKey)
+              const isFindActive = !isSelected && cellKey === activeMatchKey
 
               return (
                 <div
                   key={col}
                   data-testid={`cell-${row}-${col}`}
-                  className={`cell border-t border-l relative ${isSelected ? 'selected' : isInRange ? 'bg-blue-50' : ''} ${fontClasses}`}
-                  style={{ width: COL_WIDTH, minWidth: COL_WIDTH }}
+                  className={[
+                    'cell border-t border-l relative',
+                    isSelected ? 'selected' : isInRange ? 'in-range' : '',
+                    isFindActive ? 'find-match-active' : isFindMatch ? 'find-match' : '',
+                    fontClasses,
+                  ].filter(Boolean).join(' ')}
+                  style={{ width: colWidths[col], minWidth: colWidths[col], textAlign }}
                   onMouseDown={(e) => {
                     if (e.shiftKey) {
                       onSelectionEnd(addr)
@@ -224,6 +258,7 @@ export function Grid({ selected, selectionEnd, onSelect, onSelectionEnd }: GridP
                       onFocus={(e) => { e.currentTarget.select() }}
                       id={`cell-${row}-${col}`}
                       className={`cell-input absolute inset-0 w-full h-full px-1.5 text-sm bg-transparent outline-none ${fontClasses}`}
+                      style={{ textAlign }}
                       defaultValue={getCellFormula(addr) ?? String(rawValue ?? '')}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {

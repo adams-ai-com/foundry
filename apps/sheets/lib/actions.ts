@@ -9,6 +9,7 @@ export type CellFormat = {
   bold?: boolean
   italic?: boolean
   underline?: boolean
+  align?: 'left' | 'center' | 'right'
   numFormat?: 'general' | 'number' | 'currency' | 'percent' | 'date'
 }
 // keyed: sheetName → "row:col" → CellFormat (sparse — only formatted cells present)

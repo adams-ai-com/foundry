@@ -94,6 +94,24 @@ export function Toolbar({ selected, selectionEnd, onTogglePython, onToggleChart,
 
       <Separator />
 
+      <IconButton data-testid="btn-align-left" label="Align left" active={!fmt.align || fmt.align === 'left'} onClick={() => setRangeFormat(selected, selectionEnd, { align: 'left' })}>
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" d="M3 6h18M3 10h10M3 14h18M3 18h10"/>
+        </svg>
+      </IconButton>
+      <IconButton data-testid="btn-align-center" label="Align center" active={fmt.align === 'center'} onClick={() => setRangeFormat(selected, selectionEnd, { align: 'center' })}>
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" d="M3 6h18M7 10h10M3 14h18M7 18h10"/>
+        </svg>
+      </IconButton>
+      <IconButton data-testid="btn-align-right" label="Align right" active={fmt.align === 'right'} onClick={() => setRangeFormat(selected, selectionEnd, { align: 'right' })}>
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" d="M3 6h18M11 10h10M3 14h18M11 18h10"/>
+        </svg>
+      </IconButton>
+
+      <Separator />
+
       <select
         data-testid="select-numformat"
         className="text-xs border border-border rounded px-1 py-0.5 bg-bg-surface text-fg-primary focus:outline-none focus:ring-1 focus:ring-accent"

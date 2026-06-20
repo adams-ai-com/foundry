@@ -9,7 +9,7 @@ export default async function EditorPage({ params }: { params: Promise<{ id: str
   const spreadsheet = await getSpreadsheet(id)
   if (!spreadsheet) notFound()
   return (
-    <div className="h-screen flex flex-col bg-white">
+    <div className="h-screen flex flex-col bg-bg-base">
       <SpreadsheetEditor spreadsheet={spreadsheet} />
     </div>
   )

@@ -61,7 +61,7 @@
 
 .cell {
   @apply border-b border-r text-sm px-1.5 overflow-hidden whitespace-nowrap text-ellipsis cursor-cell;
-  border-color: rgb(var(--border));
+  border-color: rgb(var(--border) / 0.5);
   color: rgb(var(--fg-primary));
   height: 24px;
   line-height: 24px;
@@ -71,10 +71,26 @@
   --tw-ring-color: rgb(var(--accent));
 }
 .cell.selected {
-  background-color: rgb(var(--bg-active));
+  background-color: rgb(var(--accent) / 0.09);
+}
+.cell.in-range {
+  background-color: rgb(var(--accent) / 0.05);
+}
+.cell.find-match {
+  background-color: rgb(253 224 71 / 0.45);
+}
+.cell.find-match-active {
+  background-color: rgb(251 191 36 / 0.65);
+  outline: 1px solid rgb(217 119 6 / 0.8);
+  outline-offset: -1px;
 }
 .cell.header {
   background-color: rgb(var(--bg-surface));
-  color: rgb(var(--fg-secondary));
+  color: rgb(var(--fg-tertiary));
+  border-color: rgb(var(--border) / 0.65);
   @apply text-xs font-medium text-center cursor-default select-none;
+}
+.cell.header.header-active {
+  background-color: rgb(var(--accent) / 0.07);
+  color: rgb(var(--accent));
 }

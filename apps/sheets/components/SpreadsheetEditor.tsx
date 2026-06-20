@@ -77,16 +77,16 @@ export function SpreadsheetEditor({ spreadsheet }: { spreadsheet: Spreadsheet })
   }, [])
 
   const saveIndicator =
-    saveState === 'saving'  ? { dot: 'bg-amber-400 animate-pulse', text: 'Saving…',  textColor: 'text-gray-400' } :
+    saveState === 'saving'  ? { dot: 'bg-amber-400 animate-pulse', text: 'Saving…',  textColor: 'text-fg-tertiary' } :
     saveState === 'unsaved' ? { dot: 'bg-amber-400',               text: 'Unsaved',  textColor: 'text-amber-600' } :
-                              { dot: 'bg-green-500',               text: 'Saved',    textColor: 'text-gray-400' }
+                              { dot: 'bg-green-500',               text: 'Saved',    textColor: 'text-fg-tertiary' }
 
   return (
     <>
-      <div className="flex items-center gap-4 px-4 py-2.5 bg-white border-b border-gray-200 shrink-0">
+      <div className="flex items-center gap-4 px-4 py-2.5 bg-bg-raised border-b border-border shrink-0">
         <button
           onClick={handleBack}
-          className="flex items-center gap-1.5 text-gray-500 hover:text-gray-900 text-sm font-medium transition-colors shrink-0 group"
+          className="flex items-center gap-1.5 text-fg-secondary hover:text-fg-primary text-sm font-medium transition-colors shrink-0 group"
         >
           <svg className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -101,7 +101,7 @@ export function SpreadsheetEditor({ spreadsheet }: { spreadsheet: Spreadsheet })
           onBlur={handleTitleBlur}
           placeholder="Untitled"
           data-testid="spreadsheet-title"
-          className="flex-1 text-base font-semibold text-gray-900 bg-transparent border-none outline-none placeholder-gray-300 min-w-0"
+          className="flex-1 text-base font-semibold text-fg-primary bg-transparent border-none outline-none placeholder:text-fg-tertiary/50 min-w-0"
         />
         <div className="flex items-center gap-2 shrink-0" data-testid="save-state">
           <span className={`w-2 h-2 rounded-full shrink-0 ${saveIndicator.dot}`} />

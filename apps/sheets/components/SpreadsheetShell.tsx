@@ -1,14 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Grid } from './Grid'
 import { FormulaBar } from './FormulaBar'
+import { FindBar } from './FindBar'
 import { Toolbar } from './Toolbar'
 import { PythonPanel } from './PythonPanel'
 import { ChartPanel } from './ChartPanel'
 import { HyperFormulaProvider, useHyperFormulaContext } from '@/lib/hyperformula-context'
 import type { CellAddress } from '@foundry/shared'
 import type { SheetData, CellFormats, ChartDef } from '@/lib/actions'
+import { ROWS, COLS } from '@/lib/sheet-constants'
 
 interface SpreadsheetShellProps {
   initialData?: SheetData
@@ -105,7 +107,84 @@ function SheetContent({
   onToggleChart,
   onChartsChange,
 }: SheetContentProps) {
-  const { getSheetNames, addSheet } = useHyperFormulaContext()
+  const { getSheetNames, addSheet, getCellValue, getCellFormula, setCellValue } = useHyperFormulaContext()
+
+  // Find & Replace
+  const [findOpen, setFindOpen] = useState(false)
+  const [findQuery, setFindQuery] = useState('')
+  const [replaceQuery, setReplaceQuery] = useState('')
+  const [findMatches, setFindMatches] = useState<{ row: number; col: number }[]>([])
+  const [findMatchIndex, setFindMatchIndex] = useState(0)
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault()
+        setFindOpen(true)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  function runFind(q: string) {
+    setFindQuery(q)
+    if (!q.trim()) { setFindMatches([]); setFindMatchIndex(0); return }
+    const lower = q.toLowerCase()
+    const matches: { row: number; col: number }[] = []
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const addr: CellAddress = { sheet: activeSheet, row: r, col: c }
+        const formula = getCellFormula(addr)
+        const val = String(getCellValue(addr) ?? '')
+        if ((formula ?? val).toLowerCase().includes(lower)) matches.push({ row: r, col: c })
+      }
+    }
+    setFindMatches(matches)
+    setFindMatchIndex(0)
+    if (matches.length > 0) onSelect({ sheet: activeSheet, row: matches[0].row, col: matches[0].col })
+  }
+
+  function findStep(delta: number) {
+    if (!findMatches.length) return
+    const idx = (findMatchIndex + delta + findMatches.length) % findMatches.length
+    setFindMatchIndex(idx)
+    onSelect({ sheet: activeSheet, row: findMatches[idx].row, col: findMatches[idx].col })
+  }
+
+  function escapeRe(s: string) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  }
+
+  function replaceOne() {
+    if (!findMatches.length) return
+    const m = findMatches[findMatchIndex]
+    const addr: CellAddress = { sheet: activeSheet, ...m }
+    const formula = getCellFormula(addr)
+    const val = String(getCellValue(addr) ?? '')
+    setCellValue(addr, (formula ?? val).replace(new RegExp(escapeRe(findQuery), 'i'), replaceQuery))
+    runFind(findQuery)
+  }
+
+  function replaceAll() {
+    if (!findMatches.length) return
+    const re = new RegExp(escapeRe(findQuery), 'gi')
+    for (const m of [...findMatches]) {
+      const addr: CellAddress = { sheet: activeSheet, ...m }
+      const formula = getCellFormula(addr)
+      const val = String(getCellValue(addr) ?? '')
+      setCellValue(addr, (formula ?? val).replace(re, replaceQuery))
+    }
+    runFind(findQuery)
+  }
+
+  function closeFindBar() {
+    setFindOpen(false)
+    setFindQuery('')
+    setReplaceQuery('')
+    setFindMatches([])
+    setFindMatchIndex(0)
+  }
 
   function handleAddSheet() {
     const names = getSheetNames()
@@ -127,6 +206,21 @@ function SheetContent({
         chartOpen={chartOpen}
       />
       <FormulaBar selected={selected} selectionEnd={selectionEnd} />
+      {findOpen && (
+        <FindBar
+          query={findQuery}
+          replace={replaceQuery}
+          matchIndex={findMatchIndex}
+          matchCount={findMatches.length}
+          onQueryChange={runFind}
+          onReplaceChange={setReplaceQuery}
+          onPrev={() => findStep(-1)}
+          onNext={() => findStep(1)}
+          onReplace={replaceOne}
+          onReplaceAll={replaceAll}
+          onClose={closeFindBar}
+        />
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         <Grid
@@ -134,6 +228,8 @@ function SheetContent({
           selectionEnd={selectionEnd}
           onSelect={onSelect}
           onSelectionEnd={onSelectionEnd}
+          findMatches={findOpen ? findMatches : undefined}
+          findMatchIndex={findOpen ? findMatchIndex : undefined}
         />
 
         {chartOpen && (
@@ -158,7 +254,7 @@ function SheetContent({
             className={`text-xs px-3 py-0.5 rounded border font-medium transition-colors ${
               name === activeSheet
                 ? 'bg-bg-raised border-border text-fg-primary shadow-sm'
-                : 'border-transparent text-fg-secondary hover:text-fg-primary hover:bg-bg-raised hover:border-border'
+                : 'border-transparent text-fg-tertiary hover:text-fg-primary hover:bg-bg-raised hover:border-border'
             }`}
           >
             {name}
