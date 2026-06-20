@@ -259,18 +259,22 @@ const TOOLBAR_COLORS = [
   '#ffffff',
 ]
 
-function EditSpanToolbar({ style, pageW, spanLeft, spanTop, spanBottom, onChange }: {
-  style:       SpanStyle
-  pageW:       number
-  spanLeft:    number
-  spanTop:     number
-  spanBottom:  number
-  onChange:    (s: SpanStyle) => void
+function EditSpanToolbar({ style, pageW, spanLeft, spanTop, spanBottom, containerTop: _containerTop, onChange }: {
+  style:          SpanStyle
+  pageW:          number
+  spanLeft:       number
+  spanTop:        number
+  spanBottom:     number
+  containerTop?:  number  // page-relative top of the containing div; defaults to spanTop
+  onChange:       (s: SpanStyle) => void
 }) {
+  const containerTop = _containerTop ?? spanTop
   const W = 340
-  const left = Math.min(Math.max(spanLeft, 0), Math.max(0, pageW - W))
+  // container is positioned at spanLeft horizontally in all cases
+  const pageLeft = Math.min(Math.max(spanLeft, 0), Math.max(0, pageW - W))
+  const left = pageLeft - spanLeft
   const above = spanTop > 46
-  const top   = above ? spanTop - 46 : spanBottom + 4
+  const top = above ? (spanTop - containerTop) - 46 : (spanBottom - containerTop) + 4
 
   const familyLabel: Record<SpanStyle['family'], string> = { sans: 'Sans', serif: 'Serif', mono: 'Mono' }
   const cssFamily:   Record<SpanStyle['family'], string> = { sans: 'sans-serif', serif: 'serif', mono: 'monospace' }
@@ -1668,10 +1672,11 @@ export function Editor({ jobId }: { jobId: string }) {
       })
       const data = await res.json().catch(() => ({}))
       console.log('[PDF:edit] span save  → status=%d ok=%s response=%o', res.status, res.ok, data)
-      if (!res.ok) { return }
+      if (!res.ok) { toast('Text save failed — please try again'); return }
       setVersion(v => v + 1)
     } catch (err) {
       console.error('[PDF:edit] span save  → fetch error', err)
+      toast('Text save failed — please try again')
     } finally {
       setSaving(false)
     }
@@ -1709,10 +1714,11 @@ export function Editor({ jobId }: { jobId: string }) {
       })
       const data = await res.json().catch(() => ({}))
       console.log('[PDF:edit] insert  → status=%d ok=%s response=%o', res.status, res.ok, data)
-      if (!res.ok) { return }
+      if (!res.ok) { toast('Insert failed — please try again'); return }
       setVersion(v => v + 1)
     } catch (err) {
       console.error('[PDF:edit] insert  → fetch error', err)
+      toast('Insert failed — please try again')
     } finally {
       setSaving(false)
     }
@@ -2544,6 +2550,7 @@ export function Editor({ jobId }: { jobId: string }) {
                         style={style} pageW={dw2}
                         spanLeft={newTextPos.screenX} spanTop={newTextPos.screenY - lineH - DRAG_HANDLE_H}
                         spanBottom={newTextPos.screenY}
+                        containerTop={newTextPos.screenY - lineH}
                         onChange={s => setEditSpanStyle(s)} />
                       <NewTextInput renderScale={renderScale} style={style}
                         onMove={(dx, dy) => setNewTextPos(p => p ? {
@@ -2845,6 +2852,7 @@ export function Editor({ jobId }: { jobId: string }) {
                       style={style} pageW={dw}
                       spanLeft={newTextPos.screenX} spanTop={newTextPos.screenY - lineH - DRAG_HANDLE_H}
                       spanBottom={newTextPos.screenY}
+                      containerTop={newTextPos.screenY - lineH}
                       onChange={s => setEditSpanStyle(s)} />
                     <NewTextInput renderScale={renderScale} style={style}
                       onMove={(dx, dy) => setNewTextPos(p => p ? {
