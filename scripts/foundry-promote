@@ -219,15 +219,28 @@ else
   exit 1
 fi
 
-# 4. Verify production actually reaches the commit (affected apps only).
-# Coolify's gitea webhook auto-deploys, but its clone can fail transiently
-# (gitea SSH blips), leaving production silently on the old build.
+# 4. Explicitly trigger production deploys for affected apps + verify they land.
+# watch_paths is NOT set on production apps (they always rebuild on main push),
+# but we use the Coolify API to trigger directly — more reliable than the gitea
+# webhook which can fail transiently (SSH blips, Coolify queue backlog).
 PROD_APPS=/etc/foundry-promote/production-apps
+COOLIFY_TOKEN_FILE=/etc/foundry-promote/coolify.token
 prod_deadline=$(( $(date +%s) + DEPLOY_WAIT_SECS ))
 prod_stuck=""
-if [ -f "$PROD_APPS" ]; then
+if [ -f "$PROD_APPS" ] && [ -f "$COOLIFY_TOKEN_FILE" ]; then
+  COOLIFY_TOKEN=$(cat "$COOLIFY_TOKEN_FILE")
   while read -r uuid label; do
     [ -z "$uuid" ] && continue
+    is_affected "$label" || continue
+    curl -sf "https://coolify.adams-ai.com/api/v1/deploy?uuid=${uuid}&force=false" \
+      -H "Authorization: Bearer $COOLIFY_TOKEN" >>"$LOG" 2>&1 \
+      && log "  triggered production deploy: $label" \
+      || log "  WARN: could not trigger production deploy for $label — webhook fallback"
+  done < "$PROD_APPS"
+  # Wait for affected production apps to reach TARGET
+  while read -r uuid label; do
+    [ -z "$uuid" ] && continue
+    is_affected "$label" || continue
     while :; do
       container_is_current "$uuid" "$label" && break
       if [ "$(date +%s)" -ge "$prod_deadline" ]; then prod_stuck="$prod_stuck $label"; break; fi
