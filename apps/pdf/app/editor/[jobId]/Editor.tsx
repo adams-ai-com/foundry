@@ -338,10 +338,11 @@ function EditSpanToolbar({ style, pageW, spanLeft, spanTop, spanBottom, containe
   )
 }
 
-function EditSpanInput({ span, renderScale, style, onSave, onCancel }: {
+function EditSpanInput({ span, renderScale, style, onMove, onSave, onCancel }: {
   span:        TextSpan
   renderScale: number
   style:       SpanStyle
+  onMove:      (dx: number, dy: number) => void
   onSave:      (text: string) => void
   onCancel:    () => void
 }) {
@@ -375,48 +376,80 @@ function EditSpanInput({ span, renderScale, style, onSave, onCancel }: {
     onSave(getText())
   }
 
+  function startDrag(e: React.MouseEvent) {
+    e.preventDefault()
+    let lx = e.clientX, ly = e.clientY
+    function mm(me: MouseEvent) {
+      onMove(me.clientX - lx, me.clientY - ly)
+      lx = me.clientX; ly = me.clientY
+    }
+    function mu() {
+      document.removeEventListener('mousemove', mm)
+      document.removeEventListener('mouseup', mu)
+      ref.current?.focus()
+    }
+    document.addEventListener('mousemove', mm)
+    document.addEventListener('mouseup', mu)
+  }
+
   return (
-    <div
-      ref={ref}
-      contentEditable
-      suppressContentEditableWarning
-      onKeyDown={e => {
-        if (e.key === 'Enter')  { e.preventDefault(); commit() }
-        if (e.key === 'Escape') { committed.current = true; onCancel() }
-      }}
-      onBlur={commit}
-      onPaste={e => {
-        e.preventDefault()
-        const text = e.clipboardData.getData('text/plain')
-        const sel = window.getSelection()
-        if (!sel?.rangeCount) return
-        const range = sel.getRangeAt(0)
-        range.deleteContents()
-        range.insertNode(document.createTextNode(text))
-        range.collapse(false)
-        sel.removeAllRanges()
-        sel.addRange(range)
-      }}
-      style={{
-        position:   'absolute', inset: 0,
-        fontSize:   `${style.size * renderScale}px`,
-        fontFamily: cssFamily,
-        fontWeight: style.bold   ? 'bold'   : 'normal',
-        fontStyle:  style.italic ? 'italic' : 'normal',
-        color:      style.colorHex,
-        background: 'rgba(255,255,255,0.97)',
-        border:     '2px solid #3b82f6',
-        borderRadius: 2,
-        outline:    'none',
-        padding:    '0 1px',
-        lineHeight: 'normal',
-        whiteSpace: 'nowrap',
-        overflow:   'visible',
-        boxShadow:  '0 0 0 3px rgba(59,130,246,0.15)',
-        zIndex:     20,
-        cursor:     'text',
-      }}
-    />
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <div
+        onMouseDown={startDrag}
+        style={{
+          position: 'absolute', bottom: '100%', left: 0, right: 0, height: DRAG_HANDLE_H,
+          background: '#3b82f6', cursor: 'move',
+          borderRadius: '3px 3px 0 0',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
+          userSelect: 'none',
+        }}
+      >
+        {[0, 1, 2].map(i => (
+          <div key={i} style={{ width: 3, height: 3, borderRadius: '50%', background: 'rgba(255,255,255,0.8)' }} />
+        ))}
+      </div>
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        onKeyDown={e => {
+          if (e.key === 'Enter')  { e.preventDefault(); commit() }
+          if (e.key === 'Escape') { committed.current = true; onCancel() }
+        }}
+        onBlur={commit}
+        onPaste={e => {
+          e.preventDefault()
+          const text = e.clipboardData.getData('text/plain')
+          const sel = window.getSelection()
+          if (!sel?.rangeCount) return
+          const range = sel.getRangeAt(0)
+          range.deleteContents()
+          range.insertNode(document.createTextNode(text))
+          range.collapse(false)
+          sel.removeAllRanges()
+          sel.addRange(range)
+        }}
+        style={{
+          position:   'absolute', inset: 0,
+          fontSize:   `${style.size * renderScale}px`,
+          fontFamily: cssFamily,
+          fontWeight: style.bold   ? 'bold'   : 'normal',
+          fontStyle:  style.italic ? 'italic' : 'normal',
+          color:      style.colorHex,
+          background: 'rgba(255,255,255,0.97)',
+          border:     '2px solid #3b82f6',
+          borderRadius: 2,
+          outline:    'none',
+          padding:    '0 1px',
+          lineHeight: 'normal',
+          whiteSpace: 'nowrap',
+          overflow:   'visible',
+          boxShadow:  '0 0 0 3px rgba(59,130,246,0.15)',
+          zIndex:     20,
+          cursor:     'text',
+        }}
+      />
+    </div>
   )
 }
 
@@ -749,6 +782,7 @@ export function Editor({ jobId }: { jobId: string }) {
   const [editingSpanIdx, setEditingSpanIdx]   = useState<number | null>(null)
   const [editSpanStyle, setEditSpanStyle]     = useState<SpanStyle | null>(null)
   const [editSpanStyleDirty, setEditSpanStyleDirty] = useState(false)
+  const [editSpanOffset, setEditSpanOffset]   = useState<{dx: number; dy: number}>({dx: 0, dy: 0})
   // Phase 3: click-to-insert new text on blank space
   const [newTextPos, setNewTextPos] = useState<{ screenX: number; screenY: number; pdfX: number; pdfY: number } | null>(null)
   const [hoverPos,   setHoverPos]   = useState<{ x: number; y: number } | null>(null)
@@ -1031,6 +1065,7 @@ export function Editor({ jobId }: { jobId: string }) {
 
   // Initialize SpanStyle when a span is clicked for editing
   useEffect(() => {
+    setEditSpanOffset({dx: 0, dy: 0})
     if (editingSpanIdx === null) { setEditSpanStyle(null); setEditSpanStyleDirty(false); return }
     const span = textSpans[editingSpanIdx]
     if (span) { setEditSpanStyle(spanToStyle(span)); setEditSpanStyleDirty(false) }
@@ -1637,7 +1672,7 @@ export function Editor({ jobId }: { jobId: string }) {
     'edit-text': 'text',
   }
 
-  async function saveTextEdit(spanIdx: number, newText: string) {
+  async function saveTextEdit(spanIdx: number, newText: string, offset: {dx: number; dy: number}) {
     setEditingSpanIdx(null)
     const span  = textSpans[spanIdx]
     const style = editSpanStyle   // capture before async gap
@@ -1645,17 +1680,22 @@ export function Editor({ jobId }: { jobId: string }) {
     if (!span) return
     const textSame   = normalized === span.text
     const styleDirty = editSpanStyleDirty
-    console.log('[PDF:edit] span save  idx=%d page=%d old=%s new=%s textSame=%s styleDirty=%s style=%o',
+    const posDirty   = offset.dx !== 0 || offset.dy !== 0
+    console.log('[PDF:edit] span save  idx=%d page=%d old=%s new=%s textSame=%s styleDirty=%s posDirty=%s style=%o',
       spanIdx, currentPage, JSON.stringify(span.text.slice(0,40)), JSON.stringify(normalized.slice(0,40)),
-      textSame, styleDirty, style)
-    if (textSame && !styleDirty) {
+      textSame, styleDirty, posDirty, style)
+    if (textSame && !styleDirty && !posDirty) {
       console.log('[PDF:edit] span save  → skipped (no changes)')
       return
     }
+    const newOrigin = [
+      span.origin[0] + offset.dx / renderScale,
+      span.origin[1] + offset.dy / renderScale,
+    ]
     const payload = {
       page:          currentPage,
       bbox:          span.bbox,
-      origin:        span.origin,
+      origin:        newOrigin,
       new_text:      normalized,
       resolved_font: style ? styleToBase14(style.family, style.bold) : undefined,
       size:          style?.size  ?? span.size,
@@ -2569,16 +2609,20 @@ export function Editor({ jobId }: { jobId: string }) {
                   const w = bx1 - bx0; const h = by1 - by0
                   if (w < 2 || h < 2) return null
                   if (editingSpanIdx === sidx && editSpanStyle) {
+                    const ox = editSpanOffset.dx, oy = editSpanOffset.dy
                     return (
-                      <div key={sidx} style={{ position: 'absolute', left: bx0, top: by0, width: w, height: h }}>
+                      <React.Fragment key={sidx}>
                         <EditSpanToolbar
                           style={editSpanStyle} pageW={dw2}
-                          spanLeft={bx0} spanTop={by0} spanBottom={by1}
+                          spanLeft={bx0 + ox} spanTop={by0 + oy} spanBottom={by1 + oy}
                           onChange={s => { setEditSpanStyle(s); setEditSpanStyleDirty(true) }} />
-                        <EditSpanInput span={span} renderScale={renderScale} style={editSpanStyle}
-                          onSave={text => saveTextEdit(sidx, text)}
-                          onCancel={() => setEditingSpanIdx(null)} />
-                      </div>
+                        <div style={{ position: 'absolute', left: bx0 + ox, top: by0 + oy, width: w, height: h }}>
+                          <EditSpanInput span={span} renderScale={renderScale} style={editSpanStyle}
+                            onMove={(dx, dy) => setEditSpanOffset(o => ({ dx: o.dx + dx, dy: o.dy + dy }))}
+                            onSave={text => saveTextEdit(sidx, text, editSpanOffset)}
+                            onCancel={() => setEditingSpanIdx(null)} />
+                        </div>
+                      </React.Fragment>
                     )
                   }
                   const editing = editingSpanIdx !== null || newTextPos !== null
@@ -2871,16 +2915,20 @@ export function Editor({ jobId }: { jobId: string }) {
                 const w = bx1 - bx0; const h = by1 - by0
                 if (w < 2 || h < 2) return null
                 if (editingSpanIdx === idx && editSpanStyle) {
+                  const ox = editSpanOffset.dx, oy = editSpanOffset.dy
                   return (
-                    <div key={idx} style={{ position: 'absolute', left: bx0, top: by0, width: w, height: h }}>
+                    <React.Fragment key={idx}>
                       <EditSpanToolbar
                         style={editSpanStyle} pageW={dw}
-                        spanLeft={bx0} spanTop={by0} spanBottom={by1}
+                        spanLeft={bx0 + ox} spanTop={by0 + oy} spanBottom={by1 + oy}
                         onChange={s => { setEditSpanStyle(s); setEditSpanStyleDirty(true) }} />
-                      <EditSpanInput span={span} renderScale={renderScale} style={editSpanStyle}
-                        onSave={text => saveTextEdit(idx, text)}
-                        onCancel={() => setEditingSpanIdx(null)} />
-                    </div>
+                      <div style={{ position: 'absolute', left: bx0 + ox, top: by0 + oy, width: w, height: h }}>
+                        <EditSpanInput span={span} renderScale={renderScale} style={editSpanStyle}
+                          onMove={(dx, dy) => setEditSpanOffset(o => ({ dx: o.dx + dx, dy: o.dy + dy }))}
+                          onSave={text => saveTextEdit(idx, text, editSpanOffset)}
+                          onCancel={() => setEditingSpanIdx(null)} />
+                      </div>
+                    </React.Fragment>
                   )
                 }
                 const editing = editingSpanIdx !== null || newTextPos !== null
