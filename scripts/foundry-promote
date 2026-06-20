@@ -64,6 +64,7 @@ CHANGED=$(as_foundry git -C "$REPO" diff --name-only "gitea/main" "gitea/staging
 # (fallback: can't determine diff → treat all as affected).
 declare -A WATCH_PATHS
 WATCH_PATHS["pdf-staging"]="apps/pdf:packages:services/pdf-proc"
+WATCH_PATHS["mailserver-staging"]="services/mailserver:packages"
 WATCH_PATHS["sheets-staging"]="apps/sheets:packages"
 WATCH_PATHS["wiki-staging"]="apps/wiki:packages"
 WATCH_PATHS["docs-staging"]="apps/docs:packages"
