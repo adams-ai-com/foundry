@@ -317,7 +317,7 @@ export function Grid({
               {/* Row header */}
               <div
                 className={`cell header border-t sticky left-0 z-10 relative ${selected.row === row ? 'header-active' : ''}`}
-                style={{ width: HEADER_WIDTH, minWidth: HEADER_WIDTH, height: rowHeights[row], lineHeight: `${rowHeights[row]}px` }}
+                style={{ width: HEADER_WIDTH, minWidth: HEADER_WIDTH, minHeight: rowHeights[row] }}
                 onContextMenu={e => { e.preventDefault(); onContextMenu?.('row', row, e.clientX, e.clientY) }}
               >
                 {row + 1}
@@ -337,9 +337,9 @@ export function Grid({
                 const fmt = getCellFormat(addr)
                 const displayValue = applyNumFormat(rawValue, fmt.numFormat)
                 const fontClasses = [
-                  fmt.bold         ? 'font-bold'    : '',
-                  fmt.italic       ? 'italic'       : '',
-                  fmt.underline    ? 'underline'    : '',
+                  fmt.bold          ? 'font-bold'    : '',
+                  fmt.italic        ? 'italic'       : '',
+                  fmt.underline     ? 'underline'    : '',
                   fmt.strikethrough ? 'line-through' : '',
                 ].filter(Boolean).join(' ')
                 const textAlign = fmt.align ?? (typeof rawValue === 'number' ? 'right' : 'left')
@@ -354,8 +354,10 @@ export function Grid({
                 const cellStyle: React.CSSProperties = {
                   width: colWidths[col], minWidth: colWidths[col],
                   textAlign,
-                  height: rowHeights[row],
-                  lineHeight: `${rowHeights[row]}px`,
+                  // wrap text: use minHeight so the row expands; otherwise fixed height
+                  ...(fmt.wrapText
+                    ? { minHeight: rowHeights[row] }
+                    : { height: rowHeights[row], lineHeight: `${rowHeights[row]}px` }),
                   color: fmt.color,
                   backgroundColor: appliedFill,
                   ...(isFrozenCol ? { position: 'sticky', left: HEADER_WIDTH, zIndex: isFrozenRow ? 11 : 9 } : {}),
@@ -367,6 +369,7 @@ export function Grid({
                     data-testid={`cell-${row}-${col}`}
                     className={[
                       'cell border-t border-l relative',
+                      fmt.wrapText ? 'wrap-text' : '',
                       isSelected ? 'selected' : isInRange ? 'in-range' : '',
                       isFindActive ? 'find-match-active' : isFindMatch ? 'find-match' : '',
                       isFillPreview ? 'fill-preview' : '',

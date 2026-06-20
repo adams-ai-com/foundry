@@ -10,6 +10,7 @@ export type CellFormat = {
   italic?: boolean
   underline?: boolean
   strikethrough?: boolean
+  wrapText?: boolean
   align?: 'left' | 'center' | 'right'
   color?: string
   fillColor?: string

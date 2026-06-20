@@ -99,6 +99,12 @@ export function Toolbar({ selected, selectionEnd, onTogglePython, onToggleChart,
       <IconButton data-testid="btn-strikethrough" label="Strikethrough" active={!!fmt.strikethrough} onClick={() => toggleFormat('strikethrough')}>
         <span className="line-through">S</span>
       </IconButton>
+      <IconButton data-testid="btn-wrap-text" label="Wrap text" active={!!fmt.wrapText} onClick={() => setRangeFormat(selected, selectionEnd, { wrapText: !fmt.wrapText })}>
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" d="M3 6h18M3 10h11a4 4 0 010 8h-1"/>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M11 15l-2 2 2 2"/>
+        </svg>
+      </IconButton>
 
       <Separator />
 
