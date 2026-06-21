@@ -14,6 +14,7 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /app/apps/channels/.next/standalone ./
-COPY --from=builder /app/apps/channels/.next/static ./.next/static
+COPY --from=builder /app/apps/channels/.next/static ./apps/channels/.next/static
+COPY --from=builder /app/apps/channels/public ./apps/channels/public
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["node", "apps/channels/server.js"]

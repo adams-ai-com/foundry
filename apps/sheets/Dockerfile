@@ -14,6 +14,7 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /app/apps/sheets/.next/standalone ./
-COPY --from=builder /app/apps/sheets/.next/static ./.next/static
+COPY --from=builder /app/apps/sheets/.next/static ./apps/sheets/.next/static
+
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["node", "apps/sheets/server.js"]
