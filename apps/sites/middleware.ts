@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server"
 
 export function middleware(request: NextRequest) {
   if (!request.cookies.get("foundry_session")) {
-    const res = NextResponse.redirect(new URL("/login", request.url))
+    const res = NextResponse.redirect(`${request.nextUrl.origin}/login`)
     res.cookies.set("foundry_return_to", request.nextUrl.pathname + request.nextUrl.search, {
       httpOnly: true,
       secure: true,
