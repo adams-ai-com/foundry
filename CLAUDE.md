@@ -3,8 +3,8 @@
 pnpm monorepo (Turborepo). AGPL-licensed open-source workspace replacing MS 365 / Google Workspace: Mail (our own server), Docs, Sheets, Channels, Files, Wiki, Tasks, Decisions. Workspace-first architecture. AI-native. Adams AI manages self-hosted instances for verticals. Working copy lives here on the control box; running on foundry-srv.
 
 ## Remote host
-- **Server**: foundry-srv `142.93.61.78`
-- **SSH**: `sudo -u manager ssh -n -i ~manager/.ssh/id_ed25519 manager@142.93.61.78 '<cmd>'`
+- **Server**: foundry-srv `206.189.255.78` (reserved; eth0/outbound `147.182.185.3`)
+- **SSH**: `sudo -u manager ssh -n -i ~manager/.ssh/id_ed25519 manager@206.189.255.78 '<cmd>'`
 - **Repo on server**: cloned to `/var/www/foundry` as `foundry` unix user from `github.com/adams-ai-com/foundry`
 
 ## Deploying — converted apps: push to STAGING only (promotion is automatic)
