@@ -6,6 +6,10 @@
 	handle @wiki {
 		reverse_proxy wiki:3000
 	}
+	@pdf path /pdf /pdf/*
+	handle @pdf {
+		reverse_proxy pdf:3000
+	}
 	handle {
 		reverse_proxy workspace:3000
 	}

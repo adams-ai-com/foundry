@@ -68,6 +68,30 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # PDF processing engine (PyMuPDF + LibreOffice + pdf2docx). Internal only.
+  pdf-proc:
+    build:
+      context: https://github.com/adams-ai-com/foundry-pdf-proc.git#main
+    restart: unless-stopped
+    environment:
+      FOUNDRY_PDF_PROC_SECRET: ${PDF_PROC_SECRET:-change-me-pdf-proc-secret}
+    volumes:
+      - pdfdata:/data
+
+  # PDF app (editor UI). Talks to pdf-proc; no database needed.
+  pdf:
+    build:
+      context: .
+      dockerfile: apps/pdf/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      FOUNDRY_PDF_PROC_URL: http://pdf-proc:3200
+      FOUNDRY_PDF_PROC_SECRET: ${PDF_PROC_SECRET:-change-me-pdf-proc-secret}
+    depends_on:
+      - pdf-proc
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -83,8 +107,10 @@ services:
     depends_on:
       - workspace
       - wiki
+      - pdf
 
 volumes:
   pgdata:
   caddydata:
   caddyconfig:
+  pdfdata:
