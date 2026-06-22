@@ -1,7 +1,7 @@
 # Foundry self-host reverse proxy — single domain, path-routed per app.
 # Apps under a subpath keep their basePath prefix (no stripping).
 # FOUNDRY_DOMAIN: e.g. foundry.example.com (TLS auto); default :80 for local eval.
-{$FOUNDRY_DOMAIN::80} {
+{$FOUNDRY_DOMAIN} {
 	@wiki path /wiki /wiki/*
 	handle @wiki {
 		reverse_proxy wiki:3000
