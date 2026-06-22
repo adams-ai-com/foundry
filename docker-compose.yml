@@ -8,7 +8,8 @@
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector image (postgres 16 + the `vector` extension Channels' AI memory needs).
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_USER: foundry
@@ -36,6 +37,7 @@ services:
       - ./apps/docs/lib/schema.sql:/sql/foundry_docs.sql:ro
       - ./apps/sheets/lib/schema.sql:/sql/foundry_sheets.sql:ro
       - ./apps/sites/lib/schema.sql:/sql/foundry_sites.sql:ro
+      - ./apps/channels/scripts:/sql/channels:ro
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
@@ -46,6 +48,13 @@ services:
           n=$$(psql -h postgres -U foundry -d "$$db" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")
           if [ "$$n" = "0" ]; then echo "migrating $$db"; psql -h postgres -U foundry -d "$$db" -v ON_ERROR_STOP=1 -f "/sql/$$db.sql"; else echo "$$db already migrated (skip)"; fi
         done
+        # Channels: ordered multi-file migration (base then c2..c8), once.
+        cn=$$(psql -h postgres -U foundry -d foundry_channels -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")
+        if [ "$$cn" = "0" ]; then
+          for f in migrate migrate-c2 migrate-c3 migrate-c4 migrate-c5 migrate-c6 migrate-c7 migrate-c8; do
+            echo "channels: applying $$f"; psql -h postgres -U foundry -d foundry_channels -v ON_ERROR_STOP=1 -f "/sql/channels/$$f.sql"
+          done
+        else echo "foundry_channels already migrated (skip)"; fi
         echo "migrations applied"
     restart: "no"
 
@@ -110,6 +119,20 @@ services:
       NODE_ENV: production
       PORT: 3000
       DATABASE_URL: postgresql://foundry:${POSTGRES_PASSWORD:-foundry}@postgres:5432/foundry_sites
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  channels:
+    build:
+      context: .
+      dockerfile: apps/channels/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      CHANNELS_DATABASE_URL: postgresql://foundry:${POSTGRES_PASSWORD:-foundry}@postgres:5432/foundry_channels
+      # Optional: VAPID_* (web push), LIVEKIT_API_KEY/SECRET + NEXT_PUBLIC_LIVEKIT_URL (video calls).
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -214,6 +237,7 @@ services:
       - docs
       - sheets
       - sites
+      - channels
 
 volumes:
   pgdata:
