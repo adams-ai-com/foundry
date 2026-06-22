@@ -4,6 +4,11 @@ import type { NextRequest } from 'next/server'
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // Health check (Harbor blue-green liveness) — never gated
+  if (pathname === '/api/health' || pathname === '/pdf/api/health') {
+    return NextResponse.next()
+  }
+
   // Signing pages and their API routes are token-gated, not session-gated
   if (pathname.startsWith('/sign/') || pathname.startsWith('/pdf/sign/') ||
       pathname.startsWith('/api/sign/') || pathname.startsWith('/pdf/api/sign/')) {
