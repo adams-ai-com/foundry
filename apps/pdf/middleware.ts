@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server'
 
 export function middleware(request: NextRequest) {
   if (!request.cookies.get('foundry_session')) {
-    return NextResponse.redirect(new URL('/login', 'https://foundry.adams-ai.com'))
+    return NextResponse.redirect(new URL('/login', request.url))
   }
   return NextResponse.next()
 }

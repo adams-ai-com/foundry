@@ -75,7 +75,10 @@ export async function buildApi() {
 
 export async function startApi() {
   const app = await buildApi()
-  await app.listen({ port: config.apiPort, host: '127.0.0.1' })
+  // Bind host configurable: 0.0.0.0 for containers (API is x-api-key auth'd and
+  // meant to sit on an internal network, not exposed publicly). Set API_HOST=127.0.0.1
+  // for a single-host loopback-only deployment.
+  await app.listen({ port: config.apiPort, host: process.env.API_HOST ?? '0.0.0.0' })
   console.log(`Mail API listening on port ${config.apiPort}`)
   return app
 }

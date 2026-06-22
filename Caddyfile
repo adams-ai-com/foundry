@@ -10,6 +10,10 @@
 	handle @pdf {
 		reverse_proxy pdf:3000
 	}
+	@mail path /mail /mail/*
+	handle @mail {
+		reverse_proxy mail:3000
+	}
 	handle {
 		reverse_proxy workspace:3000
 	}

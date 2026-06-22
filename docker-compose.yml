@@ -92,6 +92,62 @@ services:
     depends_on:
       - pdf-proc
 
+  # Mail server: REST API (mail app talks to it) + optional SMTP. Internal only.
+  mailserver:
+    build:
+      context: .
+      dockerfile: services/mailserver/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://foundry:${POSTGRES_PASSWORD:-foundry}@postgres:5432/foundry_mail
+      API_PORT: 3002
+      API_KEY: ${MAIL_API_KEY:-change-me-mail-api-key}
+      MAIL_DOMAIN: ${FOUNDRY_DOMAIN:-localhost}
+      ATTACHMENTS_DIR: /data/attachments
+      # Outbound email needs an SMTP relay (set SMTP_RELAY_* in .env); without it, mail is internal-only.
+    volumes:
+      - maildata:/data/attachments
+    depends_on:
+      mail-migrate:
+        condition: service_completed_successfully
+
+  # One-shot: apply the mail schema and provision a default account ('default').
+  mail-migrate:
+    image: postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-foundry}
+    volumes:
+      - ./services/mailserver/src/schema.sql:/sql/mail.sql:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        psql -h postgres -U foundry -d foundry_mail -v ON_ERROR_STOP=1 -f /sql/mail.sql
+        psql -h postgres -U foundry -d foundry_mail -c "INSERT INTO accounts (id, domain, display_name) VALUES ('default', '${FOUNDRY_DOMAIN:-localhost}', 'Foundry Mail') ON CONFLICT (id) DO NOTHING;"
+        echo "mail migrated"
+    restart: "no"
+
+  mail:
+    build:
+      context: .
+      dockerfile: apps/mail/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      MAILSERVER_URL: http://mailserver:3002
+      MAILSERVER_HEALTH_URL: http://mailserver:3002/health
+      MAILSERVER_API_KEY: ${MAIL_API_KEY:-change-me-mail-api-key}
+      MAILSERVER_ACCOUNT_ID: default
+      NEXT_PUBLIC_DISPLAY_NAME: Foundry Mail
+      NEXT_PUBLIC_MAIL_FROM: ${MAIL_FROM:-foundry@localhost}
+    depends_on:
+      - mailserver
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -108,9 +164,11 @@ services:
       - workspace
       - wiki
       - pdf
+      - mail
 
 volumes:
   pgdata:
   caddydata:
   caddyconfig:
   pdfdata:
+  maildata:
