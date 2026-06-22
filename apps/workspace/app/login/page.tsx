@@ -30,10 +30,16 @@ export default async function LoginPage() {
   const host = hdrs.get('host') ?? ''
   const org = await getOrgFromHost(host)
 
-  const heading = org ? `Sign in to ${org.name}` : 'Sign in to Foundry'
-  const subheading = org
-    ? 'Enter your email address to continue.'
-    : "Enter your email address and we'll verify your identity."
+  // First run: no users yet → create the admin account.
+  const userCount = await db`SELECT COUNT(*)::int AS n FROM users`
+  const firstRun = (userCount[0]?.n as number ?? 0) === 0
+
+  const heading = firstRun
+    ? 'Welcome to Foundry'
+    : org ? `Sign in to ${org.name}` : 'Sign in to Foundry'
+  const subheading = firstRun
+    ? 'Create the first administrator account to get started.'
+    : 'Enter your email and password to continue.'
 
   return (
     <AuthShell>
@@ -47,7 +53,7 @@ export default async function LoginPage() {
           </p>
         </div>
 
-        <LoginForm />
+        <LoginForm firstRun={firstRun} />
 
         <p className="mt-6 text-center text-[11.5px] text-fg-tertiary leading-relaxed">
           By signing in you agree to keep your access credentials private.

@@ -43,14 +43,12 @@ export async function getSession(): Promise<SessionUser | null> {
 export async function requireSession(): Promise<SessionUser> {
   const session = await getSession()
   if (!session) redirect('/login')
-  if (session.totpEnforced && !session.hasTotpSecret) redirect('/login/setup')
   return session
 }
 
 export async function requireAdmin(): Promise<SessionUser> {
   const session = await getSession()
   if (!session) redirect('/login')
-  if (session.totpEnforced && !session.hasTotpSecret) redirect('/login/setup')
   if (session.role !== 'owner' && session.role !== 'admin') redirect('/')
   return session
 }
@@ -120,4 +118,30 @@ export async function setSessionCookie(sessionId: string, timeoutHours: number =
 export async function clearSessionCookie() {
   const jar = await cookies()
   jar.delete(SESSION_COOKIE)
+}
+
+// ── Password hashing (scrypt; no external dependency) ──────────────────────
+import { scrypt as _scrypt, randomBytes, timingSafeEqual } from 'crypto'
+import { promisify } from 'util'
+const scryptAsync = promisify(_scrypt)
+
+export async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16)
+  const derived = (await scryptAsync(password, salt, 64)) as Buffer
+  return `scrypt$${salt.toString('hex')}$${derived.toString('hex')}`
+}
+
+export async function verifyPassword(password: string, stored: string | null | undefined): Promise<boolean> {
+  if (!stored) return false
+  const parts = stored.split('$')
+  if (parts.length !== 3 || parts[0] !== 'scrypt') return false
+  const salt = Buffer.from(parts[1], 'hex')
+  const expected = Buffer.from(parts[2], 'hex')
+  let derived: Buffer
+  try {
+    derived = (await scryptAsync(password, salt, expected.length)) as Buffer
+  } catch {
+    return false
+  }
+  return expected.length === derived.length && timingSafeEqual(expected, derived)
 }

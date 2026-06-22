@@ -3,12 +3,11 @@
 import { redirect } from 'next/navigation'
 import { cookies, headers } from 'next/headers'
 import db from './db'
-import { createSession, setSessionCookie, destroySession, clearSessionCookie, getSession, requireAdmin } from './auth'
+import { createSession, setSessionCookie, destroySession, clearSessionCookie, getSession, requireAdmin, hashPassword, verifyPassword } from './auth'
 import { generateSecret, verifyCode } from './totp'
 import { sendInvite, sendSecurityAlert } from './mailer'
 import { writeAudit } from './audit'
 
-const ALLOWLIST = new Set(['john@adams-ai.com'])
 const EMAIL_COOKIE = 'foundry_login_email'
 const PENDING_SECRET_COOKIE = 'foundry_totp_pending'
 const INVITE_TOKEN_COOKIE = 'foundry_invite'
@@ -31,26 +30,82 @@ async function getRequestMeta(): Promise<{ ip: string | null; ua: string | null 
   return { ip, ua }
 }
 
-export async function submitEmail(formData: FormData) {
+export async function login(formData: FormData) {
   const email = (formData.get('email') as string ?? '').trim().toLowerCase()
-  if (!email || !email.includes('@')) return { error: 'Valid email required' }
+  const password = (formData.get('password') as string ?? '')
+  if (!email || !password) return { error: 'Email and password are required' }
+  const invalid = { error: 'Invalid email or password' }
 
-  if (!ALLOWLIST.has(email)) {
-    const rows = await db`
-      SELECT u.id FROM users u
-      JOIN org_members m ON m.user_id = u.id
-      WHERE u.email = ${email}
-      LIMIT 1
-    `
-    if (!rows.length) {
-      await writeAudit({ orgId: null, actorEmail: email, action: 'auth.sign_in_failed', metadata: { reason: 'not_allowed' } })
-      return { error: 'Access denied' }
-    }
+  const rows = await db`
+    SELECT id, password_hash, deactivated_at, totp_failed_count, totp_locked_until
+    FROM users WHERE email = ${email}
+  `
+  const user = rows[0]
+  if (!user) {
+    await writeAudit({ orgId: null, actorEmail: email, action: 'auth.sign_in_failed', metadata: { reason: 'no_user' } })
+    return invalid
+  }
+  if (user.deactivated_at) {
+    return { error: 'This account has been deactivated. Contact your administrator.' }
+  }
+  if (user.totp_locked_until && new Date(user.totp_locked_until as string) > new Date()) {
+    const mins = Math.ceil((new Date(user.totp_locked_until as string).getTime() - Date.now()) / 60000)
+    return { error: `Too many failed attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.` }
   }
 
-  const jar = await cookies()
-  jar.set(EMAIL_COOKIE, email, { ...COOKIE_OPTS, maxAge: 10 * 60 })
-  redirect('/login/verify')
+  if (!(await verifyPassword(password, user.password_hash as string | null))) {
+    await db`
+      UPDATE users SET
+        totp_failed_count = totp_failed_count + 1,
+        totp_locked_until = CASE
+          WHEN totp_failed_count + 1 >= ${TOTP_LOCK_THRESHOLD}
+          THEN NOW() + (${TOTP_LOCK_MINUTES} * INTERVAL '1 minute')
+          ELSE totp_locked_until END
+      WHERE id = ${user.id}
+    `
+    await writeAudit({ orgId: null, actorId: user.id as string, actorEmail: email, action: 'auth.sign_in_failed', metadata: { reason: 'bad_password' } })
+    return invalid
+  }
+
+  await db`UPDATE users SET totp_failed_count = 0, totp_locked_until = NULL WHERE id = ${user.id}`
+  const orgRows = await db`SELECT org_id FROM org_members WHERE user_id = ${user.id} LIMIT 1`
+  const orgId = (orgRows[0]?.org_id ?? null) as string | null
+  const { ip, ua } = await getRequestMeta()
+  const { sessionId, timeoutHours } = await createSession(user.id as string, orgId, { ip, ua })
+  await setSessionCookie(sessionId, timeoutHours)
+  await writeAudit({ orgId, actorId: user.id as string, actorEmail: email, action: 'auth.sign_in' })
+  redirect('/')
+}
+
+// First-run only: if no users exist, the first account becomes the admin/owner.
+// Once any user exists this is closed (further users come via invite).
+export async function registerFirstAdmin(formData: FormData) {
+  const countRows = await db`SELECT COUNT(*)::int AS n FROM users`
+  if ((countRows[0].n as number) > 0) {
+    return { error: 'Registration is closed. Ask an administrator to invite you.' }
+  }
+  const email = (formData.get('email') as string ?? '').trim().toLowerCase()
+  const name = (formData.get('name') as string ?? '').trim()
+  const password = (formData.get('password') as string ?? '')
+  if (!email || !email.includes('@')) return { error: 'A valid email is required' }
+  if (password.length < 10) return { error: 'Password must be at least 10 characters' }
+
+  const hash = await hashPassword(password)
+  const userRows = await db`
+    INSERT INTO users (email, name, password_hash) VALUES (${email}, ${name || null}, ${hash})
+    RETURNING id
+  `
+  const userId = userRows[0].id as string
+  const orgName = name ? `${name}'s Workspace` : 'Workspace'
+  const orgRows = await db`INSERT INTO orgs (name, slug) VALUES (${orgName}, 'workspace') RETURNING id`
+  const orgId = orgRows[0].id as string
+  await db`INSERT INTO org_members (org_id, user_id, role) VALUES (${orgId}, ${userId}, 'owner')`
+
+  const { ip, ua } = await getRequestMeta()
+  const { sessionId, timeoutHours } = await createSession(userId, orgId, { ip, ua })
+  await setSessionCookie(sessionId, timeoutHours)
+  await writeAudit({ orgId, actorId: userId, actorEmail: email, action: 'auth.first_admin_created' })
+  redirect('/')
 }
 
 export async function verifyTotp(formData: FormData) {

@@ -66,6 +66,9 @@ ALTER TABLE sessions ADD COLUMN IF NOT EXISTS user_agent TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_failed_count INT NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_locked_until TIMESTAMPTZ;
 
+-- Email + password auth (self-hosted default; replaces email+TOTP)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+
 -- Group app access (added for group-level app permissions)
 CREATE TABLE IF NOT EXISTS group_app_access (
   group_id TEXT NOT NULL REFERENCES org_groups(id) ON DELETE CASCADE,
