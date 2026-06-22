@@ -3,8 +3,8 @@
 #   docker compose up -d --build
 # Then open http://localhost (or your FOUNDRY_DOMAIN) and create the admin account.
 #
-# This brings up the apps whose schema ships in this repo (Workspace, Wiki).
-# Additional apps are added as their self-host packaging lands — see QUICKSTART.md.
+# Brings up the Foundry suite: Workspace, Docs, Sheets, Sites, Wiki, Mail, PDF.
+# (Channels is the remaining app — see QUICKSTART.md.)
 
 services:
   postgres:

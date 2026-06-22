@@ -24,13 +24,15 @@ No SMTP, no authenticator app required: login is email + password.
 | App | Path | Status |
 |---|---|---|
 | Workspace (auth shell, org, launcher) | `/` | ✅ |
+| Docs (word processor) | `/docs` | ✅ |
+| Sheets (spreadsheets) | `/sheets` | ✅ |
+| Sites (CMS) | `/sites` | ✅ |
 | Wiki | `/wiki` | ✅ |
-| Docs / Sheets / Sites | — | ⏳ schema packaging in progress |
-| Mail | `/mail` | ⏳ needs the mail server image |
-| Channels | `/channels` | ⏳ |
-| PDF | `/pdf` | ⏳ needs the `foundry-pdf-proc` image |
+| Mail (client + server) | `/mail` | ✅ (internal mail; set `SMTP_RELAY_*` for outbound) |
+| PDF (editor + processing engine) | `/pdf` | ✅ |
+| Channels (chat/video) | `/channels` | ⏳ next |
 
-(The compose file brings up the apps whose self-host packaging is complete; more land incrementally.)
+Log in once at `/` and your session works across every app.
 
 ## Operating
 - Logs: `docker compose logs -f workspace`
