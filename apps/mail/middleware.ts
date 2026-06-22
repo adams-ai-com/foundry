@@ -5,7 +5,7 @@ export function middleware(request: NextRequest) {
   const sessionId = request.cookies.get('foundry_session')?.value
   // Structural check: session IDs are UUID v4 (36 chars) or similar random strings
   if (!sessionId || sessionId.length < 20 || sessionId.length > 200) {
-    return NextResponse.redirect(`${request.nextUrl.origin}/login`)
+    return new NextResponse(null, { status: 307, headers: { Location: `${new URL(request.url).origin}/login` } })
   }
   return NextResponse.next()
 }

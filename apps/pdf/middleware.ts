@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server'
 
 export function middleware(request: NextRequest) {
   if (!request.cookies.get('foundry_session')) {
-    return NextResponse.redirect(`${request.nextUrl.origin}/login`)
+    return new NextResponse(null, { status: 307, headers: { Location: `${new URL(request.url).origin}/login` } })
   }
   return NextResponse.next()
 }
