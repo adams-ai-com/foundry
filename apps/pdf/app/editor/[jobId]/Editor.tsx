@@ -51,6 +51,18 @@ interface TextSpan {
   color: [number, number, number]
 }
 
+interface TextBlock {
+  id:    number
+  text:  string
+  bbox:  [number, number, number, number]
+  font:  string
+  size:  number
+  flags: number
+  color: [number, number, number]
+  align: 'left' | 'center' | 'right' | 'justify'
+  line_count: number
+}
+
 interface SpanStyle {
   family:   'sans' | 'serif' | 'mono'
   size:     number
@@ -453,6 +465,74 @@ function EditSpanInput({ span, renderScale, style, onMove, onSave, onCancel }: {
   )
 }
 
+// ── Paragraph (block) editor ────────────────────────────────────────────────
+
+function EditParaInput({ block, renderScale, busy, onSave, onCancel }: {
+  block:       TextBlock
+  renderScale: number
+  busy:        boolean
+  onSave:      (text: string) => Promise<boolean>
+  onCancel:    () => void
+}) {
+  const ref       = useRef<HTMLTextAreaElement>(null)
+  const committed = useRef(false)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.value = block.text
+    el.focus()
+    el.setSelectionRange(el.value.length, el.value.length)
+  }, [block.text])
+
+  const style = spanToStyle(block as unknown as TextSpan)
+  const cssFamily = style.family === 'mono' ? 'monospace' : style.family === 'serif' ? 'serif' : 'sans-serif'
+
+  async function commit() {
+    if (committed.current || busy) return
+    committed.current = true
+    const ok = await onSave(ref.current?.value ?? '')
+    if (!ok) { committed.current = false; ref.current?.focus() }   // overflow — keep editing
+  }
+
+  return (
+    <div style={{ position: 'absolute', inset: 0 }}>
+      <textarea
+        ref={ref}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commit() }
+          if (e.key === 'Escape') { committed.current = true; onCancel() }
+        }}
+        onBlur={commit}
+        style={{
+          position: 'absolute', inset: 0, width: '100%', height: '100%',
+          fontSize:   `${style.size * renderScale}px`,
+          fontFamily: cssFamily,
+          fontWeight: style.bold   ? 'bold'   : 'normal',
+          fontStyle:  style.italic ? 'italic' : 'normal',
+          color:      style.colorHex,
+          background: 'rgba(255,255,255,0.98)',
+          border:     '2px solid #6366f1',
+          borderRadius: 2,
+          outline:    'none',
+          padding:    '1px 2px',
+          lineHeight: 1.2,
+          resize:     'none',
+          overflow:   'hidden',
+          boxShadow:  '0 0 0 3px rgba(99,102,241,0.15)',
+          zIndex:     20,
+        }}
+      />
+      <div style={{ position: 'absolute', left: 0, bottom: '100%', display: 'flex', gap: 6,
+        alignItems: 'center', padding: '2px 5px', background: '#6366f1', color: '#fff',
+        borderRadius: '3px 3px 0 0', fontSize: 10, whiteSpace: 'nowrap', userSelect: 'none' }}>
+        <span>¶ paragraph · ⌘↵ save · esc cancel</span>
+        {busy && <span style={{ opacity: 0.85 }}>saving…</span>}
+      </div>
+    </div>
+  )
+}
+
 // ── New text insertion input ──────────────────────────────────────────────────
 
 const DRAG_HANDLE_H = 14
@@ -786,6 +866,11 @@ export function Editor({ jobId }: { jobId: string }) {
   // Phase 3: click-to-insert new text on blank space
   const [newTextPos, setNewTextPos] = useState<{ screenX: number; screenY: number; pdfX: number; pdfY: number } | null>(null)
   const [hoverPos,   setHoverPos]   = useState<{ x: number; y: number } | null>(null)
+  // Paragraph (¶) editing — sub-mode of the edit-text tool
+  const [editTextMode,    setEditTextMode]    = useState<'line' | 'para'>('line')
+  const [textBlocks,      setTextBlocks]      = useState<TextBlock[]>([])
+  const [loadingBlocks,   setLoadingBlocks]   = useState(false)
+  const [editingBlockIdx, setEditingBlockIdx] = useState<number | null>(null)
 
   // Toolbar dropdowns (fix #1: grouped menus)
   const [pagesMenuOpen, setPagesMenuOpen]       = useState(false)
@@ -1073,7 +1158,7 @@ export function Editor({ jobId }: { jobId: string }) {
 
   // Load text spans when edit-text tool is active (reload on page/version change)
   useEffect(() => {
-    if (tool !== 'edit-text') { setTextSpans([]); setEditingSpanIdx(null); setNewTextPos(null); setHoverPos(null); return }
+    if (tool !== 'edit-text' || editTextMode !== 'line') { setTextSpans([]); setEditingSpanIdx(null); setNewTextPos(null); setHoverPos(null); return }
     let cancelled = false
     setLoadingSpans(true)
     console.log('[PDF:edit] loading spans  page=%d job=%s version=%d', currentPage, jobId.slice(0,8), version)
@@ -1095,7 +1180,20 @@ export function Editor({ jobId }: { jobId: string }) {
       .catch(err => console.error('[PDF:edit] spans fetch error', err))
       .finally(() => { if (!cancelled) setLoadingSpans(false) })
     return () => { cancelled = true }
-  }, [tool, currentPage, jobId, version])
+  }, [tool, currentPage, jobId, version, editTextMode])
+
+  // Load paragraph blocks when edit-text tool is in ¶ (paragraph) mode
+  useEffect(() => {
+    if (tool !== 'edit-text' || editTextMode !== 'para') { setTextBlocks([]); setEditingBlockIdx(null); return }
+    let cancelled = false
+    setLoadingBlocks(true)
+    fetch(`/pdf/api/pdf/${jobId}/text-blocks/${currentPage}`)
+      .then(r => (r.ok ? r.json() : { blocks: [] }))
+      .then(d => { if (!cancelled) setTextBlocks(d.blocks ?? []) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoadingBlocks(false) })
+    return () => { cancelled = true }
+  }, [tool, currentPage, jobId, version, editTextMode])
 
   // Bookmarks — load on mount and after changes
   const loadBookmarks = useCallback(async () => {
@@ -1764,6 +1862,48 @@ export function Editor({ jobId }: { jobId: string }) {
     }
   }
 
+  // Returns true if the editor should close (saved / no-op / hard error),
+  // false to keep it open (overflow — text preserved so the user can trim).
+  async function saveParagraph(blockIdx: number, newText: string): Promise<boolean> {
+    const blk = textBlocks[blockIdx]
+    if (!blk) { setEditingBlockIdx(null); return true }
+    const normalized = newText.replace(/\s+$/, '')
+    if (normalized === blk.text) { setEditingBlockIdx(null); return true }
+    const payload = {
+      page:  currentPage,
+      bbox:  blk.bbox,
+      new_text: normalized,
+      font:  blk.font,
+      flags: blk.flags,
+      size:  blk.size,
+      color: blk.color,
+      align: blk.align,
+    }
+    setSaving(true)
+    try {
+      const res = await fetch(`/pdf/api/pdf/${jobId}/edit-paragraph`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (res.status === 409) {
+        toast("Text doesn't fit the paragraph — shorten it a little")
+        return false   // keep editing, text intact
+      }
+      if (!res.ok) { toast('Paragraph save failed — please try again'); setEditingBlockIdx(null); return true }
+      setEditingBlockIdx(null)
+      setVersion(v => v + 1)
+      return true
+    } catch (err) {
+      console.error('[PDF:edit] paragraph save error', err)
+      toast('Paragraph save failed — please try again')
+      setEditingBlockIdx(null)
+      return true
+    } finally {
+      setSaving(false)
+    }
+  }
+
   function onSvgDown(e: React.MouseEvent<SVGSVGElement>) {
     if (!pageInfo) return
     const [x, y] = svgPoint(e)
@@ -2107,10 +2247,27 @@ export function Editor({ jobId }: { jobId: string }) {
             <path d={ICONS['edit-text']} />
           </svg>
           <span>Edit Text</span>
-          {loadingSpans && tool === 'edit-text' && (
+          {(loadingSpans || loadingBlocks) && tool === 'edit-text' && (
             <span className="ml-0.5 opacity-60 text-[10px]">…</span>
           )}
         </button>
+
+        {tool === 'edit-text' && (
+          <div className="flex items-center rounded-md border border-accent/40 overflow-hidden shrink-0 text-xs font-medium">
+            <button
+              onClick={() => { setEditTextMode('line'); setEditingBlockIdx(null); setEditingSpanIdx(null) }}
+              title="Edit one line / span at a time"
+              className={`px-2 py-1 transition-colors ${editTextMode === 'line' ? 'bg-accent text-accent-fg' : 'text-accent hover:bg-accent/10'}`}>
+              Line
+            </button>
+            <button
+              onClick={() => { setEditTextMode('para'); setEditingSpanIdx(null); setNewTextPos(null); setEditingBlockIdx(null) }}
+              title="Edit a whole paragraph at once"
+              className={`px-2 py-1 border-l border-accent/40 transition-colors ${editTextMode === 'para' ? 'bg-accent text-accent-fg' : 'text-accent hover:bg-accent/10'}`}>
+              ¶ Paragraph
+            </button>
+          </div>
+        )}
 
         <Sep />
 
@@ -2548,7 +2705,7 @@ export function Editor({ jobId }: { jobId: string }) {
                   </defs>
                 </svg>
                 {/* Click catcher — blank page area (continuous view) */}
-                {isActive && tool === 'edit-text' && editingSpanIdx === null && newTextPos === null && (
+                {isActive && tool === 'edit-text' && editTextMode === 'line' && editingSpanIdx === null && newTextPos === null && (
                   <div style={{ position: 'absolute', inset: 0, zIndex: 1, cursor: 'none' }}
                     onMouseMove={e => {
                       const rect = e.currentTarget.getBoundingClientRect()
@@ -2637,6 +2794,31 @@ export function Editor({ jobId }: { jobId: string }) {
                         border: '1px solid transparent', borderRadius: 1, zIndex: 10,
                         pointerEvents: editing ? 'none' : 'auto' }}
                       className={editing ? '' : 'hover:border-blue-400/70 hover:bg-blue-50/30 transition-colors'} />
+                  )
+                })}
+
+                {/* Paragraph (¶) block overlay — continuous view */}
+                {isActive && tool === 'edit-text' && editTextMode === 'para' && textBlocks.map((blk, bidx) => {
+                  const [bx0, by0, bx1, by1] = blk.bbox.map(v => v * renderScale)
+                  const w = bx1 - bx0; const h = by1 - by0
+                  if (w < 2 || h < 2) return null
+                  if (editingBlockIdx === bidx) {
+                    return (
+                      <div key={`blk${bidx}`} style={{ position: 'absolute', left: bx0, top: by0, width: w, height: h, zIndex: 20 }}>
+                        <EditParaInput block={blk} renderScale={renderScale} busy={saving}
+                          onSave={text => saveParagraph(bidx, text)}
+                          onCancel={() => setEditingBlockIdx(null)} />
+                      </div>
+                    )
+                  }
+                  const editing = editingBlockIdx !== null
+                  return (
+                    <div key={`blk${bidx}`} onClick={editing ? undefined : () => setEditingBlockIdx(bidx)}
+                      style={{ position: 'absolute', left: bx0, top: by0, width: w, height: h,
+                        cursor: editing ? 'default' : 'text',
+                        border: '1px solid transparent', borderRadius: 2, zIndex: 10,
+                        pointerEvents: editing ? 'none' : 'auto' }}
+                      className={editing ? '' : 'hover:border-indigo-400/70 hover:bg-indigo-50/30 transition-colors'} />
                   )
                 })}
                 <div className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[10px] text-fg-tertiary bg-bg-raised/70 px-1.5 rounded select-none">{i + 1}</div>
@@ -2854,7 +3036,7 @@ export function Editor({ jobId }: { jobId: string }) {
               )}
 
               {/* Click catcher — blank page area opens new text input */}
-              {tool === 'edit-text' && editingSpanIdx === null && newTextPos === null && (
+              {tool === 'edit-text' && editTextMode === 'line' && editingSpanIdx === null && newTextPos === null && (
                 <div style={{ position: 'absolute', inset: 0, zIndex: 1, cursor: 'none' }}
                   onMouseMove={e => {
                     const rect = e.currentTarget.getBoundingClientRect()
@@ -2943,6 +3125,31 @@ export function Editor({ jobId }: { jobId: string }) {
                       border: '1px solid transparent', borderRadius: 1, zIndex: 10,
                       pointerEvents: editing ? 'none' : 'auto' }}
                     className={editing ? '' : 'hover:border-blue-400/70 hover:bg-blue-50/30 transition-colors'} />
+                )
+              })}
+
+              {/* Paragraph (¶) block overlay — single view */}
+              {tool === 'edit-text' && editTextMode === 'para' && textBlocks.map((blk, bidx) => {
+                const [bx0, by0, bx1, by1] = blk.bbox.map(v => v * renderScale)
+                const w = bx1 - bx0; const h = by1 - by0
+                if (w < 2 || h < 2) return null
+                if (editingBlockIdx === bidx) {
+                  return (
+                    <div key={`blk${bidx}`} style={{ position: 'absolute', left: bx0, top: by0, width: w, height: h, zIndex: 20 }}>
+                      <EditParaInput block={blk} renderScale={renderScale} busy={saving}
+                        onSave={text => saveParagraph(bidx, text)}
+                        onCancel={() => setEditingBlockIdx(null)} />
+                    </div>
+                  )
+                }
+                const editing = editingBlockIdx !== null
+                return (
+                  <div key={`blk${bidx}`} onClick={editing ? undefined : () => setEditingBlockIdx(bidx)}
+                    style={{ position: 'absolute', left: bx0, top: by0, width: w, height: h,
+                      cursor: editing ? 'default' : 'text',
+                      border: '1px solid transparent', borderRadius: 2, zIndex: 10,
+                      pointerEvents: editing ? 'none' : 'auto' }}
+                    className={editing ? '' : 'hover:border-indigo-400/70 hover:bg-indigo-50/30 transition-colors'} />
                 )
               })}
             </div>
