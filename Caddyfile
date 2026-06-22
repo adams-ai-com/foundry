@@ -5,7 +5,7 @@
 	# Send unauthenticated visitors of a sub-app straight to the root login.
 	# (Sub-apps have a Next basePath, so they can't redirect cross-app themselves.)
 	@gated_unauth {
-		path /wiki* /pdf* /mail*
+		path /wiki* /pdf* /mail* /docs* /sheets* /sites*
 		not header Cookie *foundry_session=*
 	}
 	redir @gated_unauth /login 302
@@ -21,6 +21,18 @@
 	@mail path /mail /mail/*
 	handle @mail {
 		reverse_proxy mail:3000
+	}
+	@docs path /docs /docs/*
+	handle @docs {
+		reverse_proxy docs:3000
+	}
+	@sheets path /sheets /sheets/*
+	handle @sheets {
+		reverse_proxy sheets:3000
+	}
+	@sites path /sites /sites/*
+	handle @sites {
+		reverse_proxy sites:3000
 	}
 	handle {
 		reverse_proxy workspace:3000

@@ -31,14 +31,21 @@ services:
     environment:
       PGPASSWORD: ${POSTGRES_PASSWORD:-foundry}
     volumes:
-      - ./apps/workspace/lib/schema.sql:/sql/workspace.sql:ro
-      - ./apps/wiki/lib/schema.sql:/sql/wiki.sql:ro
+      - ./apps/workspace/lib/schema.sql:/sql/foundry_workspace.sql:ro
+      - ./apps/wiki/lib/schema.sql:/sql/foundry_wiki.sql:ro
+      - ./apps/docs/lib/schema.sql:/sql/foundry_docs.sql:ro
+      - ./apps/sheets/lib/schema.sql:/sql/foundry_sheets.sql:ro
+      - ./apps/sites/lib/schema.sql:/sql/foundry_sites.sql:ro
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         set -e
-        psql -h postgres -U foundry -d foundry_workspace -v ON_ERROR_STOP=1 -f /sql/workspace.sql
-        psql -h postgres -U foundry -d foundry_wiki      -v ON_ERROR_STOP=1 -f /sql/wiki.sql
+        # Apply each app's schema once. Skip a DB that already has tables so
+        # down+up re-runs are safe (the docs/sheets/sites dumps aren't IF NOT EXISTS).
+        for db in foundry_workspace foundry_wiki foundry_docs foundry_sheets foundry_sites; do
+          n=$(psql -h postgres -U foundry -d "$db" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")
+          if [ "$n" = "0" ]; then echo "migrating $db"; psql -h postgres -U foundry -d "$db" -v ON_ERROR_STOP=1 -f "/sql/$db.sql"; else echo "$db already migrated (skip)"; fi
+        done
         echo "migrations applied"
     restart: "no"
 
@@ -64,6 +71,45 @@ services:
       NODE_ENV: production
       PORT: 3000
       DATABASE_URL: postgresql://foundry:${POSTGRES_PASSWORD:-foundry}@postgres:5432/foundry_wiki
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  docs:
+    build:
+      context: .
+      dockerfile: apps/docs/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://foundry:${POSTGRES_PASSWORD:-foundry}@postgres:5432/foundry_docs
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  sheets:
+    build:
+      context: .
+      dockerfile: apps/sheets/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://foundry:${POSTGRES_PASSWORD:-foundry}@postgres:5432/foundry_sheets
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  sites:
+    build:
+      context: .
+      dockerfile: apps/sites/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://foundry:${POSTGRES_PASSWORD:-foundry}@postgres:5432/foundry_sites
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -165,6 +211,9 @@ services:
       - wiki
       - pdf
       - mail
+      - docs
+      - sheets
+      - sites
 
 volumes:
   pgdata:
