@@ -499,6 +499,7 @@ function EditParaInput({ block, renderScale, busy, onSave, onCancel }: {
     <div style={{ position: 'absolute', inset: 0 }}>
       <textarea
         ref={ref}
+        data-testid="para-editor"
         onKeyDown={e => {
           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commit() }
           if (e.key === 'Escape') { committed.current = true; onCancel() }
@@ -2813,7 +2814,7 @@ export function Editor({ jobId }: { jobId: string }) {
                   }
                   const editing = editingBlockIdx !== null
                   return (
-                    <div key={`blk${bidx}`} onClick={editing ? undefined : () => setEditingBlockIdx(bidx)}
+                    <div key={`blk${bidx}`} data-testid="para-block" onClick={editing ? undefined : () => setEditingBlockIdx(bidx)}
                       style={{ position: 'absolute', left: bx0, top: by0, width: w, height: h,
                         cursor: editing ? 'default' : 'text',
                         border: '1px solid transparent', borderRadius: 2, zIndex: 10,
@@ -3144,7 +3145,7 @@ export function Editor({ jobId }: { jobId: string }) {
                 }
                 const editing = editingBlockIdx !== null
                 return (
-                  <div key={`blk${bidx}`} onClick={editing ? undefined : () => setEditingBlockIdx(bidx)}
+                  <div key={`blk${bidx}`} data-testid="para-block" onClick={editing ? undefined : () => setEditingBlockIdx(bidx)}
                     style={{ position: 'absolute', left: bx0, top: by0, width: w, height: h,
                       cursor: editing ? 'default' : 'text',
                       border: '1px solid transparent', borderRadius: 2, zIndex: 10,
