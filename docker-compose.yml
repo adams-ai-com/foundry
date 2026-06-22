@@ -1,0 +1,90 @@
+# Foundry self-host quickstart.
+#   cp .env.example .env   # (edit POSTGRES_PASSWORD / FOUNDRY_DOMAIN)
+#   docker compose up -d --build
+# Then open http://localhost (or your FOUNDRY_DOMAIN) and create the admin account.
+#
+# This brings up the apps whose schema ships in this repo (Workspace, Wiki).
+# Additional apps are added as their self-host packaging lands — see QUICKSTART.md.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: foundry
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-foundry}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U foundry"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: apply each app's schema to its database, then exit.
+  migrate:
+    image: postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-foundry}
+    volumes:
+      - ./apps/workspace/lib/schema.sql:/sql/workspace.sql:ro
+      - ./apps/wiki/lib/schema.sql:/sql/wiki.sql:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        psql -h postgres -U foundry -d foundry_workspace -v ON_ERROR_STOP=1 -f /sql/workspace.sql
+        psql -h postgres -U foundry -d foundry_wiki      -v ON_ERROR_STOP=1 -f /sql/wiki.sql
+        echo "migrations applied"
+    restart: "no"
+
+  workspace:
+    build:
+      context: .
+      dockerfile: apps/workspace/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://foundry:${POSTGRES_PASSWORD:-foundry}@postgres:5432/foundry_workspace
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  wiki:
+    build:
+      context: .
+      dockerfile: apps/wiki/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://foundry:${POSTGRES_PASSWORD:-foundry}@postgres:5432/foundry_wiki
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      FOUNDRY_DOMAIN: ${FOUNDRY_DOMAIN:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      - workspace
+      - wiki
+
+volumes:
+  pgdata:
+  caddydata:
+  caddyconfig:
