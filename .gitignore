@@ -34,3 +34,16 @@ Thumbs.db
 
 # testing
 coverage
+
+# Internal ops / infra docs — never publish
+CLAUDE.md
+AGENTS.md
+.claude/
+
+# keys / certs (never commit)
+*.pem
+*.key
+*.p12
+*.pfx
+id_ed25519*
+id_rsa*
