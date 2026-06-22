@@ -43,8 +43,8 @@ services:
         # Apply each app's schema once. Skip a DB that already has tables so
         # down+up re-runs are safe (the docs/sheets/sites dumps aren't IF NOT EXISTS).
         for db in foundry_workspace foundry_wiki foundry_docs foundry_sheets foundry_sites; do
-          n=$(psql -h postgres -U foundry -d "$db" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")
-          if [ "$n" = "0" ]; then echo "migrating $db"; psql -h postgres -U foundry -d "$db" -v ON_ERROR_STOP=1 -f "/sql/$db.sql"; else echo "$db already migrated (skip)"; fi
+          n=$$(psql -h postgres -U foundry -d "$$db" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")
+          if [ "$$n" = "0" ]; then echo "migrating $$db"; psql -h postgres -U foundry -d "$$db" -v ON_ERROR_STOP=1 -f "/sql/$$db.sql"; else echo "$$db already migrated (skip)"; fi
         done
         echo "migrations applied"
     restart: "no"
