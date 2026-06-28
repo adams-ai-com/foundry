@@ -17,10 +17,9 @@
 # Converted apps are listed in /etc/foundry-promote/staging-apps
 # (lines: <coolify-app-uuid> <label>). Update it as apps convert.
 #
-# Canonical copy: /var/www/foundry/scripts/foundry-promote (git-tracked).
 set -uo pipefail
 
-REPO=/var/www/foundry
+REPO="${OWL_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 STATE_DIR=/var/lib/foundry-promote
 APPS_FILE=/etc/foundry-promote/staging-apps
 LOG=/var/log/foundry-promote.log

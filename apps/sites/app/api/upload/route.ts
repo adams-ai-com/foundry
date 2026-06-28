@@ -4,7 +4,7 @@ import { join } from 'path'
 import { randomUUID } from 'crypto'
 import sql from '@/lib/db'
 
-const UPLOAD_DIR = '/var/www/foundry-uploads/sites'
+const UPLOAD_DIR = process.env.OWL_UPLOAD_DIR ?? './data/uploads/sites'
 const MAX_BYTES  = 100 * 1024 * 1024  // 100 MB
 
 export async function POST(request: NextRequest) {

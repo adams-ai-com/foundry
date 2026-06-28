@@ -17,10 +17,8 @@ import pymupdf
 
 from deps import verify_secret, STORE
 
-TEMPLATE_STORE = Path(os.environ.get("FOUNDRY_PDF_TEMPLATE_STORE",
-                                     "/var/www/foundry-pdf-proc/templates"))
-ENVELOPE_STORE = Path(os.environ.get("FOUNDRY_PDF_ENVELOPE_STORE",
-                                     "/var/www/foundry-pdf-proc/envelopes"))
+TEMPLATE_STORE = Path(os.environ.get("OWL_PDF_TEMPLATE_STORE", "./data/templates"))
+ENVELOPE_STORE = Path(os.environ.get("OWL_PDF_ENVELOPE_STORE", "./data/envelopes"))
 
 router = APIRouter(prefix="/template", dependencies=[Depends(verify_secret)])
 

@@ -3,12 +3,18 @@
 import { readFileSync } from 'fs'
 import { resolveTxt } from 'dns/promises'
 import { createRequire } from 'module'
+import { fileURLToPath } from 'url'
+import { join, dirname } from 'path'
 
-const require = createRequire('/var/www/foundry/apps/workspace/package.json')
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = join(__dirname, '..')
+const require = createRequire(join(REPO_ROOT, 'apps/workspace/package.json'))
 const postgres = require('postgres')
 
-// Load DATABASE_URL from workspace env file
-const envFile = readFileSync('/var/www/foundry/apps/workspace/.env', 'utf8')
+// Load DATABASE_URL from workspace env file (or set DATABASE_URL env var directly)
+const envFile = process.env.DATABASE_URL
+  ? `DATABASE_URL=${process.env.DATABASE_URL}`
+  : readFileSync(join(REPO_ROOT, 'apps/workspace/.env'), 'utf8')
 const dbUrl = envFile.split('\n')
   .map(l => l.trim())
   .find(l => l.startsWith('DATABASE_URL='))
