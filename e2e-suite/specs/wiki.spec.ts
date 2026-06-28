@@ -5,7 +5,8 @@ import { E2E_PREFIX, dbFromEnvFile, dbFromUrl, mintSession } from '@owl/e2e'
 // WIKI_BASE / WIKI_DB_URL override the live-production defaults so the same
 // spec can verify a staging container (used by the staging test runner).
 const BASE = process.env.WIKI_BASE ?? 'http://127.0.0.1:4105'
-const ENV = '/var/www/foundry/apps/wiki/.env'
+import { resolve } from 'path'
+const ENV = resolve(__dirname, '../../apps/wiki/.env')
 
 const TIPTAP_DOC = {
   type: 'doc',

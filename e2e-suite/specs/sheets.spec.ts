@@ -3,7 +3,8 @@ import { randomUUID } from 'crypto'
 import { E2E_PREFIX, dbFromEnvFile, dbFromUrl, mintSession } from '@owl/e2e'
 
 const BASE = process.env.SHEETS_BASE ?? 'http://127.0.0.1:4102'
-const ENV = '/var/www/foundry/apps/sheets/.env'
+import { resolve } from 'path'
+const ENV = resolve(__dirname, '../../apps/sheets/.env')
 
 test.describe.serial('sheets', () => {
   let sess: string

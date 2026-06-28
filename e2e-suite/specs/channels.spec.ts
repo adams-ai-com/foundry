@@ -6,7 +6,8 @@ import { E2E_PREFIX, dbFromEnvFile, dbFromUrl, mintSession, testUser, wsDb } fro
 // (llmbox), and importers are external-dependency paths — deliberately not
 // exercised here; they need mocks when their suites are built.
 const BASE = process.env.CHANNELS_BASE ?? 'http://127.0.0.1:4108'
-const ENV = '/var/www/foundry/apps/channels/.env'
+import { resolve } from 'path'
+const ENV = resolve(__dirname, '../../apps/channels/.env')
 
 test.describe.serial('channels', () => {
   let sess: string

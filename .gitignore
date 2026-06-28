@@ -40,3 +40,4 @@ tsconfig.tsbuildinfo
 test-results/
 playwright-report/
 .pw-browsers/
+CLAUDE.md

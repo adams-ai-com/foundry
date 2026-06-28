@@ -3,7 +3,8 @@ import { randomUUID } from 'crypto'
 import { E2E_PREFIX, cookieHeader, dbFromEnvFile, dbFromUrl, mintSession } from '@owl/e2e'
 
 const BASE = process.env.DOCS_BASE ?? 'http://127.0.0.1:4101'
-const ENV = '/var/www/foundry/apps/docs/.env'
+import { resolve } from 'path'
+const ENV = resolve(__dirname, '../../apps/docs/.env')
 
 const TIPTAP_DOC = {
   type: 'doc',

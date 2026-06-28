@@ -5,7 +5,8 @@ import { envFileValue, mintSession, testUser } from '@owl/e2e'
 // goes through the SMTP relay and tests must never send real mail. Send-path
 // coverage needs a dedicated mailserver instance with a mocked sender.
 const API = 'http://127.0.0.1:3100/api/v1'
-const MAIL_ENV = '/var/www/foundry/apps/mail/.env'
+import { resolve } from 'path'
+const MAIL_ENV = resolve(__dirname, '../../apps/mail/.env')
 
 const apiKey = () => envFileValue(MAIL_ENV, 'MAILSERVER_API_KEY') ?? ''
 const accountId = () => envFileValue(MAIL_ENV, 'MAILSERVER_ACCOUNT_ID') ?? ''

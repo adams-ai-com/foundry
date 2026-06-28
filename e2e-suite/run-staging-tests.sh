@@ -13,9 +13,10 @@ env_value() { grep -m1 "^$2=" "$1" | cut -d= -f2-; }
 
 # Per converted app: <APP>_BASE = staging container port, <APP>_DB_URL =
 # staging DB. Each app's spec reads these (falls back to live prod otherwise).
-stg_db() { echo "$(env_value "/var/www/foundry/apps/$1/.env" DATABASE_URL)" | sed "s|/foundry_$1\$|/foundry_${1}_staging|"; }
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+stg_db() { echo "$(env_value "$REPO_ROOT/apps/$1/.env" DATABASE_URL)" | sed "s|/foundry_$1\$|/foundry_${1}_staging|"; }
 
-chan_stg_db() { echo "$(env_value /var/www/foundry/apps/channels/.env CHANNELS_DATABASE_URL)" | sed 's|/foundry_channels$|/foundry_channels_staging|'; }
+chan_stg_db() { echo "$(env_value "$REPO_ROOT/apps/channels/.env" CHANNELS_DATABASE_URL)" | sed 's|/foundry_channels$|/foundry_channels_staging|'; }
 
 # wiki — staging 4005
 export WIKI_BASE="http://127.0.0.1:4005";     export WIKI_DB_URL=$(stg_db wiki)
