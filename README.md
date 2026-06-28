@@ -46,17 +46,17 @@ OWL addresses all of these — not by patching existing software, but by startin
 
 Everything in OWL is organized around **workspaces** — a project, a team, a customer relationship. Within a workspace, every surface shares the same data model:
 
-| Surface | Replaces |
+| Surface | What it does |
 |---|---|
-| **OWL Mail** — email + calendar, our own SMTP server | Outlook / Exchange |
-| **OWL Channels** — real-time communication + video | Teams / Slack |
-| **OWL Docs** — rich text editor, .docx compatible | Word |
-| **OWL Sheets** — spreadsheet + Python scripting | Excel |
-| **OWL PDF** — PDF editing, forms, e-signing, redaction | Acrobat / DocuSign |
-| **OWL Wiki** — structured knowledge, team intranet | SharePoint / Notion |
-| **OWL Sites** — team sites with folders and permissions | SharePoint / Confluence |
-| **Files** — versioned file storage, any format | OneDrive / Drive |
-| **Tasks + Decisions** — action items and explicit outcomes | Planner / Asana |
+| **OWL Mail** | Email and calendar, powered by our own SMTP server — your domain, your data |
+| **OWL Channels** | Real-time team communication with threads, video calls, and AI memory |
+| **OWL Docs** | Rich text editor with full .docx round-trip compatibility |
+| **OWL Sheets** | Spreadsheet with formula engine and Python scripting |
+| **OWL PDF** | PDF editing, form creation, cryptographic e-signing, and object-level redaction |
+| **OWL Wiki** | Structured knowledge base and team intranet, built on the Docs editor |
+| **OWL Sites** | Team CMS with folder hierarchy and fine-grained permissions |
+| **Files** | Versioned file storage for any format |
+| **Tasks + Decisions** | Action items and explicit, searchable outcomes |
 
 One search across all of it. One AI context across all of it. No switching between applications to find something that happened last month.
 
@@ -71,7 +71,7 @@ One search across all of it. One AI context across all of it. No switching betwe
 | OWL Docs | ✅ Live — rich text editor, save/load, .docx round-trip |
 | OWL Sheets | ✅ Live — spreadsheet grid, HyperFormula engine, Python scripting |
 | OWL Mail | ✅ Live — our own SMTP server, inbox, threads, compose, calendar, contacts, full-text search |
-| OWL Channels | ✅ Live — real-time chat, threads, video calls, AI memory, Slack/Teams/GChat import |
+| OWL Channels | ✅ Live — real-time chat, threads, video calls, AI memory, chat history import |
 | OWL PDF | ✅ Live — PDF editing, form creation, e-signing with cryptographic envelopes, object-level redaction |
 | OWL Wiki | ✅ Live — structured knowledge base built on the Docs editor |
 | OWL Sites | ✅ Live — team CMS with folder hierarchy and fine-grained permissions |
@@ -86,7 +86,7 @@ OWL uses a two-layer approach to document fidelity:
 
 **Layer 1 — native JavaScript** handles everyday documents: standard business letters, proposals, reports, typical spreadsheets. Fast, no external dependencies.
 
-**Layer 2 — LibreOffice headless** handles complex documents: tracked changes, embedded charts, multi-section layouts, legacy formats. We run LibreOffice as a server-side conversion service and gratefully credit The Document Foundation for two decades of Microsoft format compatibility work that we build on. LibreOffice is licensed under MPL-2.0 + LGPLv3+.
+**Layer 2 — LibreOffice headless** handles complex documents: tracked changes, embedded charts, multi-section layouts, legacy formats. We run LibreOffice as a server-side conversion service and gratefully credit The Document Foundation for two decades of .docx/.xlsx format compatibility work that we build on. LibreOffice is licensed under MPL-2.0 + LGPLv3+.
 
 ---
 
