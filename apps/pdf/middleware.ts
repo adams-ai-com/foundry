@@ -15,7 +15,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  if (!request.cookies.get('foundry_session')) {
+  if (!request.cookies.get('owl_session')) {
     return NextResponse.redirect(new URL('/login', 'https://foundry.adams-ai.com'))
   }
   return NextResponse.next()

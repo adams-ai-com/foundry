@@ -2,7 +2,7 @@ import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
   output: 'standalone',
-  transpilePackages: ['@foundry/shared'],
+  transpilePackages: ['@owl/shared'],
 }
 
 export default nextConfig

@@ -166,7 +166,7 @@ export async function runGoogleChatImport(jobId: string, orgId: string, createdB
     const mapping = job.space_mapping[space.id]
     if (!mapping || mapping.skip) continue
 
-    // Resolve or create Foundry channel
+    // Resolve or create OWL channel
     let foundryChannelId: string
     if (mapping.foundry_channel_id) {
       foundryChannelId = mapping.foundry_channel_id
@@ -207,8 +207,8 @@ export async function runGoogleChatImport(jobId: string, orgId: string, createdB
 
     // Build topic map: topic_id → foundry topic id
     // In Google Chat, the root message has message_id === topic_id (or no topic_id in flat spaces)
-    const gchatTopicToFoundry = new Map<string, string>()
-    const gchatMsgToFoundry = new Map<string, string>()
+    const gchatTopicToOwl = new Map<string, string>()
+    const gchatMsgToOwl = new Map<string, string>()
 
     // Pass 1: create topics for root messages
     // Root = message_id === topic_id, or topic_id missing (flat space)
@@ -227,7 +227,7 @@ export async function runGoogleChatImport(jobId: string, orgId: string, createdB
       ` as { id: string }[])[0]?.id
       if (topicId) {
         for (const m of messages) {
-          if (m.message_id) gchatTopicToFoundry.set(m.message_id, topicId)
+          if (m.message_id) gchatTopicToOwl.set(m.message_id, topicId)
         }
       }
     } else {
@@ -245,7 +245,7 @@ export async function runGoogleChatImport(jobId: string, orgId: string, createdB
         const topicId = t?.id ?? (await db`
           SELECT id FROM channel_topics WHERE channel_id = ${foundryChannelId} AND org_id = ${orgId} AND name = ${topicName} LIMIT 1
         ` as { id: string }[])[0]?.id
-        if (topicId && msg.message_id) gchatTopicToFoundry.set(msg.message_id, topicId)
+        if (topicId && msg.message_id) gchatTopicToOwl.set(msg.message_id, topicId)
       }
     }
 
@@ -254,7 +254,7 @@ export async function runGoogleChatImport(jobId: string, orgId: string, createdB
       const topicKey = isFlat
         ? (messages[0]?.message_id ?? '')
         : (msg.topic_id ?? msg.message_id ?? '')
-      const topicId = gchatTopicToFoundry.get(topicKey)
+      const topicId = gchatTopicToOwl.get(topicKey)
       if (!topicId) continue
 
       const email = msg.creator?.email ?? ''
@@ -277,7 +277,7 @@ export async function runGoogleChatImport(jobId: string, orgId: string, createdB
       if (!body.trim()) continue
 
       const parentId = (!isFlat && msg.topic_id && msg.topic_id !== msg.message_id)
-        ? (gchatMsgToFoundry.get(msg.topic_id) ?? null)
+        ? (gchatMsgToOwl.get(msg.topic_id) ?? null)
         : null
 
       const msgKey = msg.message_id ?? ''
@@ -295,7 +295,7 @@ export async function runGoogleChatImport(jobId: string, orgId: string, createdB
           RETURNING id
         ` as { id: string }[]
         if (inserted) {
-          gchatMsgToFoundry.set(msgKey, inserted.id)
+          gchatMsgToOwl.set(msgKey, inserted.id)
           totalImported++
         }
       } catch (err) { console.error(`[gchat-import] insert ${msgKey}:`, err) }

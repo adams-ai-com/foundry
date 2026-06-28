@@ -171,7 +171,7 @@ export default async function DomainDetailPage({
               />
               <p className="text-xs text-fg-tertiary mt-2">
                 Selector: <code className="font-mono">{dkimSelector}</code>.
-                The private key is stored on the Foundry mail server and used to sign outbound messages.
+                The private key is stored on the OWL mail server and used to sign outbound messages.
               </p>
               <form action={generateDkimKeys.bind(null, d.id)} className="mt-3">
                 <button

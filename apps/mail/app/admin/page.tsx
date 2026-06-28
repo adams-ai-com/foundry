@@ -1,4 +1,4 @@
-import { requireSession } from '@foundry/auth'
+import { requireSession } from '@owl/auth'
 import { AdminView } from '../../components/AdminView'
 
 export default async function AdminPage() {

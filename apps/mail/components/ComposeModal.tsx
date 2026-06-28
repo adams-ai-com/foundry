@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import type { MailThread, MailMessage } from '@foundry/shared'
+import type { MailThread, MailMessage } from '@owl/shared'
 import { sendMail, uploadFile, type FileItem } from '../lib/api'
 import { RecipientInput, type Recipient } from './RecipientInput'
 import { RichTextEditor, type RichTextEditorRef } from './RichTextEditor'

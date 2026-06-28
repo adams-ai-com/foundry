@@ -10,7 +10,7 @@ import { ContextMenu } from './ContextMenu'
 import { PythonPanel } from './PythonPanel'
 import { ChartPanel } from './ChartPanel'
 import { HyperFormulaProvider, useHyperFormulaContext } from '@/lib/hyperformula-context'
-import type { CellAddress } from '@foundry/shared'
+import type { CellAddress } from '@owl/shared'
 import type { SheetData, CellFormats, ChartDef, MergedRange } from '@/lib/actions'
 import { ROWS, COLS } from '@/lib/sheet-constants'
 

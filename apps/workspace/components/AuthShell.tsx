@@ -26,7 +26,7 @@ function ServerIcon({ className = '', style }: { className?: string; style?: Rea
     </svg>
   )
 }
-function FoundryLogoIcon({ className = '', style }: { className?: string; style?: React.CSSProperties }) {
+function OWLLogoIcon({ className = '', style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className={className} style={style} aria-hidden="true">
       <path d="M4 5a1 1 0 011-1h14a1 1 0 010 2H5a1 1 0 01-1-1zm0 6a1 1 0 011-1h10a1 1 0 010 2H5a1 1 0 01-1-1zm0 6a1 1 0 011-1h6a1 1 0 010 2H5a1 1 0 01-1-1z"/>
@@ -83,9 +83,9 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
           {/* Logo */}
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgb(255 255 255 / .10)', backdropFilter: 'blur(4px)', border: '1px solid rgb(255 255 255 / .12)' }}>
-              <FoundryLogoIcon className="text-white" style={{ width: '1.1rem', height: '1.1rem' }} />
+              <OWLLogoIcon className="text-white" style={{ width: '1.1rem', height: '1.1rem' }} />
             </div>
-            <span className="font-bold text-white text-lg tracking-tight">Foundry</span>
+            <span className="font-bold text-white text-lg tracking-tight">OpenWork Loft</span>
           </div>
 
           {/* Central copy */}
@@ -137,9 +137,9 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
         {/* Mobile-only logo */}
         <div className="lg:hidden mb-10 flex flex-col items-center gap-3">
           <div className="w-11 h-11 rounded-xl bg-accent flex items-center justify-center shadow-lg">
-            <FoundryLogoIcon className="w-5 h-5 text-accent-fg" />
+            <OWLLogoIcon className="w-5 h-5 text-accent-fg" />
           </div>
-          <span className="text-base font-bold text-fg-primary tracking-tight">Foundry</span>
+          <span className="text-base font-bold text-fg-primary tracking-tight">OpenWork Loft</span>
         </div>
 
         <div className="w-full max-w-[380px]">

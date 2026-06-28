@@ -177,7 +177,7 @@ export default async function MailAdminPage({
 
       {/* Live server info */}
       <div className="bg-bg-raised border border-border rounded-xl p-5 mb-6">
-        <h2 className="text-sm font-semibold text-fg-primary mb-3">Foundry mail server</h2>
+        <h2 className="text-sm font-semibold text-fg-primary mb-3">OWL mail server</h2>
         <div className="grid grid-cols-2 gap-3">
           {[
             { label: 'Host',    value: MAIL_SERVER_IP },
@@ -325,7 +325,7 @@ export default async function MailAdminPage({
                 type="text"
                 name="from_name"
                 defaultValue={cfg.from_name ?? ''}
-                placeholder="Foundry"
+                placeholder="OpenWork Loft"
                 className={inputCls}
               />
             </Field>
@@ -337,7 +337,7 @@ export default async function MailAdminPage({
           <h2 className="text-sm font-semibold text-fg-primary mb-2">Outbound relay</h2>
           <p className="text-xs text-fg-secondary mb-5">
             Route outbound mail through an external SMTP relay (e.g. Mailgun, SendGrid, SES).
-            Leave disabled to send directly from the Foundry mail server.
+            Leave disabled to send directly from the OWL mail server.
           </p>
 
           <label className="flex items-center gap-3 mb-5 cursor-pointer">

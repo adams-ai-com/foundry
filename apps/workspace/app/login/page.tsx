@@ -36,7 +36,7 @@ export default async function LoginPage({
   const sp = await searchParams
   const urlError = sp.err ?? null
 
-  const heading = org ? `Sign in to ${org.name}` : 'Sign in to Foundry'
+  const heading = org ? `Sign in to ${org.name}` : 'Sign in to OpenWork Loft'
   const subheading = 'Enter your email address to continue.'
 
   return (

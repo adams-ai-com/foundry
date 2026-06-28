@@ -16,6 +16,6 @@ export function verifyCode(secret: string, code: string): boolean {
 }
 
 export async function generateQRDataURL(email: string, secret: string): Promise<string> {
-  const uri = authenticator.keyuri(email, 'Foundry', secret)
+  const uri = authenticator.keyuri(email, 'OpenWork Loft', secret)
   return QRCode.toDataURL(uri)
 }

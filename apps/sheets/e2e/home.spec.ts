@@ -4,7 +4,7 @@ import { createTestSheet, deleteTestSheet } from './helpers'
 test.describe('Home page', () => {
   test('has correct page title', async ({ page }) => {
     await page.goto('/sheets')
-    await expect(page).toHaveTitle(/Foundry Sheets/)
+    await expect(page).toHaveTitle(/OWL Sheets/)
   })
 
   test('shows Sheets nav link in TopNav', async ({ page }) => {

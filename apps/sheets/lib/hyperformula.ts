@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { CellAddress } from '@foundry/shared'
+import type { CellAddress } from '@owl/shared'
 import type { SheetData } from './actions'
 
 type HFInstance = import('hyperformula').HyperFormula

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Foundry PDF Pricing — No per-envelope fees, no seat limits',
+  title: 'OWL PDF Pricing — No per-envelope fees, no seat limits',
   description: 'Open-source PDF editing, forms, conversion, and defensible redaction. Free to self-host. No DocuSign envelope tax.',
 }
 
@@ -132,24 +132,24 @@ const FAQS = [
     a: 'Yes. AGPL-3.0. Run it on your own server with docker compose up. No seats, no envelopes, no calls to sales.',
   },
   {
-    q: "How is Foundry PDF's redaction different from Acrobat's?",
-    a: "Acrobat paints a black rectangle over content — the underlying text remains in the file, searchable and copyable. Courts have rejected documents redacted this way. Foundry PDF removes content at the object level using PyMuPDF's apply_redacts(): text runs, image pixels, and vector paths are deleted from the content stream before saving. Every redaction generates a certificate with SHA-256 hashes of both the original and redacted document.",
+    q: "How is OWL PDF's redaction different from Acrobat's?",
+    a: "Acrobat paints a black rectangle over content — the underlying text remains in the file, searchable and copyable. Courts have rejected documents redacted this way. OWL PDF removes content at the object level using PyMuPDF's apply_redacts(): text runs, image pixels, and vector paths are deleted from the content stream before saving. Every redaction generates a certificate with SHA-256 hashes of both the original and redacted document.",
   },
   {
     q: 'What is the envelope tax and why does it matter for governments?',
-    a: 'DocuSign charges per signature event — typically $0.50–$3.00 each time someone signs a document. A city processing 10,000 permits, HR forms, and contracts per year pays $5,000–$30,000 in envelope fees alone, on top of seat costs. Foundry PDF has no envelope fees at any volume.',
+    a: 'DocuSign charges per signature event — typically $0.50–$3.00 each time someone signs a document. A city processing 10,000 permits, HR forms, and contracts per year pays $5,000–$30,000 in envelope fees alone, on top of seat costs. OWL PDF has no envelope fees at any volume.',
   },
   {
     q: 'Can I migrate from Acrobat or DocuSign?',
-    a: "Yes. Any PDF you can export from Acrobat or DocuSign can be opened, edited, and re-saved in Foundry PDF. There is no proprietary format to escape from.",
+    a: "Yes. Any PDF you can export from Acrobat or DocuSign can be opened, edited, and re-saved in OWL PDF. There is no proprietary format to escape from.",
   },
   {
-    q: 'Does Foundry PDF handle e-signatures?',
-    a: 'Foundry PDF creates AcroForm signature fields in PDFs. Full cryptographic signing (PKI/X.509) is on the roadmap. For organizations that need legally binding e-signatures today, Foundry PDF handles the document preparation and form creation; your signing workflow closes the loop.',
+    q: 'Does OWL PDF handle e-signatures?',
+    a: 'OWL PDF creates AcroForm signature fields in PDFs. Full cryptographic signing (PKI/X.509) is on the roadmap. For organizations that need legally binding e-signatures today, OWL PDF handles the document preparation and form creation; your signing workflow closes the loop.',
   },
   {
-    q: 'What does Foundry Cloud include?',
-    a: 'Foundry Cloud is a managed, hosted instance of the full Foundry workspace — Docs, Sheets, Mail, Channels, Wiki, and PDF — under one login. Flat annual pricing, no per-envelope fees, no per-seat fees beyond the base plan. Contact us for a quote.',
+    q: 'What does OpenWork Loft Cloud include?',
+    a: 'OpenWork Loft Cloud is a managed, hosted instance of the full OWL workspace — Docs, Sheets, Mail, Channels, Wiki, and PDF — under one login. Flat annual pricing, no per-envelope fees, no per-seat fees beyond the base plan. Contact us for a quote.',
   },
 ]
 
@@ -176,7 +176,7 @@ export default function PricingPage() {
       <header className="h-14 border-b border-border bg-bg-base/80 backdrop-blur-sm sticky top-0 z-10 flex items-center px-6 justify-between">
         <Link href="/" className="flex items-center gap-2.5">
           <Logo />
-          <span className="font-semibold text-fg-primary text-sm">Foundry</span>
+          <span className="font-semibold text-fg-primary text-sm">OpenWork Loft</span>
         </Link>
         <nav className="flex items-center gap-5">
           <Link href="/#apps" className="hidden sm:block text-sm text-fg-secondary hover:text-fg-primary transition-colors">Apps</Link>
@@ -197,7 +197,7 @@ export default function PricingPage() {
         <div className="relative max-w-3xl mx-auto">
           <div className="inline-flex items-center gap-2 bg-bg-surface border border-border text-fg-secondary text-xs px-3 py-1.5 rounded-full mb-8 font-medium">
             <span className="w-1.5 h-1.5 rounded-full bg-orange-400 inline-block" />
-            Foundry PDF
+            OWL PDF
           </div>
           <h1 className="text-5xl sm:text-6xl font-semibold text-fg-primary tracking-tight mb-5 leading-[1.05]">
             No per-envelope tax.<br />
@@ -253,7 +253,7 @@ export default function PricingPage() {
             <div className="pointer-events-none absolute top-0 right-0 w-48 h-48 bg-accent/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
             <div className="relative">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-fg-tertiary uppercase tracking-widest">Foundry Cloud</p>
+                <p className="text-xs font-semibold text-fg-tertiary uppercase tracking-widest">OpenWork Loft Cloud</p>
                 <span className="text-xs bg-accent/10 text-accent font-semibold px-2.5 py-0.5 rounded-full">Managed</span>
               </div>
               <div className="flex items-baseline gap-2 mb-3">
@@ -264,7 +264,7 @@ export default function PricingPage() {
               </p>
               <ul className="space-y-3 mb-8">
                 {[
-                  'Full Foundry workspace (Docs, Sheets, Mail, PDF, Channels)',
+                  'Full OWL workspace (Docs, Sheets, Mail, PDF, Channels)',
                   'Flat annual pricing',
                   'No envelope or send fees',
                   'Managed upgrades + backups',
@@ -291,7 +291,7 @@ export default function PricingPage() {
         <div className="max-w-4xl mx-auto">
           <p className="text-xs font-semibold text-fg-tertiary uppercase tracking-widest text-center mb-3">How it stacks up</p>
           <h2 className="text-3xl font-semibold text-fg-primary text-center tracking-tight mb-12">
-            Foundry PDF vs. the alternatives
+            OWL PDF vs. the alternatives
           </h2>
 
           <div className="rounded-2xl border border-border overflow-hidden">
@@ -299,7 +299,7 @@ export default function PricingPage() {
               <thead>
                 <tr className="border-b border-border bg-bg-raised">
                   <th className="text-left px-6 py-4 text-fg-tertiary font-medium text-xs uppercase tracking-wider w-2/5">Feature</th>
-                  <th className="text-center px-4 py-4 text-orange-500 font-semibold text-sm w-1/5">Foundry PDF</th>
+                  <th className="text-center px-4 py-4 text-orange-500 font-semibold text-sm w-1/5">OWL PDF</th>
                   <th className="text-center px-4 py-4 text-fg-secondary font-medium text-sm w-1/5">Adobe Acrobat Pro</th>
                   <th className="text-center px-4 py-4 text-fg-secondary font-medium text-sm w-1/5">DocuSign</th>
                 </tr>
@@ -372,7 +372,7 @@ export default function PricingPage() {
                 <thead>
                   <tr className="border-b border-border">
                     <th className="text-left px-5 py-3 text-fg-tertiary font-medium text-xs">Envelopes/yr</th>
-                    <th className="text-right px-5 py-3 text-orange-500 font-semibold text-xs">Foundry PDF</th>
+                    <th className="text-right px-5 py-3 text-orange-500 font-semibold text-xs">OWL PDF</th>
                     <th className="text-right px-5 py-3 text-fg-secondary font-medium text-xs">DocuSign</th>
                   </tr>
                 </thead>
@@ -409,7 +409,7 @@ export default function PricingPage() {
                 Acrobat Pro's redaction paints a black rectangle over text. The underlying content stream is unchanged — the text remains searchable, copyable, and recoverable. Courts have rejected FOIA responses redacted this way.
               </p>
               <p className="text-fg-secondary text-sm leading-relaxed">
-                Foundry PDF removes content at the PDF object level: text runs, image pixels, and vector paths are deleted from the file before saving. The redacted content cannot be recovered by any means short of the original document.
+                OWL PDF removes content at the PDF object level: text runs, image pixels, and vector paths are deleted from the file before saving. The redacted content cannot be recovered by any means short of the original document.
               </p>
             </div>
             <div className="space-y-4">
@@ -423,7 +423,7 @@ export default function PricingPage() {
                 </p>
               </div>
               <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-5">
-                <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2">Foundry PDF — object-level removal</p>
+                <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2">OWL PDF — object-level removal</p>
                 <p className="font-mono text-xs text-fg-secondary leading-6">
                   page.apply_redacts(<br />
                   {'  '}images=REDACT_IMAGE_PIXELS,<br />
@@ -510,7 +510,7 @@ export default function PricingPage() {
         <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <Logo />
-            <span className="text-sm font-medium text-fg-primary">Foundry</span>
+            <span className="text-sm font-medium text-fg-primary">OpenWork Loft</span>
           </div>
           <div className="flex items-center gap-6 text-xs text-fg-tertiary">
             <Link href="/pricing" className="text-accent">Pricing</Link>

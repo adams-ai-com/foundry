@@ -98,7 +98,7 @@ export default function PdfHome() {
     <div className="max-w-2xl w-full mx-auto px-6 py-10">
       <div className="mb-6 flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-fg-primary">Foundry PDF</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-fg-primary">OWL PDF</h1>
           <p className="text-sm text-fg-tertiary mt-1">Upload a PDF to edit, create forms, convert, redact, or send for signing.</p>
         </div>
         <a href="/pdf/envelopes"

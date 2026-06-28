@@ -1,13 +1,13 @@
 'use client'
 
 import { useRef } from 'react'
-import { IconButton, Separator } from '@foundry/ui'
+import { IconButton, Separator } from '@owl/ui'
 import { useHyperFormulaContext } from '@/lib/hyperformula-context'
 import { importXlsx, exportXlsx, parseCSV, serializeCSV } from '@/lib/xlsx-io'
 import { ColorPicker } from './ColorPicker'
 import { BorderPicker } from './BorderPicker'
 import type { BorderPreset } from './BorderPicker'
-import type { CellAddress } from '@foundry/shared'
+import type { CellAddress } from '@owl/shared'
 import type { CellFormat, MergedRange } from '@/lib/actions'
 
 const FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 72]

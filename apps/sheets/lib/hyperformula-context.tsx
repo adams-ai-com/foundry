@@ -3,7 +3,7 @@
 import React, { createContext, useCallback, useContext, useRef, useState } from 'react'
 import { useHyperFormula } from './hyperformula'
 import type { SheetData, CellFormat, CellFormats } from './actions'
-import type { CellAddress } from '@foundry/shared'
+import type { CellAddress } from '@owl/shared'
 
 type HFContextValue = ReturnType<typeof useHyperFormula> & {
   getCellFormat: (addr: CellAddress) => CellFormat

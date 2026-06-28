@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { Editor as TipTapEditor } from '@tiptap/react'
-import { IconButton, Separator } from '@foundry/ui'
+import { IconButton, Separator } from '@owl/ui'
 import { LinkPopover } from './LinkPopover'
 import { ImagePopover } from './ImagePopover'
 

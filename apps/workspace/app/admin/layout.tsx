@@ -19,7 +19,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </svg>
           </div>
           <div>
-            <div className="text-xs font-semibold text-fg-primary leading-none">Foundry Admin</div>
+            <div className="text-xs font-semibold text-fg-primary leading-none">OWL Admin</div>
             <div className="text-[10px] text-fg-tertiary mt-0.5">{session.role}</div>
           </div>
         </div>

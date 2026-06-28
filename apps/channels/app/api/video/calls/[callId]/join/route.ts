@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession } from '@foundry/auth'
+import { getSession } from '@owl/auth'
 import { AccessToken } from 'livekit-server-sdk'
 import db from '@/lib/db'
 

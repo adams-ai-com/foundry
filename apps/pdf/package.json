@@ -1,5 +1,5 @@
 {
-  "name": "@foundry/pdf",
+  "name": "@owl/pdf",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -10,9 +10,9 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@foundry/auth": "workspace:*",
-    "@foundry/shared": "workspace:*",
-    "@foundry/ui": "workspace:*",
+    "@owl/auth": "workspace:*",
+    "@owl/shared": "workspace:*",
+    "@owl/ui": "workspace:*",
     "next": "^15.0.0",
     "postgres": "^3.4.4",
     "react": "^19.0.0",

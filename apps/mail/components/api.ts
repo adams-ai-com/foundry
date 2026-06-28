@@ -1,4 +1,4 @@
-import type { MailThread, MailMessage, MailboxInfo, CalendarEvent } from '@foundry/shared'
+import type { MailThread, MailMessage, MailboxInfo, CalendarEvent } from '@owl/shared'
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/mail/api/mail/${path}`, {

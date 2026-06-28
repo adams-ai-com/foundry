@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test'
 
-test('app loads and shows Foundry Mail branding', async ({ page }) => {
+test('app loads and shows OWL Mail branding', async ({ page }) => {
   await page.goto('/mail')
-  await expect(page.getByText('Foundry Mail')).toBeVisible()
+  await expect(page.getByText('OWL Mail')).toBeVisible()
 })
 
 test('Compose button is visible on load', async ({ page }) => {

@@ -1,15 +1,15 @@
 {
-  "name": "foundry",
+  "name": "openwork-loft",
   "private": true,
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
     "type-check": "turbo type-check",
-    "dev:docs": "turbo dev --filter=@foundry/docs",
-    "dev:sheets": "turbo dev --filter=@foundry/sheets",
-    "dev:mail": "turbo dev --filter=@foundry/mail",
-    "dev:sites": "turbo dev --filter=@foundry/sites"
+    "dev:docs": "turbo dev --filter=@owl/docs",
+    "dev:sheets": "turbo dev --filter=@owl/sheets",
+    "dev:mail": "turbo dev --filter=@owl/mail",
+    "dev:sites": "turbo dev --filter=@owl/sites"
   },
   "devDependencies": {
     "turbo": "^2.0.0",

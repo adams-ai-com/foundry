@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { requireSession } from '@foundry/auth'
+import { requireSession } from '@owl/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,7 +10,7 @@ export default async function ImportPage() {
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-8">
       <div className="max-w-2xl w-full">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Import Communications History</h1>
-        <p className="text-gray-500 mb-8">Bring your team's history into Foundry Channels in minutes.</p>
+        <p className="text-gray-500 mb-8">Bring your team's history into OWL Channels in minutes.</p>
         <div className="grid gap-4">
           <Link href="/import/slack"
             className="flex items-start gap-4 bg-white border border-gray-200 rounded-xl p-5 hover:border-indigo-400 hover:shadow-sm transition-all group">

@@ -285,7 +285,7 @@ interface Branding {
   brand_color: string
 }
 
-interface FoundryUser {
+interface OWLUser {
   userId: string
   email: string
   name: string | null
@@ -313,7 +313,7 @@ export function SigningClient({
   token: string
   initialData: SigningData
   branding?: Branding | null
-  foundryUser?: FoundryUser | null
+  owlUser?: OWLUser | null
 }) {
   const d = initialData
   const color = branding?.brand_color || '#2563eb'
@@ -340,7 +340,7 @@ export function SigningClient({
   const [declined, setDeclined] = useState(false)
   const [declineError, setDeclineError] = useState<string | null>(null)
 
-  // Foundry identity mode: auto-fill all sig fields with a typed PNG on mount
+  // OWL identity mode: auto-fill all sig fields with a typed PNG on mount
   useEffect(() => {
     if (!foundryUser) return
     const displayName = foundryUser.name || foundryUser.email
@@ -461,7 +461,7 @@ export function SigningClient({
           <p className="text-sm text-gray-500">
             {branding?.display_name || d.creator_name} will be notified when all parties have signed.
           </p>
-          <p className="text-xs text-gray-400 mt-8">Powered by Foundry PDF · Open source</p>
+          <p className="text-xs text-gray-400 mt-8">Powered by OWL PDF · Open source</p>
         </div>
       </div>
     )
@@ -483,7 +483,7 @@ export function SigningClient({
           <p className="text-sm text-gray-500">
             {branding?.display_name || d.creator_name} has been notified.
           </p>
-          <p className="text-xs text-gray-400 mt-8">Powered by Foundry PDF · Open source</p>
+          <p className="text-xs text-gray-400 mt-8">Powered by OWL PDF · Open source</p>
         </div>
       </div>
     )
@@ -521,7 +521,7 @@ export function SigningClient({
           <p className="text-sm font-medium text-gray-800">{d.recipient_name}</p>
           {foundryUser && (
             <p className="text-xs text-blue-600 font-medium mt-0.5">
-              ✓ Foundry Workspace identity
+              ✓ OWL Workspace identity
             </p>
           )}
         </div>
@@ -698,7 +698,7 @@ export function SigningClient({
         <div>
           {foundryUser && allSigned && (
             <p className="text-xs text-blue-700 font-medium">
-              ✓ All fields verified — signing with Foundry Workspace identity
+              ✓ All fields verified — signing with OWL Workspace identity
             </p>
           )}
           {!foundryUser && !allSigned && (
@@ -727,12 +727,12 @@ export function SigningClient({
           {submitting
             ? 'Submitting…'
             : foundryUser
-              ? 'Sign with Foundry account →'
+              ? 'Sign with OWL account →'
               : 'Sign Document →'}
         </button>
       </footer>
 
-      {/* Signature capture modal — external signers only; Foundry identity uses auto-generated PNG */}
+      {/* Signature capture modal — external signers only; OWL identity uses auto-generated PNG */}
       {!foundryUser && captureField && (captureField.field_type === 'signature' || captureField.field_type === 'initials') && (
         <CaptureModal
           fieldType={captureField.field_type}

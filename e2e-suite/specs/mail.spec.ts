@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { envFileValue, mintSession, testUser } from '@foundry/e2e'
+import { envFileValue, mintSession, testUser } from '@owl/e2e'
 
 // Mailserver REST API (port 3100). Deliberately NO /send coverage — outbound
 // goes through the SMTP relay and tests must never send real mail. Send-path
@@ -88,7 +88,7 @@ test.describe('mail client UI', () => {
   test('inbox shell renders with account sidebar', async ({ page, context }) => {
     const sess = await mintSession()
     const base = process.env.MAIL_BASE ?? 'http://127.0.0.1:4104'
-    await context.addCookies([{ name: 'foundry_session', value: sess, url: base }])
+    await context.addCookies([{ name: 'owl_session', value: sess, url: base }])
     const res = await page.goto(`${base}/mail`)
     expect(res!.status()).toBeLessThan(400)
     await expect(page.getByText(/inbox/i).first()).toBeVisible({ timeout: 20_000 })

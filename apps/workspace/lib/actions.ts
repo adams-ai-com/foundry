@@ -345,7 +345,7 @@ export async function setTheme(theme: string) {
   const allowed = ['light', 'dark', 'warm']
   if (!allowed.includes(theme)) return
   const jar = await cookies()
-  jar.set('foundry_theme', theme, {
+  jar.set('owl_theme', theme, {
     httpOnly: false,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax' as const,

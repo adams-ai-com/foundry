@@ -1,8 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { colIndexToLetter } from '@foundry/shared'
-import type { CellAddress } from '@foundry/shared'
+import { colIndexToLetter } from '@owl/shared'
+import type { CellAddress } from '@owl/shared'
 import { useHyperFormulaContext } from '@/lib/hyperformula-context'
 import { applyNumFormat } from '@/lib/format-utils'
 import { ROWS, COLS, COL_WIDTH, ROW_HEIGHT, HEADER_WIDTH } from '@/lib/sheet-constants'

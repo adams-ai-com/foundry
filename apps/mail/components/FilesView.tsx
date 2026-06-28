@@ -32,7 +32,7 @@ export function FilesView() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  async function openInFoundryPdf(id: string, filename: string) {
+  async function openInOwlPdf(id: string, filename: string) {
     setOpeningPdf(id)
     try {
       const res = await fetch(downloadFileUrl(id))
@@ -178,7 +178,7 @@ export function FilesView() {
                       <div className="min-w-0">
                         {file.contentType === 'application/pdf' ? (
                           <button
-                            onClick={() => openInFoundryPdf(file.id, file.filename)}
+                            onClick={() => openInOwlPdf(file.id, file.filename)}
                             disabled={openingPdf === file.id}
                             className="text-sm text-gray-200 hover:text-blue-300 truncate block max-w-xs text-left disabled:opacity-50"
                           >

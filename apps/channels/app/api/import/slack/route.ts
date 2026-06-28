@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession } from '@foundry/auth'
+import { getSession } from '@owl/auth'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
        ${JSON.stringify(parsed.users)}, ${JSON.stringify(parsed.channels)})
   `
 
-  // Get existing Foundry channels for mapping UI
+  // Get existing OWL channels for mapping UI
   const foundryChannels = await db`
     SELECT id, name FROM channels WHERE org_id = ${session.orgId} AND is_archived = false AND type = 'stream'
     ORDER BY name ASC
@@ -86,6 +86,6 @@ export async function POST(req: NextRequest) {
     user_mapping: userMapping,
     channel_mapping: channelMapping,
     auto_matched: autoMatched,
-    foundry_channels: foundryChannels,
+    owl_channels: foundryChannels,
   }, { status: 201 })
 }

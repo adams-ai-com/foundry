@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 
-type FoundryChannel = { id: string; name: string }
+type OWLChannel = { id: string; name: string }
 type SlackUser = { id: string; name: string; email: string | null; is_bot: boolean }
 type SlackChannel = { id: string; name: string; is_dm: boolean; purpose: string | null }
 type ChanMap = { foundry_channel_id: string | null; create_new: boolean; new_name: string | null; skip: boolean }
@@ -14,7 +14,7 @@ type RecentJob = {
 }
 
 interface Props {
-  foundryChannels: FoundryChannel[]
+  foundryChannels: OWLChannel[]
   recentJobs: RecentJob[]
 }
 
@@ -194,7 +194,7 @@ export function SlackImportWizard({ foundryChannels, recentJobs }: Props) {
               <div className="grid grid-cols-[1fr_auto_1fr] gap-0 text-xs font-semibold text-gray-400 uppercase tracking-wide px-5 py-3 border-b border-gray-100 bg-gray-50">
                 <span>Slack channel</span>
                 <span></span>
-                <span>Foundry channel</span>
+                <span>OWL channel</span>
               </div>
               {nonDmChannels.map(c => {
                 const m = chanMapping[c.id] ?? { foundry_channel_id: null, create_new: true, new_name: c.name, skip: false }
@@ -374,7 +374,7 @@ export function SlackImportWizard({ foundryChannels, recentJobs }: Props) {
               <div>
                 <div className="text-5xl mb-4">✅</div>
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">Import complete</h1>
-                <p className="text-gray-500 mb-6">Your Slack history is now in Foundry Channels.</p>
+                <p className="text-gray-500 mb-6">Your Slack history is now in OWL Channels.</p>
                 <div className="grid grid-cols-2 gap-4 mb-8">
                   <div className="bg-white border border-gray-200 rounded-xl px-5 py-4 text-center">
                     <div className="text-3xl font-bold text-gray-900">{jobStatus.messages_imported.toLocaleString()}</div>

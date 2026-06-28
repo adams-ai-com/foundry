@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 
-type FoundryChannel = { id: string; name: string }
+type OWLChannel = { id: string; name: string }
 type TeamsChannel = { teamId: string; teamName: string; channelId: string; channelName: string }
 type ChanMap = { team_name: string; channel_name: string; foundry_channel_id: string | null; create_new: boolean; new_name: string | null; skip: boolean }
 
@@ -18,7 +18,7 @@ type JobStatus = {
 }
 
 interface Props {
-  foundryChannels: FoundryChannel[]
+  foundryChannels: OWLChannel[]
   recentJobs: RecentJob[]
 }
 
@@ -126,7 +126,7 @@ export function TeamsImportWizard({ foundryChannels, recentJobs }: Props) {
             <p className="text-gray-500 mb-2">Upload a Teams export ZIP from the Teams admin center or Microsoft Purview.</p>
             <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-blue-800 mb-6">
               <strong>How to export:</strong> Teams Admin Center → <em>Users → Data export</em>, or Microsoft Purview Compliance → <em>Content search → Export</em>.
-              Conversation threads become individual topics in Foundry Channels.
+              Conversation threads become individual topics in OWL Channels.
             </div>
 
             <div
@@ -177,7 +177,7 @@ export function TeamsImportWizard({ foundryChannels, recentJobs }: Props) {
             <h1 className="text-2xl font-bold text-gray-900 mb-1">Map channels</h1>
             <p className="text-gray-500 mb-6">
               Found <strong>{teamsChannels.length}</strong> channel{teamsChannels.length !== 1 ? 's' : ''} across <strong>{Object.keys(teamGroups).length}</strong> team{Object.keys(teamGroups).length !== 1 ? 's' : ''}.
-              Each channel's conversation threads become topics in Foundry.
+              Each channel's conversation threads become topics in OWL.
             </p>
 
             <div className="space-y-6">
@@ -271,7 +271,7 @@ export function TeamsImportWizard({ foundryChannels, recentJobs }: Props) {
               </div>
               <div className="px-5 py-4">
                 <div className="text-sm text-gray-500 mb-0.5">Threading</div>
-                <div className="font-medium text-gray-900">Each conversation thread → one Foundry topic</div>
+                <div className="font-medium text-gray-900">Each conversation thread → one OWL topic</div>
               </div>
               <div className="px-5 py-4">
                 <div className="text-sm text-gray-500 mb-0.5">Users</div>
@@ -325,7 +325,7 @@ export function TeamsImportWizard({ foundryChannels, recentJobs }: Props) {
               <div>
                 <div className="text-5xl mb-4">✅</div>
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">Import complete</h1>
-                <p className="text-gray-500 mb-6">Your Teams history is now in Foundry Channels, organized as topics.</p>
+                <p className="text-gray-500 mb-6">Your Teams history is now in OWL Channels, organized as topics.</p>
                 <div className="grid grid-cols-2 gap-4 mb-8">
                   <div className="bg-white border border-gray-200 rounded-xl px-5 py-4 text-center">
                     <div className="text-3xl font-bold text-gray-900">{jobStatus.messages_imported.toLocaleString()}</div>

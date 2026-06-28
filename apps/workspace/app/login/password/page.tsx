@@ -22,7 +22,7 @@ export default async function PasswordPage() {
             </svg>
           </div>
           <h1 className="text-2xl font-bold text-fg-primary tracking-tight mb-2">
-            Sign in to Foundry
+            Sign in to OpenWork Loft
           </h1>
           <p className="text-sm text-fg-secondary leading-relaxed">
             Enter your password to continue.

@@ -2,7 +2,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import db from './db'
 
-export const SESSION_COOKIE = 'foundry_session'
+export const SESSION_COOKIE = 'owl_session'
 const SESSION_DAYS_DEFAULT = 30
 
 export type Role = 'owner' | 'admin' | 'member'

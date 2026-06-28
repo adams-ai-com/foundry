@@ -27,7 +27,7 @@ async function waitForSaved(page: Page) {
 
 test('home page has correct title and shows empty state', async ({ page }) => {
   await page.goto('/docs')
-  await expect(page).toHaveTitle('Foundry Docs')
+  await expect(page).toHaveTitle('OWL Docs')
   await expect(page.getByTestId('empty-state')).toBeVisible()
   await expect(page.getByRole('button', { name: 'New document' })).toBeVisible()
 })

@@ -103,7 +103,7 @@ export function FileList({ files }: { files: SiteFile[] }) {
     router.refresh()
   }
 
-  async function openInFoundryPdf(id: string, name: string) {
+  async function openInOwlPdf(id: string, name: string) {
     setOpeningPdf(id)
     try {
       const res = await fetch(`/sites/api/file/${id}`)
@@ -131,7 +131,7 @@ export function FileList({ files }: { files: SiteFile[] }) {
           <li key={f.id} className="group flex items-center">
             {f.mimeType === 'application/pdf' ? (
               <button
-                onClick={() => openInFoundryPdf(f.id, f.name)}
+                onClick={() => openInOwlPdf(f.id, f.name)}
                 disabled={openingPdf === f.id}
                 className="flex-1 flex items-center gap-3.5 px-4 py-3 hover:bg-bg-hover transition-colors min-w-0 text-left disabled:opacity-60"
               >

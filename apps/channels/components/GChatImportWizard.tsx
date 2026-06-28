@@ -82,7 +82,7 @@ export function GChatImportWizard({
         user_mapping: Record<string, string>
         space_mapping: Record<string, SpaceMappingEntry>
         auto_matched: number
-        foundry_channels: Channel[]
+        owl_channels: Channel[]
       }
       setJobId(data.jobId)
       setSpaces(data.spaces)

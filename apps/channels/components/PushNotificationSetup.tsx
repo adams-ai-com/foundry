@@ -79,7 +79,7 @@ export function PushNotificationSetup() {
         <div>
           <p className="font-medium text-indigo-900">Enable push notifications on iPhone</p>
           <p className="text-indigo-700 mt-0.5">
-            Tap <strong>Share</strong> → <strong>Add to Home Screen</strong> in Safari, then open Foundry from your home screen.
+            Tap <strong>Share</strong> → <strong>Add to Home Screen</strong> in Safari, then open OWL from your home screen.
           </p>
         </div>
       </div>

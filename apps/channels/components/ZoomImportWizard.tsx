@@ -244,7 +244,7 @@ export function ZoomImportWizard({
           <div className="space-y-4">
             <p className="text-sm text-gray-600">
               Found <strong>{recordings.length}</strong> recording{recordings.length !== 1 ? 's' : ''}.
-              Optionally assign each to a Foundry channel and topic so the AI summary gets posted there.
+              Optionally assign each to an OWL channel and topic so the AI summary gets posted there.
             </p>
             <div className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
               {recordings.map(r => {

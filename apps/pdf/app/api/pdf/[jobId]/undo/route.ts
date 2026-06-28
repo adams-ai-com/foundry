@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession } from '@foundry/auth'
+import { getSession } from '@owl/auth'
 import { fetchProc, assertJobOwner } from '@/lib/proc'
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {

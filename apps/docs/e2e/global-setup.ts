@@ -3,7 +3,7 @@ import * as dotenv from 'dotenv'
 import * as path from 'path'
 import * as fs from 'fs'
 
-const SESSION_COOKIE = 'foundry_session'
+const SESSION_COOKIE = 'owl_session'
 const TEST_USER_EMAIL = 'test@playwright.local'
 const TEST_SESSION_ID = 'playwright-test-session-docs-0000000001'
 

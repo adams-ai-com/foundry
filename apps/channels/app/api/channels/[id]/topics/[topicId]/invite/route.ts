@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession } from '@foundry/auth'
+import { getSession } from '@owl/auth'
 import { randomBytes } from 'node:crypto'
 import db from '@/lib/db'
 

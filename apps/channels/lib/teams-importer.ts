@@ -209,7 +209,7 @@ export async function runTeamsImport(jobId: string, orgId: string, createdBy: st
     const mapping = job.channel_mapping[teamsChannel.channelId]
     if (!mapping || mapping.skip) continue
 
-    // Resolve or create Foundry channel
+    // Resolve or create OWL channel
     let foundryChannelId: string
     if (mapping.foundry_channel_id) {
       foundryChannelId = mapping.foundry_channel_id
@@ -254,7 +254,7 @@ export async function runTeamsImport(jobId: string, orgId: string, createdBy: st
     // Pass 1: create topics for root messages (replyToId is null/undefined/"")
     const rootMessages = messages.filter(m => !m.replyToId)
     const msgIdToTopic = new Map<string, string>()  // teamsMessageId → foundryTopicId
-    const msgIdToFoundryId = new Map<string, string>()  // teamsMessageId → foundryMessageId
+    const msgIdToOwlId = new Map<string, string>()  // teamsMessageId → foundryMessageId
 
     for (const msg of rootMessages) {
       const body = msg.body?.contentType === 'html'
@@ -310,7 +310,7 @@ export async function runTeamsImport(jobId: string, orgId: string, createdBy: st
       }
       if (!body.trim()) continue
 
-      const parentMsgId = msg.replyToId ? (msgIdToFoundryId.get(msg.replyToId) ?? null) : null
+      const parentMsgId = msg.replyToId ? (msgIdToOwlId.get(msg.replyToId) ?? null) : null
       const teamsId = msg.id
 
       const reactions = JSON.stringify((msg.reactions ?? []).map(r => ({
@@ -331,7 +331,7 @@ export async function runTeamsImport(jobId: string, orgId: string, createdBy: st
           RETURNING id
         ` as { id: string }[]
         if (inserted) {
-          msgIdToFoundryId.set(teamsId, inserted.id)
+          msgIdToOwlId.set(teamsId, inserted.id)
           if (!msg.replyToId) msgIdToTopic.set(msg.id, topicId)
           totalImported++
         }

@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback, forwardRef, useImperativeHandle, useRef } from 'react'
-import { formatDate } from '@foundry/shared'
-import type { MailThread } from '@foundry/shared'
+import { formatDate } from '@owl/shared'
+import type { MailThread } from '@owl/shared'
 import { listThreads, searchThreads, archiveThread, trashThread, starThread } from '../lib/api'
 
 export interface InboxViewHandle {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import type { CalendarEvent } from '@foundry/shared'
+import type { CalendarEvent } from '@owl/shared'
 import { updateCalendarEvent } from '../lib/api'
 
 function XIcon() {

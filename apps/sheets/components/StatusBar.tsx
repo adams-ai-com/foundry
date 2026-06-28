@@ -1,7 +1,7 @@
 'use client'
 
 import { useHyperFormulaContext } from '@/lib/hyperformula-context'
-import type { CellAddress } from '@foundry/shared'
+import type { CellAddress } from '@owl/shared'
 
 interface StatusBarProps {
   selected: CellAddress

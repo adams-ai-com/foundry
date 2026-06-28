@@ -16,9 +16,9 @@ export async function sendMagicLink(email: string, url: string) {
     const t = await makeTransport()
     await t.sendMail({
       from: FROM(), to: email,
-      subject: 'Sign in to Foundry',
+      subject: 'Sign in to OpenWork Loft',
       text: `Click to sign in:\n\n${url}\n\nExpires in 15 minutes.`,
-      html: `<p>Click to sign in to Foundry:</p><p><a href="${url}">${url}</a></p><p>Expires in 15 minutes.</p>`,
+      html: `<p>Click to sign in to OpenWork Loft:</p><p><a href="${url}">${url}</a></p><p>Expires in 15 minutes.</p>`,
     })
   } else {
     console.log(`\n[MAGIC LINK] ${email}\n${url}\n`)
@@ -36,9 +36,9 @@ export async function sendInvite(
     const t = await makeTransport()
     await t.sendMail({
       from: FROM(), to: email,
-      subject: `You've been invited to Foundry`,
-      text: `${inviterEmail} has invited you to join Foundry as ${roleLabel}.\n\nAccept your invitation:\n${inviteUrl}\n\nThis link expires in 7 days.`,
-      html: `<p>${inviterEmail} has invited you to join <strong>Foundry</strong> as <strong>${roleLabel}</strong>.</p><p><a href="${inviteUrl}">Accept invitation</a></p><p>This link expires in 7 days.</p>`,
+      subject: `You've been invited to OpenWork Loft`,
+      text: `${inviterEmail} has invited you to join OpenWork Loft as ${roleLabel}.\n\nAccept your invitation:\n${inviteUrl}\n\nThis link expires in 7 days.`,
+      html: `<p>${inviterEmail} has invited you to join <strong>OpenWork Loft</strong> as <strong>${roleLabel}</strong>.</p><p><a href="${inviteUrl}">Accept invitation</a></p><p>This link expires in 7 days.</p>`,
     })
   } else {
     console.log(`\n[INVITE] ${email} (${role}) invited by ${inviterEmail}\n${inviteUrl}\n`)

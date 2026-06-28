@@ -334,7 +334,7 @@ export default async function UserDetailPage({
           <div className="border-t border-border pt-3">
             <div className="mb-3">
               <div className="text-sm font-medium text-fg-primary">App access</div>
-              <div className="text-xs text-fg-tertiary mt-0.5">Control which Foundry apps this user can open</div>
+              <div className="text-xs text-fg-tertiary mt-0.5">Control which OWL apps this user can open</div>
             </div>
             <form action={updateAppAccessWithId} className="space-y-2">
               {(['docs', 'sheets', 'mail', 'wiki'] as const).map(app => (

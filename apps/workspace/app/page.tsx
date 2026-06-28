@@ -127,7 +127,7 @@ export default async function RootPage() {
                   <path d="M4 5a1 1 0 011-1h14a1 1 0 010 2H5a1 1 0 01-1-1zm0 6a1 1 0 011-1h10a1 1 0 010 2H5a1 1 0 01-1-1zm0 6a1 1 0 011-1h6a1 1 0 010 2H5a1 1 0 01-1-1z"/>
                 </svg>
               </div>
-              <span className="font-semibold text-fg-primary text-sm tracking-tight">Foundry</span>
+              <span className="font-semibold text-fg-primary text-sm tracking-tight">OpenWork Loft</span>
               <span className="text-border hidden sm:block text-lg leading-none">·</span>
               <span className="text-fg-tertiary text-sm truncate hidden sm:block max-w-[200px]">{org.name}</span>
             </div>
@@ -197,7 +197,7 @@ export default async function RootPage() {
       <header className="h-14 border-b border-border bg-bg-base/80 backdrop-blur-sm sticky top-0 z-10 flex items-center px-6 justify-between">
         <div className="flex items-center gap-2.5">
           <Logo />
-          <span className="font-semibold text-fg-primary text-sm">Foundry</span>
+          <span className="font-semibold text-fg-primary text-sm">OpenWork Loft</span>
         </div>
         <nav className="flex items-center gap-5">
           <a href="#apps" className="hidden sm:block text-sm text-fg-secondary hover:text-fg-primary transition-colors">Apps</a>
@@ -309,7 +309,7 @@ export default async function RootPage() {
                 Microsoft and Google made the same mistake: they built apps first, then tried to connect them. Mail in one place, files in another, chat in a third.
               </p>
               <p className="text-fg-secondary text-sm leading-relaxed">
-                Foundry organizes around <strong className="text-fg-primary font-semibold">workspaces</strong> — a project, a client, a team. Every conversation, document, and decision lives together. Search spans all of it. AI understands all of it.
+                OpenWork Loft organizes around <strong className="text-fg-primary font-semibold">workspaces</strong> — a project, a client, a team. Every conversation, document, and decision lives together. Search spans all of it. AI understands all of it.
               </p>
             </div>
             <div className="bg-bg-raised border border-border rounded-xl p-6 font-mono text-xs text-fg-secondary leading-7">
@@ -390,7 +390,7 @@ export default async function RootPage() {
         <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <Logo />
-            <span className="text-sm font-medium text-fg-primary">Foundry</span>
+            <span className="text-sm font-medium text-fg-primary">OpenWork Loft</span>
           </div>
           <div className="flex items-center gap-6 text-xs text-fg-tertiary">
             <Link href="/pricing" className="hover:text-fg-secondary transition-colors">Pricing</Link>

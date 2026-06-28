@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { randomUUID } from 'crypto'
-import { mintSession } from '@foundry/e2e'
+import { mintSession } from '@owl/e2e'
 
 const BASE = process.env.SITES_BASE ?? 'http://127.0.0.1:4107'
 
@@ -13,7 +13,7 @@ test.describe('sites', () => {
   test('upload rejects a request with no file', async ({ request }) => {
     const sess = await mintSession()
     const res = await request.post(`${BASE}/sites/api/upload`, {
-      headers: { cookie: `foundry_session=${sess}` },
+      headers: { cookie: `owl_session=${sess}` },
       multipart: { siteId: 'nonexistent' },
     })
     expect(res.status()).toBeGreaterThanOrEqual(400)
@@ -23,7 +23,7 @@ test.describe('sites', () => {
   test('unknown file id is a clean 404', async ({ request }) => {
     const sess = await mintSession()
     const res = await request.get(`${BASE}/sites/api/file/${randomUUID()}`, {
-      headers: { cookie: `foundry_session=${sess}` },
+      headers: { cookie: `owl_session=${sess}` },
     })
     expect([404, 400]).toContain(res.status())
   })

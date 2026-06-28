@@ -1,5 +1,5 @@
 {
-  "name": "@foundry/channels",
+  "name": "@owl/channels",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -11,9 +11,9 @@
     "db:migrate": "psql $CHANNELS_DATABASE_URL -f scripts/migrate.sql"
   },
   "dependencies": {
-    "@foundry/auth": "workspace:*",
-    "@foundry/shared": "workspace:*",
-    "@foundry/ui": "workspace:*",
+    "@owl/auth": "workspace:*",
+    "@owl/shared": "workspace:*",
+    "@owl/ui": "workspace:*",
     "@livekit/components-react": "^2.6",
     "@livekit/components-styles": "^1.1",
     "livekit-client": "^2.5",

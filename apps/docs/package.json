@@ -1,5 +1,5 @@
 {
-  "name": "@foundry/docs",
+  "name": "@owl/docs",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -13,9 +13,9 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@foundry/auth": "workspace:*",
-    "@foundry/shared": "workspace:*",
-    "@foundry/ui": "workspace:*",
+    "@owl/auth": "workspace:*",
+    "@owl/shared": "workspace:*",
+    "@owl/ui": "workspace:*",
     "@tiptap/core": "^2.4.0",
     "@tiptap/extension-color": "^2.4.0",
     "@tiptap/extension-highlight": "^2.4.0",

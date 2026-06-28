@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import type { CalendarEvent } from '@foundry/shared'
+import type { CalendarEvent } from '@owl/shared'
 import { listCalendarEvents, createCalendarEvent, deleteCalendarEvent } from '../lib/api'
 import { EventModal } from './EventModal'
 import { AppPasswordModal } from './AppPasswordModal'

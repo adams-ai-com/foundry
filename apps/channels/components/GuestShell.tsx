@@ -246,7 +246,7 @@ export function GuestShell({
       {/* Footer */}
       <div className="shrink-0 border-t border-border px-4 py-2 flex items-center justify-between">
         <p className="text-[10px] text-fg-tertiary">
-          Powered by <span className="font-medium text-fg-secondary">Foundry Channels</span>
+          Powered by <span className="font-medium text-fg-secondary">OWL Channels</span>
         </p>
         <p className="text-[10px] text-fg-tertiary">{guestEmail}</p>
       </div>

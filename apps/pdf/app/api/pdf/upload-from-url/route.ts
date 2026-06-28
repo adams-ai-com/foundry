@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession } from '@foundry/auth'
+import { getSession } from '@owl/auth'
 
 const MAX_BYTES = 50 * 1024 * 1024 // 50 MB
 const FETCH_TIMEOUT_MS = 20_000

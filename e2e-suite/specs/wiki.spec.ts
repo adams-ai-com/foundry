@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { randomUUID } from 'crypto'
-import { E2E_PREFIX, dbFromEnvFile, dbFromUrl, mintSession } from '@foundry/e2e'
+import { E2E_PREFIX, dbFromEnvFile, dbFromUrl, mintSession } from '@owl/e2e'
 
 // WIKI_BASE / WIKI_DB_URL override the live-production defaults so the same
 // spec can verify a staging container (used by the staging test runner).
@@ -31,7 +31,7 @@ test.describe.serial('wiki', () => {
   })
 
   test('navigation lists the seeded page (dynamic render)', async ({ page, context }) => {
-    await context.addCookies([{ name: 'foundry_session', value: sess, url: BASE }])
+    await context.addCookies([{ name: 'owl_session', value: sess, url: BASE }])
     await page.goto(`${BASE}/wiki/page/${pageId}`)
     await expect(page.getByText(`${E2E_PREFIX} wiki page`).first()).toBeVisible({
       timeout: 15_000,
@@ -39,7 +39,7 @@ test.describe.serial('wiki', () => {
   })
 
   test('seeded page renders its content', async ({ page, context }) => {
-    await context.addCookies([{ name: 'foundry_session', value: sess, url: BASE }])
+    await context.addCookies([{ name: 'owl_session', value: sess, url: BASE }])
     const res = await page.goto(`${BASE}/wiki/page/${pageId}`)
     expect(res!.status()).toBeLessThan(400)
     await expect(page.getByText(/E2E wiki body|\[E2E\] wiki page/).first()).toBeVisible({

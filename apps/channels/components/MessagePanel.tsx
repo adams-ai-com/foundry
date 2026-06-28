@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import type { SessionUser } from '@foundry/auth'
+import type { SessionUser } from '@owl/auth'
 import { EmojiPicker } from './EmojiPicker'
 import { TopicSummary } from './TopicSummary'
 

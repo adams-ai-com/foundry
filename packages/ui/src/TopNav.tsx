@@ -1,4 +1,4 @@
-import type { SessionUser } from '@foundry/auth'
+import type { SessionUser } from '@owl/auth'
 import { ThemeSwitcher } from './ThemeSwitcher'
 
 const APPS = [
@@ -34,7 +34,7 @@ export function TopNav({ session, activeApp, orgSlug, theme = 'light', allowedAp
             <path d="M4 5a1 1 0 0 1 1-1h14a1 1 0 0 1 0 2H5a1 1 0 0 1-1-1zm0 6a1 1 0 0 1 1-1h10a1 1 0 0 1 0 2H5a1 1 0 0 1-1-1zm0 6a1 1 0 0 1 1-1h6a1 1 0 0 1 0 2H5a1 1 0 0 1-1-1z"/>
           </svg>
         </div>
-        <span className="font-semibold text-fg-primary text-sm hidden sm:block">Foundry</span>
+        <span className="font-semibold text-fg-primary text-sm hidden sm:block">OpenWork Loft</span>
       </a>
 
       {visibleApps.length > 1 && (

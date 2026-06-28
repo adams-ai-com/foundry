@@ -221,7 +221,7 @@ const FEATURES = [
   },
   {
     title: 'Built-in mail server',
-    desc: 'Not just a client — Foundry ships its own SMTP server. Send email from your own domain, fully self-contained.',
+    desc: 'Not just a client — OWL ships its own SMTP server. Send email from your own domain, fully self-contained.',
     Icon: SendIcon,
   },
   {
@@ -273,7 +273,7 @@ export default async function OrgLauncherPage({ params }: { params: Promise<{ sl
   if (allowedApps.length === 1) redirect(allowedApps[0].path)
 
   const jar = await cookies()
-  const theme = (jar.get('foundry_theme')?.value ?? 'light') as 'light' | 'dark' | 'warm'
+  const theme = (jar.get('owl_theme')?.value ?? 'light') as 'light' | 'dark' | 'warm'
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
@@ -298,7 +298,7 @@ export default async function OrgLauncherPage({ params }: { params: Promise<{ sl
               <path d="M4 5a1 1 0 011-1h14a1 1 0 010 2H5a1 1 0 01-1-1zm0 6a1 1 0 011-1h10a1 1 0 010 2H5a1 1 0 01-1-1zm0 6a1 1 0 011-1h6a1 1 0 010 2H5a1 1 0 01-1-1z"/>
             </svg>
           </div>
-          <span className="font-semibold text-fg-primary text-sm tracking-tight">Foundry</span>
+          <span className="font-semibold text-fg-primary text-sm tracking-tight">OpenWork Loft</span>
           <span className="text-border hidden sm:block text-lg leading-none">·</span>
           <span className="text-fg-tertiary text-sm truncate hidden sm:block max-w-[200px]">{org.name}</span>
         </div>
@@ -395,9 +395,9 @@ export default async function OrgLauncherPage({ params }: { params: Promise<{ sl
           </div>
         </section>
 
-        {/* ── Why Foundry ──────────────────────────────────────────────────── */}
+        {/* ── Why OpenWork Loft ──────────────────────────────────────────────────── */}
         <section>
-          <SectionHeader label="Why Foundry" />
+          <SectionHeader label="Why OWL" />
           <p className="mt-2 mb-5 text-sm text-fg-secondary leading-relaxed max-w-2xl">
             A modern, open alternative to Microsoft 365 and Google Workspace — built for teams that care about
             privacy, ownership, and craft.
@@ -460,7 +460,7 @@ export default async function OrgLauncherPage({ params }: { params: Promise<{ sl
                   <path d="M4 5a1 1 0 011-1h14a1 1 0 010 2H5a1 1 0 01-1-1zm0 6a1 1 0 011-1h10a1 1 0 010 2H5a1 1 0 01-1-1zm0 6a1 1 0 011-1h6a1 1 0 010 2H5a1 1 0 01-1-1z"/>
                 </svg>
               </div>
-              <span className="text-xs font-semibold text-fg-secondary">Foundry</span>
+              <span className="text-xs font-semibold text-fg-secondary">OWL</span>
             </div>
             <span className="text-fg-tertiary/40 text-xs hidden sm:block">·</span>
             <span className="text-xs text-fg-tertiary hidden sm:block">Open source workspace</span>

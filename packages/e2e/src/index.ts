@@ -1,4 +1,4 @@
-// Shared e2e helpers for all Foundry app test suites.
+// Shared e2e helpers for all OWL (OpenWork Loft) app test suites.
 // Pattern established by apps/pdf/e2e (2026-06-10): direct-DB session minting,
 // [E2E]-prefixed artifacts, mocks for anything that would leave the box.
 import { readFileSync } from 'fs'
@@ -72,7 +72,7 @@ export async function testUser(email = 'john@adams-ai.com') {
   return { userId: u.id as string, orgId: (m?.org_id ?? null) as string | null, email: u.email as string }
 }
 
-/** Mint a real session row; cookie name is foundry_session across all apps. */
+/** Mint a real session row; cookie name is owl_session across all apps. */
 export async function mintSession(email?: string): Promise<string> {
   const { userId, orgId } = await testUser(email)
   const id = randomBytes(24).toString('hex')
@@ -83,7 +83,7 @@ export async function mintSession(email?: string): Promise<string> {
 }
 
 export function cookieHeader(sessionId: string) {
-  return { cookie: `foundry_session=${sessionId}` }
+  return { cookie: `owl_session=${sessionId}` }
 }
 
 /** Same shape as workspace admin-actions: pbkdf2:100000:<salt>:<sha512-base64> */

@@ -1,5 +1,5 @@
 {
-  "name": "@foundry/e2e-suite",
+  "name": "@owl/e2e-suite",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -7,7 +7,7 @@
     "test:smoke": "playwright test specs/apps.smoke.spec.ts"
   },
   "devDependencies": {
-    "@foundry/e2e": "workspace:*",
+    "@owl/e2e": "workspace:*",
     "@playwright/test": "^1.50.0"
   }
 }

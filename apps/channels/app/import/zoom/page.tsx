@@ -1,4 +1,4 @@
-import { requireSession } from '@foundry/auth'
+import { requireSession } from '@owl/auth'
 import db from '@/lib/db'
 import { ZoomImportWizard } from '@/components/ZoomImportWizard'
 

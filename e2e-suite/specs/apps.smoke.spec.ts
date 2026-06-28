@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
-import { mintSession } from '@foundry/e2e'
+import { mintSession } from '@owl/e2e'
 
-// One smoke block per Foundry app: the service answers, and an authenticated
+// One smoke block per OWL app: the service answers, and an authenticated
 // browser session renders a real page (no 5xx, non-empty body).
 // Deep per-app suites live in each app's own e2e/ directory (see apps/pdf/e2e).
 
@@ -39,7 +39,7 @@ for (const app of APPS) {
     })
 
     test(`${app.name}: authenticated page renders`, async ({ page, context }) => {
-      await context.addCookies([{ name: 'foundry_session', value: sess, url: app.base }])
+      await context.addCookies([{ name: 'owl_session', value: sess, url: app.base }])
       const res = await page.goto(`${app.base}${app.home}`)
       expect(res, 'navigation returned a response').toBeTruthy()
       expect(res!.status(), `${app.name} authed page status`).toBeLessThan(500)

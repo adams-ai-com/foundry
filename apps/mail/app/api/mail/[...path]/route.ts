@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server'
-import { getSession } from '@foundry/auth'
+import { getSession } from '@owl/auth'
 
 const MAILSERVER_URL = process.env.MAILSERVER_URL ?? 'http://localhost:3100'
 const MAILSERVER_API_KEY = process.env.MAILSERVER_API_KEY ?? ''

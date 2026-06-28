@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { randomUUID } from 'crypto'
-import { E2E_PREFIX, dbFromEnvFile, dbFromUrl, mintSession, testUser, wsDb } from '@foundry/e2e'
+import { E2E_PREFIX, dbFromEnvFile, dbFromUrl, mintSession, testUser, wsDb } from '@owl/e2e'
 
 // Channels read path with seeded org data. Video calls (LiveKit), AI summaries
 // (llmbox), and importers are external-dependency paths — deliberately not
@@ -51,20 +51,20 @@ test.describe.serial('channels', () => {
   })
 
   test('root redirects an authed user to their org', async ({ page, context }) => {
-    await context.addCookies([{ name: 'foundry_session', value: sess, url: BASE }])
+    await context.addCookies([{ name: 'owl_session', value: sess, url: BASE }])
     await page.goto(`${BASE}/`)
     await page.waitForURL(/\/org\//, { timeout: 15_000 })
   })
 
   test('org page renders and lists the seeded channel', async ({ page, context }) => {
-    await context.addCookies([{ name: 'foundry_session', value: sess, url: BASE }])
+    await context.addCookies([{ name: 'owl_session', value: sess, url: BASE }])
     const res = await page.goto(`${BASE}/org/${orgSlug}`)
     expect(res!.status()).toBeLessThan(400)
     await expect(page.getByText(`${E2E_PREFIX} channel`).first()).toBeVisible({ timeout: 15_000 })
   })
 
   test('channel page shows the seeded topic', async ({ page, context }) => {
-    await context.addCookies([{ name: 'foundry_session', value: sess, url: BASE }])
+    await context.addCookies([{ name: 'owl_session', value: sess, url: BASE }])
     const res = await page.goto(`${BASE}/org/${orgSlug}/${channelId}`)
     expect(res!.status()).toBeLessThan(500)
     if (res!.status() < 400) {

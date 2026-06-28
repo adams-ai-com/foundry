@@ -2,7 +2,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import postgres from 'postgres'
 
-export const SESSION_COOKIE = 'foundry_session'
+export const SESSION_COOKIE = 'owl_session'
 export const SESSION_DAYS = 30
 
 export type SessionUser = {
@@ -19,7 +19,7 @@ let _db: ReturnType<typeof postgres> | null = null
 function getAuthDb() {
   if (!_db) {
     const url = process.env.WORKSPACE_DATABASE_URL || process.env.DATABASE_URL
-    if (!url) throw new Error('No database URL configured for @foundry/auth')
+    if (!url) throw new Error('No database URL configured for @owl/auth')
     _db = postgres(url, { max: 3 })
   }
   return _db

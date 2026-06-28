@@ -27,7 +27,7 @@ test.describe('UI smoke (chromium)', () => {
 
   test('authenticated home page renders', async ({ page, context }) => {
     await context.addCookies([
-      { name: 'foundry_session', value: sess, url: 'http://127.0.0.1:3019' },
+      { name: 'owl_session', value: sess, url: 'http://127.0.0.1:3019' },
     ])
     await page.goto('/pdf')
     await expect(page.getByText(/envelope|upload|pdf/i).first()).toBeVisible({ timeout: 20_000 })

@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { getSession } from '@foundry/auth'
+import { getSession } from '@owl/auth'
 import { getGuestSession } from '@/lib/guest-auth'
 import { addSSEClient } from '@/lib/sse'
 

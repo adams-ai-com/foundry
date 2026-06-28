@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server'
-import { getSession } from '@foundry/auth'
+import { getSession } from '@owl/auth'
 
 export const dynamic = 'force-dynamic'
 

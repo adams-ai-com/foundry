@@ -1,12 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { colIndexToLetter } from '@foundry/shared'
+import { colIndexToLetter } from '@owl/shared'
 import { useHyperFormulaContext } from '@/lib/hyperformula-context'
 import { BarChartSVG, LineChartSVG, PieChartSVG } from './ChartRenderer'
 import type { ChartData } from './ChartRenderer'
 import type { ChartDef } from '@/lib/actions'
-import type { CellAddress } from '@foundry/shared'
+import type { CellAddress } from '@owl/shared'
 
 interface Props {
   charts: ChartDef[]

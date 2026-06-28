@@ -1,5 +1,5 @@
 {
-  "name": "@foundry/mail",
+  "name": "@owl/mail",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -12,9 +12,9 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
-    "@foundry/auth": "workspace:*",
-    "@foundry/shared": "workspace:*",
-    "@foundry/ui": "workspace:*",
+    "@owl/auth": "workspace:*",
+    "@owl/shared": "workspace:*",
+    "@owl/ui": "workspace:*",
     "@tiptap/extension-placeholder": "^2.4.0",
     "@tiptap/extension-underline": "^2.4.0",
     "@tiptap/pm": "^2.27.2",

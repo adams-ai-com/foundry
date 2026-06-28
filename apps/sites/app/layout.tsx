@@ -2,20 +2,20 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { cookies } from 'next/headers'
 import './globals.css'
-import { requireSession } from '@foundry/auth'
-import { TopNav } from '@foundry/ui'
+import { requireSession } from '@owl/auth'
+import { TopNav } from '@owl/ui'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
 
 export const metadata: Metadata = {
-  title: 'Foundry Sites',
-  description: 'Team sites with folders and permissions — part of the Foundry suite',
+  title: 'OWL Sites',
+  description: 'Team sites with folders and permissions — part of OpenWork Loft',
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession()
   const cookieStore = await cookies()
-  const theme = (cookieStore.get('foundry_theme')?.value ?? 'light') as 'light' | 'dark' | 'warm'
+  const theme = (cookieStore.get('owl_theme')?.value ?? 'light') as 'light' | 'dark' | 'warm'
 
   return (
     <html lang="en" data-theme={theme} className={inter.variable}>

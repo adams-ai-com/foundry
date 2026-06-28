@@ -1,4 +1,4 @@
-import { cleanupSessions, closeDb } from '@foundry/e2e'
+import { cleanupSessions, closeDb } from '@owl/e2e'
 
 export default async function globalTeardown() {
   await cleanupSessions()

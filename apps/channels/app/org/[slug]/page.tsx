@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { requireSession } from '@foundry/auth'
+import { requireSession } from '@owl/auth'
 import db from '@/lib/db'
 
 export const dynamic = 'force-dynamic'

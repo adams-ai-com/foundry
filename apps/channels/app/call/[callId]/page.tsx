@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { requireSession } from '@foundry/auth'
+import { requireSession } from '@owl/auth'
 import db from '@/lib/db'
 import { CallRoom } from './CallRoom'
 
@@ -33,7 +33,7 @@ export default async function CallPage({ params }: Props) {
           <p className="text-white text-sm font-medium mb-1">Call ended</p>
           <p className="text-white/40 text-xs mb-4">This call is no longer active.</p>
           <Link href="/" className="text-xs text-white/30 hover:text-white/50 underline">
-            Return to Foundry
+            Return to OWL
           </Link>
         </div>
       </div>

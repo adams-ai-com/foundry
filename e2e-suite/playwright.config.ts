@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test'
 import path from 'path'
-import { loadEnvFile } from '@foundry/e2e'
+import { loadEnvFile } from '@owl/e2e'
 
 // Smoke runs against the LIVE services on localhost — no extra app instances.
 // Auth comes from a minted workspace session; nothing here sends email or

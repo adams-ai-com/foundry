@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession } from '@foundry/auth'
+import { getSession } from '@owl/auth'
 import { fetchProc } from '@/lib/proc'
 import { db } from '@/lib/db'
 import { randomUUID } from 'crypto'

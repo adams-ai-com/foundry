@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { requireSession } from '@foundry/auth'
+import { requireSession } from '@owl/auth'
 import { cookies } from 'next/headers'
 import db from '@/lib/db'
 import { ChannelsShell } from '@/components/ChannelsShell'
@@ -81,7 +81,7 @@ export default async function TopicPage({ params }: Props) {
     : (topics.find(t => t.id === topicId) ?? null)
 
   const jar = await cookies()
-  const theme = (jar.get('foundry_theme')?.value ?? 'light') as 'light' | 'dark' | 'warm'
+  const theme = (jar.get('owl_theme')?.value ?? 'light') as 'light' | 'dark' | 'warm'
 
   return (
     <ChannelsShell

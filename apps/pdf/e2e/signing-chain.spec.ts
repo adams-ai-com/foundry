@@ -16,7 +16,7 @@ import {
 
 // The full two-signer ordered chain, end to end:
 // create → invite #1 only → out-of-turn rejected → bad submit does NOT brick
-// the link → #1 signs → #2 invited → #2 signs with Foundry identity →
+// the link → #1 signs → #2 invited → #2 signs with OWL identity →
 // envelope complete → events + certificate + dashboard all consistent.
 test.describe.serial('signing chain — two ordered signers', () => {
   let sess: string
@@ -122,7 +122,7 @@ test.describe.serial('signing chain — two ordered signers', () => {
     expect(['already_signed', 'Link already used']).toContain(body.error)
   })
 
-  test('signer 2 signs with Foundry identity → envelope complete', async ({ request }) => {
+  test('signer 2 signs with OWL identity → envelope complete', async ({ request }) => {
     const { userId } = await import('./helpers').then((h) => h.testUser())
     const f1 = await fieldIdFor(r1.id)
     const fresh = await recipientRow(envelopeId, 1)

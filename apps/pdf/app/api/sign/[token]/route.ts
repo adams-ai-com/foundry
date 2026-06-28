@@ -74,7 +74,7 @@ export async function GET(_: NextRequest, { params }: Params) {
 
   const metaBranding = (ctx as any).metadata?.branding
   const branding = {
-    display_name: metaBranding?.display_name || process.env.SIGNING_PAGE_DISPLAY_NAME || 'Foundry PDF',
+    display_name: metaBranding?.display_name || process.env.SIGNING_PAGE_DISPLAY_NAME || 'OWL PDF',
     logo_url: metaBranding?.logo_url || process.env.SIGNING_PAGE_LOGO_URL || '',
     brand_color: metaBranding?.brand_color || process.env.SIGNING_PAGE_BRAND_COLOR || '#2563eb',
   }
@@ -177,7 +177,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     recipient_id: ctx.recipient_id,
     signer_name: signer_name ?? ctx.recipient_name,
     signer_email: signer_email ?? ctx.recipient_email,
-    reason: `Signed via Foundry PDF envelope ${ctx.envelope_id.slice(0, 8)}`,
+    reason: `Signed via OWL PDF envelope ${ctx.envelope_id.slice(0, 8)}`,
     fields: submissions.map(s => ({
       field_id: s.field_id,
       page: 0,      // filled from DB below

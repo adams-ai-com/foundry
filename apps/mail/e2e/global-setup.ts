@@ -5,18 +5,18 @@ export default async function globalSetup() {
   const mailserverUrl = process.env.MAILSERVER_HEALTH_URL ?? 'http://localhost:3100/health'
 
   const clientRes = await fetch(base, {
-    headers: { Cookie: 'foundry_session=e2e-test-session-fixed' },
+    headers: { Cookie: 'owl_session=e2e-test-session-fixed' },
   }).catch(() => null)
   if (!clientRes || !clientRes.ok) {
     throw new Error(
-      `Mail client at ${base} is not reachable. Start it with: pnpm --filter @foundry/mail dev`,
+      `Mail client at ${base} is not reachable. Start it with: pnpm --filter @owl/mail dev`,
     )
   }
 
   const serverRes = await fetch(mailserverUrl).catch(() => null)
   if (!serverRes || !serverRes.ok) {
     throw new Error(
-      `Mailserver health check at ${mailserverUrl} failed. Start it with: pnpm --filter @foundry/mailserver dev`,
+      `Mailserver health check at ${mailserverUrl} failed. Start it with: pnpm --filter @owl/mailserver dev`,
     )
   }
 

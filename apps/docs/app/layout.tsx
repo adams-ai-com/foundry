@@ -3,20 +3,20 @@ import { Inter } from 'next/font/google'
 import { cookies } from 'next/headers'
 import './globals.css'
 import { FeedbackButton } from '@/components/FeedbackButton'
-import { requireSession } from '@foundry/auth'
-import { TopNav } from '@foundry/ui'
+import { requireSession } from '@owl/auth'
+import { TopNav } from '@owl/ui'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
 
 export const metadata: Metadata = {
-  title: 'Foundry Docs',
-  description: 'Word processor — part of the Foundry suite',
+  title: 'OWL Docs',
+  description: 'Word processor — part of OpenWork Loft',
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession()
   const jar = await cookies()
-  const theme = (jar.get('foundry_theme')?.value ?? 'light') as 'light' | 'dark' | 'warm'
+  const theme = (jar.get('owl_theme')?.value ?? 'light') as 'light' | 'dark' | 'warm'
 
   return (
     <html lang="en" data-theme={theme} className={inter.variable}>

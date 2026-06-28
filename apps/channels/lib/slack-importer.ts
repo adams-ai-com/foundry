@@ -126,7 +126,7 @@ export async function runSlackImport(jobId: string, orgId: string, createdBy: st
     if (!mapping || mapping.skip) continue
     if (slack_channel.is_dm && !job.include_dms) continue
 
-    // Resolve or create Foundry channel
+    // Resolve or create OWL channel
     let foundryChannelId: string
     if (mapping.foundry_channel_id) {
       foundryChannelId = mapping.foundry_channel_id

@@ -50,7 +50,7 @@ export default async function InvitePage({
                 <path d="M4 5a1 1 0 0 1 1-1h14a1 1 0 0 1 0 2H5a1 1 0 0 1-1-1zm0 6a1 1 0 0 1 1-1h10a1 1 0 0 1 0 2H5a1 1 0 0 1-1-1zm0 6a1 1 0 0 1 1-1h6a1 1 0 0 1 0 2H5a1 1 0 0 1-1-1z"/>
               </svg>
             </div>
-            <span className="font-semibold text-fg-primary text-sm">Foundry</span>
+            <span className="font-semibold text-fg-primary text-sm">OpenWork Loft</span>
           </div>
 
           <h1 className="text-xl font-semibold text-fg-primary mb-1">You have been invited</h1>

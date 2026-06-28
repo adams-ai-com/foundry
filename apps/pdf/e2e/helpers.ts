@@ -28,7 +28,7 @@ export async function deleteSession(id: string) {
 }
 
 export function cookie(sess: string) {
-  return { cookie: `foundry_session=${sess}` }
+  return { cookie: `owl_session=${sess}` }
 }
 
 // Build a minimal but structurally valid one-page PDF (correct xref offsets).

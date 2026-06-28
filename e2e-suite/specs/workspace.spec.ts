@@ -5,7 +5,7 @@ import {
   ensureTestUser,
   mintSession,
   wsDb,
-} from '@foundry/e2e'
+} from '@owl/e2e'
 
 const BASE = process.env.WORKSPACE_BASE ?? 'http://127.0.0.1:4100'
 
@@ -73,7 +73,7 @@ test.describe('workspace — sessions and admin', () => {
   for (const path of ['/admin/users', '/admin/sessions', '/admin/audit']) {
     test(`admin page ${path} renders for an admin`, async ({ page, context }) => {
       const sess = await mintSession()
-      await context.addCookies([{ name: 'foundry_session', value: sess, url: BASE }])
+      await context.addCookies([{ name: 'owl_session', value: sess, url: BASE }])
       const res = await page.goto(`${BASE}${path}`)
       expect(res!.status()).toBeLessThan(400)
       await expect(page.locator('body')).toContainText(/.+/)

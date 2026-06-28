@@ -291,7 +291,7 @@ export async function runPostCallPipeline(callId: string, orgId: string): Promis
           ${call.topic_id},
           ${orgId},
           ${callId},
-          'Foundry',
+          'OpenWork Loft',
           'system@foundry.internal',
           ${body},
           true

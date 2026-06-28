@@ -1,5 +1,5 @@
 {
-  "name": "@foundry/sheets",
+  "name": "@owl/sheets",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -14,9 +14,9 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
-    "@foundry/auth": "workspace:*",
-    "@foundry/shared": "workspace:*",
-    "@foundry/ui": "workspace:*",
+    "@owl/auth": "workspace:*",
+    "@owl/shared": "workspace:*",
+    "@owl/ui": "workspace:*",
     "@monaco-editor/react": "^4.6.0",
     "exceljs": "^4.4.0",
     "hyperformula": "^2.6.0",

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import type { SessionUser } from '@foundry/auth'
+import type { SessionUser } from '@owl/auth'
 import { StreamList } from './StreamList'
 import { PushNotificationSetup } from './PushNotificationSetup'
 import { MessagePanel } from './MessagePanel'
@@ -179,7 +179,7 @@ export function ChannelsShell({
               <path d="M4 5a1 1 0 011-1h14a1 1 0 010 2H5a1 1 0 01-1-1zm0 6a1 1 0 011-1h10a1 1 0 010 2H5a1 1 0 01-1-1zm0 6a1 1 0 011-1h6a1 1 0 010 2H5a1 1 0 01-1-1z"/>
             </svg>
           </div>
-          <span className="font-semibold text-fg-primary text-sm hidden sm:block">Foundry</span>
+          <span className="font-semibold text-fg-primary text-sm hidden sm:block">OpenWork Loft</span>
         </a>
 
         <nav className="flex items-center gap-0.5">

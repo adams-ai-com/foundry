@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession } from '@foundry/auth'
+import { getSession } from '@owl/auth'
 import db from '@/lib/db'
 import { broadcastToOrg } from '@/lib/sse'
 import { embedText, pgVector } from '@/lib/embed'

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { randomUUID } from 'crypto'
-import { E2E_PREFIX, cookieHeader, dbFromEnvFile, dbFromUrl, mintSession } from '@foundry/e2e'
+import { E2E_PREFIX, cookieHeader, dbFromEnvFile, dbFromUrl, mintSession } from '@owl/e2e'
 
 const BASE = process.env.DOCS_BASE ?? 'http://127.0.0.1:4101'
 const ENV = '/var/www/foundry/apps/docs/.env'
@@ -31,13 +31,13 @@ test.describe.serial('docs', () => {
   })
 
   test('doc list shows the seeded document', async ({ page, context }) => {
-    await context.addCookies([{ name: 'foundry_session', value: sess, url: BASE }])
+    await context.addCookies([{ name: 'owl_session', value: sess, url: BASE }])
     await page.goto(`${BASE}/docs`)
     await expect(page.getByText(`${E2E_PREFIX} doc`).first()).toBeVisible({ timeout: 15_000 })
   })
 
   test('editor opens the seeded document', async ({ page, context }) => {
-    await context.addCookies([{ name: 'foundry_session', value: sess, url: BASE }])
+    await context.addCookies([{ name: 'owl_session', value: sess, url: BASE }])
     const res = await page.goto(`${BASE}/docs/editor/${docId}`)
     expect(res!.status()).toBeLessThan(400)
     await expect(page.getByText(/E2E seeded content|\[E2E\] doc/).first()).toBeVisible({

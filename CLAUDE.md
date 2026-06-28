@@ -1,6 +1,6 @@
-# Foundry (Unified Open-Source Workspace)
+# OpenWork Loft (OWL) — Unified Open-Source Workspace
 
-pnpm monorepo (Turborepo). AGPL-licensed open-source workspace replacing MS 365 / Google Workspace: Mail (our own server), Docs, Sheets, Channels, Files, Wiki, Tasks, Decisions. Workspace-first architecture. AI-native. Adams AI manages self-hosted instances for verticals. Working copy lives here on the control box; running on foundry-srv.
+pnpm monorepo (Turborepo). AGPL-licensed open-source workspace replacing MS 365 / Google Workspace: Mail (our own server), Docs, Sheets, Channels, Files, Wiki, Tasks, Decisions. Workspace-first architecture. AI-native. Adams AI manages self-hosted instances for verticals. Working copy lives here on the control box; running on foundry-srv. (Infrastructure names — foundry-srv, service units, DB names — are unchanged.)
 
 ## Remote host
 - **Server**: foundry-srv `206.189.255.78` (reserved; eth0/outbound `147.182.185.3`)
@@ -36,14 +36,14 @@ cd /var/www/foundry/apps/pdf && ./node_modules/.bin/playwright test   # PDF deep
 
 ## Monorepo layout
 - `apps/workspace` — Auth shell: magic-link login, org management, app launcher (port 3000) ← **entry point**
-- `apps/docs` — Foundry Docs (word processor, port 3001)
-- `apps/sheets` — Foundry Sheets (spreadsheets, port 3003)
-- `apps/mail` — Foundry Mail client (Next.js, port 3004, proxies to mailserver)
-- `apps/wiki` — Foundry Wiki (knowledge base, port 3005)
-- `apps/sites` — Foundry Sites (CMS, port 3007)
-- `apps/channels` — Foundry Channels (real-time chat + video + AI memory, port 3008) ← C15a live
-- `apps/pdf` — Foundry PDF (PDF editing, forms, conversion, redaction, port 3009) ← P1 live
-- `services/mailserver` — Foundry Mail server (Node.js, port 3100, REST API + SMTP)
+- `apps/docs` — OWL Docs (word processor, port 3001)
+- `apps/sheets` — OWL Sheets (spreadsheets, port 3003)
+- `apps/mail` — OWL Mail client (Next.js, port 3004, proxies to mailserver)
+- `apps/wiki` — OWL Wiki (knowledge base, port 3005)
+- `apps/sites` — OWL Sites (CMS, port 3007)
+- `apps/channels` — OWL Channels (real-time chat + video + AI memory, port 3008) ← C15a live
+- `apps/pdf` — OWL PDF (PDF editing, forms, conversion, redaction, port 3009) ← P1 live
+- `services/mailserver` — OWL Mail server (Node.js, port 3100, REST API + SMTP)
 - `packages/` — shared libs
 
 ## Public URL
@@ -67,7 +67,7 @@ Cloudflare proxied (free TLS). Self-signed origin cert at `/etc/ssl/certs/foundr
 | Mail server | `foundry-mail.service` | 3100 (localhost) | `/etc/foundry-mail/secrets.env` (640 root:foundry) |
 
 ## Workspace auth model
-- Magic-link login (email → token → session cookie `foundry_session`, 30-day)
+- Magic-link login (email → token → session cookie `owl_session`, 30-day)
 - `foundry_workspace` DB: `users`, `orgs`, `org_members`, `sessions`, `magic_tokens`
 - If `SMTP_HOST` unset (current default), magic links log to stdout — check with `journalctl -u foundry-workspace | grep "MAGIC LINK"`
 - Schema migration: `psql "$DATABASE_URL" -f /var/www/foundry/apps/workspace/lib/schema.sql`
@@ -87,9 +87,9 @@ sudo -u foundry psql "$WURL" -f /var/www/foundry/apps/wiki/lib/schema.sql
 - DB: `foundry_wiki`; DATABASE_URL in `/var/www/foundry/apps/wiki/.env`
 
 ## Mail deployment (non-blue-green — simple pnpm start)
-- Mail client: `pnpm --filter @foundry/mail start` from `/var/www/foundry`
+- Mail client: `pnpm --filter @owl/mail start` from `/var/www/foundry`
 - Mail server: `node dist/index.js` from `/var/www/foundry/services/mailserver`
-- Rebuild mail client: `cd /var/www/foundry && sudo -u foundry pnpm --filter @foundry/mail build` then restart `foundry-mail-client.service`
+- Rebuild mail client: `cd /var/www/foundry && sudo -u foundry pnpm --filter @owl/mail build` then restart `foundry-mail-client.service`
 - Rebuild mailserver: `sudo -u foundry npm run build --prefix /var/www/foundry/services/mailserver`
 
 ## Testing

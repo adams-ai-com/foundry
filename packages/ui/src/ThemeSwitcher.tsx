@@ -15,7 +15,7 @@ export function ThemeSwitcher({ defaultTheme = 'light' }: { defaultTheme?: Theme
 
   function select(t: Theme) {
     document.documentElement.setAttribute('data-theme', t)
-    document.cookie = `foundry_theme=${t};path=/;max-age=${365 * 24 * 60 * 60};SameSite=Lax`
+    document.cookie = `owl_theme=${t};path=/;max-age=${365 * 24 * 60 * 60};SameSite=Lax`
     setTheme(t)
   }
 

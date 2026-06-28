@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import type { MailThread, MailMessage } from '@foundry/shared'
+import type { MailThread, MailMessage } from '@owl/shared'
 import type { ComposeRequest } from './ComposeModal'
 import { getThread } from '../lib/api'
 

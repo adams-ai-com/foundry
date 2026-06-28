@@ -2,15 +2,15 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { cookies } from 'next/headers'
 import './globals.css'
-import { getSession } from '@foundry/auth'
-import { TopNav } from '@foundry/ui'
+import { getSession } from '@owl/auth'
+import { TopNav } from '@owl/ui'
 import postgres from 'postgres'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
 
 export const metadata: Metadata = {
-  title: 'Foundry PDF',
-  description: 'PDF editing, forms, conversion, and redaction — part of the Foundry suite',
+  title: 'OWL PDF',
+  description: 'PDF editing, forms, conversion, and redaction — part of OpenWork Loft',
 }
 
 let _wsDb: ReturnType<typeof postgres> | null = null
@@ -43,7 +43,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // Middleware handles auth redirect for all paths except /sign/*
   const session = await getSession()
   const jar = await cookies()
-  const theme = (jar.get('foundry_theme')?.value ?? 'light') as 'light' | 'dark' | 'warm'
+  const theme = (jar.get('owl_theme')?.value ?? 'light') as 'light' | 'dark' | 'warm'
 
   let allowedApps: string[] | undefined
   if (session?.userId && session?.orgId) {

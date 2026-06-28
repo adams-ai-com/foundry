@@ -1,4 +1,4 @@
-# Foundry
+# OpenWork Loft (OWL)
 
 **A unified, self-hosted, open-source workspace for the world.**
 
@@ -14,19 +14,19 @@ Billions of people depend on software they don't own, running on servers they do
 
 This is not inevitable. It is a choice — and we are making a different one.
 
-Foundry is a complete productivity workspace: email, calendar, documents, spreadsheets, team communication, file storage, and knowledge management — all running on your server, under your control, free and open source forever. Not a collection of apps bolted together. One coherent system, designed from the ground up to work as a whole.
+OpenWork Loft is a complete productivity workspace: email, calendar, documents, spreadsheets, team communication, file storage, and knowledge management — all running on your server, under your control, free and open source forever. Not a collection of apps bolted together. One coherent system, designed from the ground up to work as a whole.
 
-We believe software that people depend on for work and communication is too important to leave in the hands of any single corporation. It belongs to everyone. That is why every line of Foundry's code is published here, auditable by anyone, forkable by anyone, permanent regardless of what any company decides.
+We believe software that people depend on for work and communication is too important to leave in the hands of any single corporation. It belongs to everyone. That is why every line of OWL's code is published here, auditable by anyone, forkable by anyone, permanent regardless of what any company decides.
 
 ---
 
 ## Built With AI, For Humanity
 
-Foundry is developed using AI-assisted engineering — built with [Claude Code](https://claude.ai/code), Anthropic's AI coding tool. This is not incidental. It reflects a core belief: that AI should be used to build things that benefit humanity broadly, not just to increase the productivity of those who already have the most.
+OWL is developed using AI-assisted engineering — built with [Claude Code](https://claude.ai/code), Anthropic's AI coding tool. This is not incidental. It reflects a core belief: that AI should be used to build things that benefit humanity broadly, not just to increase the productivity of those who already have the most.
 
 AI-assisted development means a small team can build software of a quality and completeness that would otherwise require an organization many times larger. That leverage exists to serve a mission: putting professional-grade, privacy-respecting productivity software in the hands of anyone who needs it — regardless of budget, geography, or organization size.
 
-Foundry is also AI-native as a product. AI is not a feature added after the fact. The workspace is designed from day one for AI comprehension: a unified data model across all surfaces, a decisions log that captures outcomes rather than letting them drown in conversation history, and full-text search that spans everything. The result is a workspace where AI can genuinely answer "what did we decide about this project?" — not just draft a reply to an email.
+OWL is also AI-native as a product. AI is not a feature added after the fact. The workspace is designed from day one for AI comprehension: a unified data model across all surfaces, a decisions log that captures outcomes rather than letting them drown in conversation history, and full-text search that spans everything. The result is a workspace where AI can genuinely answer "what did we decide about this project?" — not just draft a reply to an email.
 
 ---
 
@@ -40,22 +40,23 @@ Current productivity software has several deep structural problems — not the f
 - **AI as an afterthought.** Recent AI additions to existing tools are overlaid on architectures that predate them. They can draft text but cannot reason across the full context of your work.
 - **Access as a function of price.** The best productivity software carries per-seat licensing costs that put it out of reach for schools, nonprofits, small organizations, and most of the world.
 
-Foundry addresses all of these — not by patching existing software, but by starting clean.
+OWL addresses all of these — not by patching existing software, but by starting clean.
 
 ### The Workspace Model
 
-Everything in Foundry is organized around **workspaces** — a project, a team, a customer relationship. Within a workspace, every surface shares the same data model:
+Everything in OWL is organized around **workspaces** — a project, a team, a customer relationship. Within a workspace, every surface shares the same data model:
 
 | Surface | Replaces |
 |---|---|
-| **Mail** — email + calendar, our own server | Outlook / Exchange |
-| **Channels** — internal real-time communication | Teams / Slack |
-| **Docs** — rich text editor, .docx compatible | Word |
-| **Sheets** — spreadsheet + Python scripting | Excel |
+| **OWL Mail** — email + calendar, our own SMTP server | Outlook / Exchange |
+| **OWL Channels** — real-time communication + video | Teams / Slack |
+| **OWL Docs** — rich text editor, .docx compatible | Word |
+| **OWL Sheets** — spreadsheet + Python scripting | Excel |
+| **OWL PDF** — PDF editing, forms, e-signing, redaction | Acrobat / DocuSign |
+| **OWL Wiki** — structured knowledge, team intranet | SharePoint / Notion |
+| **OWL Sites** — team sites with folders and permissions | SharePoint / Confluence |
 | **Files** — versioned file storage, any format | OneDrive / Drive |
-| **Wiki** — structured knowledge, company intranet | SharePoint |
-| **Tasks** — action items linked to conversations | Planner / Asana |
-| **Decisions** — explicit outcomes, searchable forever | (nothing — this is new) |
+| **Tasks + Decisions** — action items and explicit outcomes | Planner / Asana |
 
 One search across all of it. One AI context across all of it. No switching between applications to find something that happened last month.
 
@@ -65,25 +66,23 @@ One search across all of it. One AI context across all of it. No switching betwe
 
 ## Current Status
 
-Foundry is in active development. Here is where each surface stands:
-
 | Surface | Status |
 |---|---|
-| Docs | ✅ Live — rich text editor, save/load, .docx round-trip |
-| Sheets | ✅ Live — spreadsheet grid, HyperFormula engine, Python scripting |
-| Mail | ✅ Live — our own mail server (SMTP + REST API), inbox, threads, compose, calendar, contacts, full-text search |
-| Channels | 📋 Planned — shares Mail's protocol-agnostic message model |
+| OWL Docs | ✅ Live — rich text editor, save/load, .docx round-trip |
+| OWL Sheets | ✅ Live — spreadsheet grid, HyperFormula engine, Python scripting |
+| OWL Mail | ✅ Live — our own SMTP server, inbox, threads, compose, calendar, contacts, full-text search |
+| OWL Channels | ✅ Live — real-time chat, threads, video calls, AI memory, Slack/Teams/GChat import |
+| OWL PDF | ✅ Live — PDF editing, form creation, e-signing with cryptographic envelopes, object-level redaction |
+| OWL Wiki | ✅ Live — structured knowledge base built on the Docs editor |
+| OWL Sites | ✅ Live — team CMS with folder hierarchy and fine-grained permissions |
 | Files | 📋 Planned — mail attachments already seed this table |
-| Wiki | 📋 Planned — built on the Docs editor |
-| Tasks + Decisions | 📋 Schema live in the Mail DB, UI planned |
-
-This is honest: Foundry is not finished. The three core surfaces are live. The rest is being built in the open because we believe the community that will use it should be part of building it.
+| Tasks + Decisions | 📋 Schema live, UI planned |
 
 ---
 
 ## Document Compatibility
 
-Foundry uses a two-layer approach to document fidelity:
+OWL uses a two-layer approach to document fidelity:
 
 **Layer 1 — native JavaScript** handles everyday documents: standard business letters, proposals, reports, typical spreadsheets. Fast, no external dependencies.
 
@@ -93,12 +92,12 @@ Foundry uses a two-layer approach to document fidelity:
 
 ## Self-Hosting
 
-Foundry runs on any Linux server with Node.js 20+ and PostgreSQL 16+. A standard deployment for a small organization requires 2 GB RAM.
+OWL runs on any Linux server with Node.js 20+ and PostgreSQL 16+. A standard deployment for a small organization requires 2 GB RAM.
 
 ```bash
 # Clone and install
-git clone https://github.com/adams-ai-com/foundry
-cd foundry
+git clone https://github.com/adams-ai-com/openworks
+cd openworks
 pnpm install
 
 # Configure apps
@@ -111,7 +110,7 @@ cp services/mailserver/.env.example services/mailserver/.env
 # Edit DATABASE_URL, API_KEY, MAIL_DOMAIN, SMTP_PORT
 
 # Run migrations
-pnpm --filter @foundry/mailserver db:migrate
+pnpm --filter @owl/mailserver db:migrate
 
 # Run in development
 pnpm dev
@@ -127,15 +126,18 @@ Adams AI provides managed hosting for organizations that want the benefits of se
 
 ```
 apps/
+  workspace/      Next.js — unified shell, auth, org management
   docs/           Next.js — word processor
   sheets/         Next.js — spreadsheet
   mail/           Next.js — email + calendar client
-  workspace/      Next.js — unified shell (coming)
+  channels/       Next.js — real-time chat + video
+  wiki/           Next.js — knowledge base
+  sites/          Next.js — team CMS
+  pdf/            Next.js — PDF editing, forms, e-signing
 services/
   mailserver/     Node.js — SMTP server, storage, REST API
-  realtime/       Node.js — WebSocket server for channels (coming)
 packages/
-  shared/         TypeScript types, DB client, auth
+  auth/           Session management, magic-link auth
   ui/             Shared component library
 docs/             Self-hosting guide, architecture docs, contributing guide
 ```
@@ -144,9 +146,9 @@ docs/             Self-hosting guide, architecture docs, contributing guide
 
 ## Contributing
 
-Foundry exists because we believe the world deserves better than what currently exists, and that the open-source community is how better things get built.
+OWL exists because we believe the world deserves better than what currently exists, and that the open-source community is how better things get built.
 
-If you share that belief, contributions are welcome — code, documentation, bug reports, design, translations, or simply using Foundry and telling us what needs to improve.
+If you share that belief, contributions are welcome — code, documentation, bug reports, design, translations, or simply using OWL and telling us what needs to improve.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started.
 
@@ -164,7 +166,7 @@ The software is free. It is free now, and it will remain free. That is not a pro
 
 ## Acknowledgements
 
-Foundry is built on the shoulders of the open-source community:
+OWL is built on the shoulders of the open-source community:
 
 - **LibreOffice** (The Document Foundation) — server-side document conversion
 - **TipTap** / **ProseMirror** — document editor foundation

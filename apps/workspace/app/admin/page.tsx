@@ -37,7 +37,7 @@ export default async function AdminOverviewPage() {
     <div className="p-8">
       <div className="mb-8">
         <h1 className="text-xl font-semibold text-fg-primary">Overview</h1>
-        <p className="text-sm text-fg-secondary mt-1">Foundry workspace at a glance</p>
+        <p className="text-sm text-fg-secondary mt-1">OpenWork Loft workspace at a glance</p>
       </div>
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-10">

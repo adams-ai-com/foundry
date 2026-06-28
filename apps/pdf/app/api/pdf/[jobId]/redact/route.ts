@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession } from '@foundry/auth'
+import { getSession } from '@owl/auth'
 import { fetchProc, assertJobOwner } from '@/lib/proc'
 
 // Returns { available: bool } — whether a redaction certificate exists for this job

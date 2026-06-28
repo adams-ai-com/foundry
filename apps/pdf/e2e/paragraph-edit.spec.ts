@@ -58,7 +58,7 @@ test.describe('paragraph (¶) editing', () => {
   test('UI: Line/¶ toggle opens the paragraph editor', async ({ page, context, request }) => {
     const jobId = await uploadJob(request, sess)
     await context.addCookies([
-      { name: 'foundry_session', value: sess, url: 'http://127.0.0.1:3019' },
+      { name: 'owl_session', value: sess, url: 'http://127.0.0.1:3019' },
     ])
     await page.goto(`/pdf/editor/${jobId}`)
 

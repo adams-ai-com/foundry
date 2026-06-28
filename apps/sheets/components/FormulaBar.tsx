@@ -1,7 +1,7 @@
 'use client'
 
-import { colIndexToLetter } from '@foundry/shared'
-import type { CellAddress } from '@foundry/shared'
+import { colIndexToLetter } from '@owl/shared'
+import type { CellAddress } from '@owl/shared'
 import { useHyperFormulaContext } from '@/lib/hyperformula-context'
 
 interface FormulaBarProps {
